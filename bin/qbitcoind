@@ -1,0 +1,24 @@
+#! /usr/bin/env perl
+use warnings;
+use strict;
+
+use Getopt::Long qw(:config bundling no_ignore_case no_auto_abbrev require_order);
+use QBitcoin::Const;
+use QBitcoin::Log;
+use QBitcoin::Config;
+use QBitcoin::Network;
+
+sub main {
+    my ( $help, @peer_hosts );
+    GetOptions(
+        'help|?'   => \$help,
+        'peer|p=s' => \@peer_hosts,
+        'bind|b=s' => \$config->{bind_addr},
+        'port|P=s' => \$config->{port},
+        'base|B'   => \$config->{base},
+        'mining|m' => \$config->{mining},
+    );
+    QBitcoin::Network->main_loop(@peer_hosts);
+}
+
+main();
