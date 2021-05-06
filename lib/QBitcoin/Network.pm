@@ -82,9 +82,10 @@ sub main_loop {
     my $class = shift;
     my @peer_hosts = @_;
 
-    $QBitcoin::Protocol::synced = 1 if $config->{base};
+    $QBitcoin::Protocol::synced = 3 if $config->{base};
     # Load last INCORE_LEVELS blocks from database
     foreach my $block (reverse QBitcoin::Block->find(-sortby => "height DESC", -limit => INCORE_LEVELS)) {
+        # TODO: load transactions from the block
         $block->receive();
     }
 
@@ -105,7 +106,7 @@ sub main_loop {
 
     while () {
         my $timeout = SELECT_TIMEOUT;
-        if ($config->{mining} && $QBitcoin::Protocol::synced) {
+        if ($config->{mining} && $QBitcoin::Protocol::synced == 3) {
             my $now = Time::HiRes::time();
             my $blockchain_height = QBitcoin::Block->blockchain_height // -1;
             my $time_next_block = QBitcoin::Block->time_by_height($blockchain_height + 1);

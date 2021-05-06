@@ -6,7 +6,7 @@ use constant GENESIS_BLOCK_HASH => "1234";
 
 use constant QBITCOIN_CONST => {
     BLOCK_INTERVAL      => 10, # sec
-    GENESIS_TIME        => 1620275957, # 2021-05-06 04:39
+    GENESIS_TIME        => 1620328800, # 2021-05-06 22:20
     INCORE_LEVELS       => 60,
     MIN_FEE             => 0.00000001, # 1 satoshi
     MAX_VALUE           => 21000000 * 100000000, # 21M
@@ -25,6 +25,7 @@ use constant QBITCOIN_CONST => {
     GENESIS_HASH_HEX    => GENESIS_BLOCK_HASH,
     MAX_BLOCK_SIZE      => 8*1024*1024,
     MAX_TX_SIZE         => 2*1024*1024,
+    MAX_PENDING_BLOCKS  => 128,
 };
 
 use constant STATE_CONST => {

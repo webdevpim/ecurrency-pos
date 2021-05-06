@@ -53,4 +53,37 @@ sub self_weight {
     return $self->{self_weight} //= $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
 }
 
+sub add_tx {
+    my $self = shift;
+    my ($tx) = @_;
+    $self->{tx_by_hash} //= {};
+    $self->{tx_by_hash}->{$tx->hash} = $tx;
+    delete $self->{pending_tx}->{$tx->hash} if $self->pending_tx;
+}
+
+sub pending_tx {
+    my $self = shift;
+    my ($tx_hash) = @_;
+    if ($tx_hash) {
+        $self->{pending_tx}->{$tx_hash} = 1;
+        return 1;
+    }
+    else {
+        return $self->{pending_tx} && %{$self->{pending_tx}} ? [ keys %{$self->{pending_tx}} ] : undef;
+    }
+}
+
+sub compact_tx {
+    my $self = shift;
+    $self->{transactions} = [ map { $self->{tx_by_hash}->{$_} } @{$self->{tx_hashes}} ];
+    delete $self->{tx_hashes};
+    delete $self->{tx_by_hash};
+}
+
+sub tx_hashes {
+    my $self = shift;
+    return $self->{tx_hashes} //
+        [ map { $_->hash } @{$self->{transactions}} ];
+}
+
 1;

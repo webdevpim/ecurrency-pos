@@ -5,13 +5,18 @@ use strict;
 use Role::Tiny;
 use QBitcoin::Log;
 use QBitcoin::Const;
-use QBitcoin::ORM qw(replace);
+use QBitcoin::ORM qw(replace db_start);
 
 use constant TABLE => 'block';
 
 sub store {
     my $self = shift;
+    my $db_transaction = $self->db_start;
+    foreach my $transaction (@{$self->transactions}) {
+        $transaction->store();
+    }
     $self->replace();
+    $db_transaction && $db_transaction->commit;
 }
 
 # All stored blocks are linked, it's only the best branch there

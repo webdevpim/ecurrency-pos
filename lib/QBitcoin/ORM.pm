@@ -17,7 +17,7 @@ use constant DB_TYPES => {
 use constant DB_TYPES;
 
 use parent 'Exporter';
-our @EXPORT_OK = qw(open_db find create replace update lock IGNORE);
+our @EXPORT_OK = qw(open_db find create replace update lock db_start IGNORE);
 push @EXPORT_OK, keys %{&DB_TYPES};
 our %EXPORT_TAGS = ( types => [ keys %{&DB_TYPES} ] );
 
@@ -201,6 +201,13 @@ sub lock {
     $dbh->do("SELECT GET_LOCK(?, ?)", undef, $table, 0)
         or die "Cannot lock $table";
     return $dbh;
+}
+
+sub db_start {
+    my $self = shift;
+
+    # TODO
+    return undef;
 }
 
 1;

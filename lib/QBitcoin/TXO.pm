@@ -2,7 +2,7 @@ package QBitcoin::TXO;
 use warnings;
 use strict;
 
-use QBitcion::ORM;
+use QBitcoin::ORM qw(:types);
 
 use constant FIELDS => {
     value         => NUMERIC,

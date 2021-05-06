@@ -41,8 +41,15 @@ sub blockchain_height {
 
 sub get_by_height {
     my $class = shift;
-    my ($height) = @_;
-    return $best_block[$height] // $class->find(height => $height);
+    my ($block_height) = @_;
+    return $best_block[$block_height] //
+        ($block_height <= $height - INCORE_LEVELS ? $class->find(height => $block_height) : undef);
+}
+
+sub block_pool {
+    my $class = shift;
+    my ($block_height, $hash) = @_;
+    return $block_pool[$block_height]->{$hash};
 }
 
 sub receive {
@@ -103,6 +110,7 @@ sub receive {
         # Remove blocks received from this peer and not linked with this one
         # The best branch was changed on the peer
         foreach my $b (values %{$block_pool[$self->height+1]}) {
+$best_block[$b->height] or die "No best_block for height " . $b->height . ", blockchain height $height";
             next if $best_block[$b->height]->hash eq $b->hash;
             next if !$b->received_from;
             next if $b->received_from->ip ne $self->received_from->ip;
@@ -129,7 +137,9 @@ sub receive {
             # Invalid branch (double-spent), dropped
             return 0;
         }
-        if ($height && $self->branch_weight <= $best_block[$height]->weight) {
+        # zero weight for new block is ok, accept it
+        if ($height && ($self->branch_weight < $best_block[$height]->weight ||
+            ($self->branch_weight == $best_block[$height]->weight && $self->branch_height <= $height))) {
             return 0;
         }
 
@@ -158,8 +168,11 @@ sub receive {
             # It's the first block in this level
             # Store and free old level (if it's linked and in best branch)
             $best_block[$self->height] = $self;
-            $height //= -1;
             $height = $self->height;
+            if ($self->received_from &&
+                (!$QBitcoin::Protocol::saw_height || $height >= $QBitcoin::Protocol::saw_height)) {
+                $QBitcoin::Protocol::synced |= 2;
+            }
             if ((my $first_free_height = $height - INCORE_LEVELS) >= 0) {
                 if ($best_block[$first_free_height]) {
                     $best_block[$first_free_height]->store();

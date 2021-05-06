@@ -31,6 +31,7 @@ use strict;
 
 # If our last known block height less than height_by_time, then batch request all blocks with height from last known to max available
 
+use Tie::IxHash;
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
@@ -57,7 +58,12 @@ use constant ATTR => qw(
 
 mk_accessors(ATTR);
 
-our $synced;
+our $synced = 0;
+our $saw_height;
+
+my %pending_blocks;
+tie(%pending_blocks, 'Tie::IxHash'); # Ordered by age
+my %pending_tx;
 
 sub new {
     my $class = shift;
@@ -170,7 +176,7 @@ sub startup {
     my $self = shift;
     $self->send_line("qbtc " . GENESIS_HASH_HEX) == 0
         or return -1;
-    $self->send_line("sendmempool") if !$synced && $self->direction eq DIR_OUT;
+    $self->send_line("sendmempool") if !($synced & 1) && $self->direction eq DIR_OUT;
     my $height = QBitcoin::Block->blockchain_height;
     if (defined($height)) {
         my $best_block = QBitcoin::Block->best_block($height);
@@ -206,8 +212,38 @@ sub process_block {
         $self->send_line("abort bad_block_data");
         return -1;
     }
+    return 0 if QBitcoin::Block->block_pool($block->height, $block->hash);
+    return 0 if $pending_blocks{$block->hash};
     $block->received_from = $self;
-    return $block->receive();
+    foreach my $tx_hash (@{$block->{tx_hashes}}) {
+        my $transaction = QBitcoin::Transaction->get_by_hash($tx_hash);
+        if ($transaction) {
+            $block->add_tx($transaction);
+        }
+        else {
+            $block->pending_tx($tx_hash);
+            $self->send_line("sendtx " . unpack("H*", $tx_hash));
+        }
+    }
+    if ($block->pending_tx) {
+        $pending_blocks{$block->hash} = $block;
+        if (keys %pending_blocks > MAX_PENDING_BLOCKS) {
+            my ($oldest_block) = values %pending_blocks;
+            foreach my $tx_hash (@{$oldest_block->pending_tx}) {
+                delete $pending_tx{$tx_hash}->{$oldest_block->hash};
+                if (!%{$pending_tx{$tx_hash}}) {
+                    delete $pending_tx{$tx_hash};
+                }
+            }
+            delete $pending_blocks{$oldest_block->hash};
+        }
+
+        return 0;
+    }
+    else {
+        $block->compact_tx();
+        return $block->receive();
+    }
 }
 
 sub cmd_tx {
@@ -232,7 +268,23 @@ sub cmd_tx {
 sub process_tx {
     my $self = shift;
     my ($tx_data) = @_;
-    ...;
+    my $tx = QBitcoin::Transaction->deserialize($tx_data);
+    if (!$tx) {
+        $self->send_line("abort bad_tx_data");
+        return -1;
+    }
+    $tx->receive() == 0
+        or return -1;
+    if (my $blocks = delete $pending_tx{$tx->hash}) {
+        foreach my $block (values %$blocks) {
+            $block->add_tx($tx);
+            if (!$block->pending_tx) {
+                delete $pending_blocks{$block->hash};
+                $block->compact_tx();
+                $block->receive();
+            }
+        }
+    }
     return 0;
 }
 
@@ -262,6 +314,9 @@ sub cmd_ihave {
     if (time() < QBitcoin::Block->time_by_height($height)) {
         Warningf("Ignore too early block height %u from peer %s", $height, $self->ip);
         return 0;
+    }
+    if (!$saw_height || $saw_height < $height) {
+        $saw_height = $height;
     }
     if ($height > (QBitcoin::Block->blockchain_height // -1)) {
         $self->send_line("sendblock " . ((QBitcoin::Block->blockchain_height // -1) + 1));
@@ -308,7 +363,7 @@ sub cmd_sendtx {
 sub cmd_sendmempool {
     my $self = shift;
     # TODO
-    $self->send_line("endmempool") if $synced;
+    $self->send_line("endmempool") if $synced & 1;
     return 0;
 }
 
@@ -319,7 +374,7 @@ sub cmd_endmempool {
         $self->send_line("abort incorrect_params");
         return -1;
     }
-    $synced = 1;
+    $synced |= 1;
     return 0;
 }
 
