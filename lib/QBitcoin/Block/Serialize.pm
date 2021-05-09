@@ -4,7 +4,7 @@ use strict;
 
 use Role::Tiny;
 
-# TODO: Change these stubs to correct serialize methods (to binary data)
+# TODO: Change these stubs to effective serialize methods (to packed binary data)
 use Digest::SHA qw(sha256);
 use JSON::XS;
 
@@ -17,11 +17,11 @@ sub serialize {
         $JSON->encode({
             height       => $self->height,
             weight       => $self->weight,
-            prev_hash    => $self->prev_hash,
+            prev_hash    => unpack("H*", $self->prev_hash),
             self_weight  => $self->self_weight,
-            transactions => $self->tx_hashes,
+            transactions => [ map { unpack("H*", $_) } @{$self->tx_hashes} ],
             $self->received_from ? ( rcvd => $self->received_from->ip ) : (),
-        });
+        }) . "\n";
 }
 
 sub deserialize {
@@ -32,14 +32,13 @@ sub deserialize {
         Warningf("Incorrect block: %s", $@);
         return undef;
     }
-    utf8::decode($decoded->{prev_hash});
     my $block = $class->new({
         height      => $decoded->{height},
         weight      => $decoded->{weight},
-        prev_hash   => $decoded->{prev_hash},
+        prev_hash   => pack("H*", $decoded->{prev_hash}),
         self_weight => $decoded->{self_weight},
         rcvd        => $decoded->{rcvd},
-        tx_hashes   => $decoded->{transactions},
+        tx_hashes   => [ map { pack("H*", $_) } @{$decoded->{transactions}} ],
     });
     $block->hash = $block->calculate_hash;
     return $block;

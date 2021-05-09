@@ -35,8 +35,9 @@ use Tie::IxHash;
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
+use QBitcoin::ProtocolState qw(mempool_synced);
 use QBitcoin::Block;
-use QBitcoin::Network;
+use QBitcoin::Peers;
 
 use constant INT_POSITIVE_RE => qw/^[1-9][0-9]*\z/;
 use constant INT_UNSIGNED_RE => qw/^(?:0|[1-9][0-9]*)\z/;
@@ -57,9 +58,6 @@ use constant ATTR => qw(
 );
 
 mk_accessors(ATTR);
-
-our $synced = 0;
-our $saw_height;
 
 my %pending_blocks;
 tie(%pending_blocks, 'Tie::IxHash'); # Ordered by age
@@ -91,7 +89,7 @@ sub disconnect {
     $self->state = STATE_DISCONNECTED;
     $self->sendbuf = "";
     $self->recvbuf = "";
-    QBitcoin::Network->del_peer($self) if $self->direction eq DIR_IN;
+    QBitcoin::Peers->del_peer($self) if $self->direction eq DIR_IN;
     return 0;
 }
 
@@ -146,7 +144,7 @@ sub send {
     my $self = shift;
     my ($data) = @_;
 
-    if ($self->sendbuf eq '') {
+    if ($self->sendbuf eq '' && $self->socket) {
         my $n = syswrite($self->socket, $data);
         if (!defined($n)) {
             Errf("Error write to socket: %s", $!);
@@ -176,7 +174,7 @@ sub startup {
     my $self = shift;
     $self->send_line("qbtc " . GENESIS_HASH_HEX) == 0
         or return -1;
-    $self->send_line("sendmempool") if !($synced & 1) && $self->direction eq DIR_OUT;
+    $self->send_line("sendmempool") if !mempool_synced() && $self->direction eq DIR_OUT;
     my $height = QBitcoin::Block->blockchain_height;
     if (defined($height)) {
         my $best_block = QBitcoin::Block->best_block($height);
@@ -215,7 +213,7 @@ sub process_block {
     return 0 if QBitcoin::Block->block_pool($block->height, $block->hash);
     return 0 if $pending_blocks{$block->hash};
     $block->received_from = $self;
-    foreach my $tx_hash (@{$block->{tx_hashes}}) {
+    foreach my $tx_hash (@{$block->tx_hashes}) {
         my $transaction = QBitcoin::Transaction->get_by_hash($tx_hash);
         if ($transaction) {
             $block->add_tx($transaction);
@@ -315,9 +313,7 @@ sub cmd_ihave {
         Warningf("Ignore too early block height %u from peer %s", $height, $self->ip);
         return 0;
     }
-    if (!$saw_height || $saw_height < $height) {
-        $saw_height = $height;
-    }
+    QBitcoin::Block->declared_height($height);
     if ($height > (QBitcoin::Block->blockchain_height // -1)) {
         $self->send_line("sendblock " . ((QBitcoin::Block->blockchain_height // -1) + 1));
     }
@@ -336,7 +332,7 @@ sub cmd_sendblock {
         return -1;
     }
     my $height = $args[0];
-    my $block = QBitcoin::Block->get_by_height($height);
+    my $block = QBitcoin::Block->best_block($height);
     if (!$block) {
         Warningf("I have no block with height %u requested by peer %s", $height, $self->ip);
     }
@@ -363,7 +359,7 @@ sub cmd_sendtx {
 sub cmd_sendmempool {
     my $self = shift;
     # TODO
-    $self->send_line("endmempool") if $synced & 1;
+    $self->send_line("endmempool") if mempool_synced();
     return 0;
 }
 
@@ -374,7 +370,7 @@ sub cmd_endmempool {
         $self->send_line("abort incorrect_params");
         return -1;
     }
-    $synced |= 1;
+    mempool_synced(1);
     return 0;
 }
 

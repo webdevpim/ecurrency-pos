@@ -19,10 +19,11 @@ sub generate {
     # TODO: generate correct block from mempool
     my $self_weight = int(rand(100));
     my $generated = $class->new({
-        height      => $height,
-        weight      => $prev_block ? $prev_block->weight + $self_weight : $self_weight,
-        self_weight => $self_weight,
-        prev_hash   => $prev_block ? $prev_block->hash : undef,
+        height       => $height,
+        weight       => $prev_block ? $prev_block->weight + $self_weight : $self_weight,
+        self_weight  => $self_weight,
+        prev_hash    => $prev_block ? $prev_block->hash : undef,
+        transactions => [],
     });
     my $data = $generated->serialize;
     $generated->hash($generated->calculate_hash($data));

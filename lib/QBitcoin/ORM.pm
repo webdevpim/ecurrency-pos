@@ -188,8 +188,16 @@ sub update {
             push @values, $args->{$key};
         }
     }
-    $sql .= " WHERE id = ?";
-    $dbh->do($sql, undef, @values, $self->id);
+    my @pk_values;
+    if ($self->can('PRIMARY_KEY')) {
+        $sql .= " WHERE " . join(" AND ", map { "$_ = ?" } $self->PRIMARY_KEY);
+        @pk_values = map { $self->$_ } $self->PRIMARY_KEY;
+    }
+    else {
+        $sql .= " WHERE id = ?";
+        @pk_values = ($self->id);
+    }
+    $dbh->do($sql, undef, @values, @pk_values);
 }
 
 # Lock until end of $dbh connection

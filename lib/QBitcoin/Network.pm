@@ -8,38 +8,15 @@ use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Log;
+use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Protocol;
-
-my %PEERS;
-
-sub peers {
-    return values %PEERS;
-}
-
-sub peer {
-    my $class = shift;
-    my ($ip) = @_;
-    return $PEERS{$ip};
-}
-
-sub add_peer {
-    my $class = shift;
-    my ($peer) = @_;
-    $PEERS{$peer->ip} = $peer;
-}
-
-sub del_peer {
-    my $class = shift;
-    my ($peer) = @_;
-    delete $PEERS{$peer->ip};
-}
 
 sub listen_socket {
     my $class = shift;
 
-    my $listen_port = $config->{port} // getservbyname(SERVICE_NAME, 'tcp') // PORT_P2P;
-    my $my_addr = inet_aton($config->{bind_addr} // BIND_ADDR);
-    my $bind_addr = sockaddr_in($listen_port, $my_addr);
+    my ($listen_addr, $listen_port) = split(/:/, $config->{bind_addr} // BIND_ADDR);
+    $listen_port //= $config->{port} // getservbyname(SERVICE_NAME, 'tcp') // PORT_P2P;
+    my $bind_addr = sockaddr_in($listen_port, inet_aton($listen_addr eq '*' ? "0.0.0.0" : $listen_addr));
     my $proto = getprotobyname('tcp');
     socket(my $listen_socket, PF_INET, SOCK_STREAM, $proto)
         or die "Error creating socket: $!\n";
@@ -49,7 +26,7 @@ sub listen_socket {
         or die "bind error: $!\n";
     listen($listen_socket, LISTEN_QUEUE)
         or die "Error listen: $!\n";
-    Infof("Accepting connections on %s:%s", BIND_ADDR, $listen_port);
+    Infof("Accepting connections on %s:%s", $listen_addr, $listen_port);
     return $listen_socket;
 }
 
@@ -82,7 +59,10 @@ sub main_loop {
     my $class = shift;
     my @peer_hosts = @_;
 
-    $QBitcoin::Protocol::synced = 3 if $config->{base};
+    if ($config->{base}) {
+        mempool_synced(1);
+        blockchain_synced(1);
+    }
     # Load last INCORE_LEVELS blocks from database
     foreach my $block (reverse QBitcoin::Block->find(-sortby => "height DESC", -limit => INCORE_LEVELS)) {
         # TODO: load transactions from the block
@@ -97,7 +77,7 @@ sub main_loop {
             direction  => DIR_OUT,
         );
         connect_to($peer);
-        $class->add_peer($peer);
+        QBitcoin::Peers->add_peer($peer);
     }
 
     my ($rin, $win, $ein);
@@ -106,7 +86,7 @@ sub main_loop {
 
     while () {
         my $timeout = SELECT_TIMEOUT;
-        if ($config->{mining} && $QBitcoin::Protocol::synced == 3) {
+        if ($config->{generate} && mempool_synced() && blockchain_synced()) {
             my $now = Time::HiRes::time();
             my $blockchain_height = QBitcoin::Block->blockchain_height // -1;
             my $time_next_block = QBitcoin::Block->time_by_height($blockchain_height + 1);
@@ -120,7 +100,7 @@ sub main_loop {
         }
         $rin = $win = $ein = '';
         vec($rin, fileno($listen_socket), 1) = 1 if $listen_socket;
-        foreach my $peer ($class->peers) {
+        foreach my $peer (QBitcoin::Peers->peers) {
             if (!$peer->socket) {
                 if (time() - $peer->state_time >= PEER_RECONNECT_TIME) {
                     connect_to($peer);
@@ -142,7 +122,7 @@ sub main_loop {
             my $peerinfo = accept(my $new_socket, $listen_socket);
             my ($remote_port, $peer_addr) = unpack_sockaddr_in($peerinfo);
             my $peer_ip = inet_ntoa($peer_addr);
-            if (my $peer = $class->peer($peer_ip)) {
+            if (my $peer = QBitcoin::Peers->peer($peer_ip)) {
                 Warningf("Already connected with peer %s, status %s", $peer_ip, $peer->state);
                 close($new_socket);
             }
@@ -156,11 +136,11 @@ sub main_loop {
                     ip         => $peer_ip,
                     direction  => DIR_IN,
                 );
-                $class->add_peer($peer);
+                QBitcoin::Peers->add_peer($peer);
                 $peer->startup();
             }
         }
-        foreach my $peer ($class->peers) {
+        foreach my $peer (QBitcoin::Peers->peers) {
             $peer->socket or next;
             if (vec($ein, $peer->socket_fileno, 1) == 1) {
                 Warningf("Peer %s disconnected", $peer->ip);

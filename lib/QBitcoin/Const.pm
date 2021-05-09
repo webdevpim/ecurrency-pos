@@ -5,8 +5,9 @@ use strict;
 use constant GENESIS_BLOCK_HASH => "1234";
 
 use constant QBITCOIN_CONST => {
+    VERSION             => "0.1",
     BLOCK_INTERVAL      => 10, # sec
-    GENESIS_TIME        => 1620328800, # 2021-05-06 22:20
+    GENESIS_TIME        => 1620540000, # 2021-05-09 09:00
     INCORE_LEVELS       => 60,
     MIN_FEE             => 0.00000001, # 1 satoshi
     MAX_VALUE           => 21000000 * 100000000, # 21M
@@ -18,7 +19,7 @@ use constant QBITCOIN_CONST => {
     PORT_API            => 9556,
     SERVICE_NAME        => "qbitcoin",
     SELECT_TIMEOUT      => 10, # sec
-    BIND_ADDR           => 'localhost',
+    BIND_ADDR           => '*',
     LISTEN_QUEUE        => 5,
     PEER_RECONNECT_TIME => 10,
     GENESIS_HASH        => pack('H*', GENESIS_BLOCK_HASH),

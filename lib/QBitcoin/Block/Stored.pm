@@ -12,10 +12,10 @@ use constant TABLE => 'block';
 sub store {
     my $self = shift;
     my $db_transaction = $self->db_start;
+    $self->replace(); # Save block first to satisfy foreign key
     foreach my $transaction (@{$self->transactions}) {
-        $transaction->store();
+        $transaction->store($self->height);
     }
-    $self->replace();
     $db_transaction && $db_transaction->commit;
 }
 

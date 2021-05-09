@@ -10,15 +10,34 @@ use QBitcoin::Network;
 
 sub main {
     my ( $help, @peer_hosts );
-    GetOptions(
-        'help|?'   => \$help,
-        'peer|p=s' => \@peer_hosts,
-        'bind|b=s' => \$config->{bind_addr},
-        'port|P=s' => \$config->{port},
-        'base|B'   => \$config->{base},
-        'mining|m' => \$config->{mining},
-    );
-    QBitcoin::Network->main_loop(@peer_hosts);
+    unless (GetOptions(
+        'help|h|?'   => \$help,
+        'peer|p=s'   => \@peer_hosts,
+        'bind|b=s'   => \$config->{bind_addr},
+        'port|P=s'   => \$config->{port},
+        'base|B'     => \$config->{base},
+        'generate|g' => \$config->{generate},
+    )) {
+        select STDERR;
+        usage();
+        return 1;
+    }
+    if ($help) {
+        usage();
+        return 0;
+    }
+    return QBitcoin::Network->main_loop(@peer_hosts);
 }
 
-main();
+sub usage {
+    print "QBitcoin Core Daemon version " . VERSION . "\n";
+    print "Usage:  qbitcoind [options]\n";
+    print "Options:\n";
+    print "   -h, -? --help            - print this help message and exit,\n";
+    print "   -p, --peer <host[:port]> - connect to peer <host> and <port> (default port " . PORT_P2P . "),\n";
+    print "   -b, --bind <addr[:port]> - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT_P2P . "),\n";
+    print "   -g, --generate           - generate blocks,\n";
+    print "   -B, --base               - run as single node, do not need to synchronize with other nodes for authoritative answers.\n";
+}
+
+exit main();
