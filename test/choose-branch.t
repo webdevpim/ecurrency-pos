@@ -1,0 +1,111 @@
+#! /usr/bin/env perl
+use warnings;
+use strict;
+use feature 'state';
+
+use FindBin '$Bin';
+use lib "$Bin/../lib";
+
+use Test::More;
+use Test::MockModule;
+use QBitcoin::Protocol;
+use QBitcoin::Block;
+
+$ENV{LOG_NULL} //= 1;
+
+my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
+$protocol_module->mock('send_line', sub { 1 });
+my $peer = QBitcoin::Protocol->new(ip => '127.0.0.1');
+
+# parent process accept and check results; child execute subchilds and wait them
+pipe my $rh, my $wh;
+my $base_pid = fork();
+close($base_pid ? $wh : $rh);
+
+send_blocks([
+    [ 0, "a1", undef, 100 ],
+    [ 1, "a2", "a1",  200 ],
+    [ 2, "a3", "a2",  300 ],
+], [ 2, "a3", 300 ]);
+
+send_blocks([
+    [ 0, "a1", undef, 100 ],
+    [ 1, "a2", "a1",  200 ],
+    [ 2, "b3", "b2",  300 ],
+], [ 1, "a2", 200 ]);
+
+send_blocks([
+    [ 0, "a1", undef, 100 ],
+    [ 1, "a2", "a1",  200 ],
+    [ 2, "b3", "b2",  300, 150 ],
+    [ 1, "b2", "a1",  150 ],
+], [ 2, "b3", 300 ]);
+
+send_blocks([
+    [ 0, "a1", undef, 100 ],
+    [ 1, "a2", "a1",  200 ],
+    [ 2, "a3", "a2",  300 ],
+    [ 1, "b2", "a1",  210 ],
+    [ 2, "b3", "b2",  290 ],
+], [ 2, "a3", 300 ]);
+
+send_blocks([
+    [ 0, "a1", undef, 100 ],
+    [ 1, "b2", "a1",  210 ],
+    [ 2, "b3", "b2",  290 ],
+    [ 2, "a3", "a2",  300, 100 ],
+    [ 1, "a2", "a1",  200 ],
+], [ 2, "a3", 300 ]);
+
+sub send_blocks {
+    my ($blocks, $expect) = @_;
+
+    # Create new blockchain from scratch for each send_blocks() call
+    if ($base_pid) {
+        my $res = <$rh>;
+        chomp($res);
+        my ($height, $weight, $hash) = split(/\s+/, $res);
+        state $n=1;
+        subtest "branch " . $n++ => sub {
+            is($height, $expect->[0], "height");
+            is($hash,   $expect->[1], "hash");
+            is($weight, $expect->[2], "weight");
+        };
+        return;
+    }
+    my $pid = fork();
+    if ($pid) {
+        waitpid($pid, 0);
+        die if $?;
+    }
+    elsif (defined($pid)) {
+        # child
+        foreach my $block_data (@$blocks) {
+            my $block = QBitcoin::Block->new(
+                height        => $block_data->[0],
+                hash          => $block_data->[1],
+                prev_hash     => $block_data->[2],
+                weight        => $block_data->[3],
+                self_weight   => $block_data->[4],
+                transactions  => [],
+                received_from => $peer,
+            );
+            $block->receive();
+        }
+        my $height = QBitcoin::Block->blockchain_height;
+        my $weight = QBitcoin::Block->best_weight;
+        my $block  = $height ? QBitcoin::Block->best_block($height) : undef;
+        my $hash   = $block ? $block->hash : undef;
+        print $wh join(' ', $height // "", $weight // "", $hash // "") . "\n";
+        exit(0);
+    }
+    else {
+        die "Can't fork: $!\n";
+    }
+}
+
+if ($base_pid) {
+    waitpid($base_pid, 0);
+    die if $?;
+    done_testing();
+}
