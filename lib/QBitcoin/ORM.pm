@@ -17,7 +17,7 @@ use constant DB_TYPES => {
 use constant DB_TYPES;
 
 use parent 'Exporter';
-our @EXPORT_OK = qw(open_db find create replace update lock db_start IGNORE);
+our @EXPORT_OK = qw(open_db find create replace update lock db_start IGNORE $DBH);
 push @EXPORT_OK, keys %{&DB_TYPES};
 our %EXPORT_TAGS = ( types => [ keys %{&DB_TYPES} ] );
 
@@ -31,11 +31,16 @@ use constant KEY_RE => qr/^[a-z][a-z0-9_]*\z/;
 
 use constant IGNORE => \undef; # { key => IGNORE } may be used to override default check for "key" column
 
+our $DBH; # controlled by QBitcoin::ORM::Transaction
+
 sub open_db {
+    my ($nocache) = @_;
+    return $DBH if $DBH; # for transaction
     my $dsn = $config->{"dsn"} // "DBI:mysql:" . DB_NAME . ";mysql_read_default_file=$ENV{HOME}/my.cnf:localhost";
     my $login = $config->{"db.login"};
     my $password = $config->{"db.password"};
-    return DBI->connect_cached($dsn, undef, undef, DB_OPTS);
+    my $method = $nocache ? "connect" : "connect_cached";
+    return DBI->$method($dsn, $login, $password, DB_OPTS);
 }
 
 sub find {
@@ -198,24 +203,6 @@ sub update {
         @pk_values = ($self->id);
     }
     $dbh->do($sql, undef, @values, @pk_values);
-}
-
-# Lock until end of $dbh connection
-sub lock {
-    my $class = shift;
-
-    my $dbh = open_db();
-    my $table = $class->TABLE;
-    $dbh->do("SELECT GET_LOCK(?, ?)", undef, $table, 0)
-        or die "Cannot lock $table";
-    return $dbh;
-}
-
-sub db_start {
-    my $self = shift;
-
-    # TODO
-    return undef;
 }
 
 1;
