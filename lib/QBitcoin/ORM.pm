@@ -113,7 +113,9 @@ sub find {
     $sth->execute(@values);
     my @result;
     while (my $res = $sth->fetchrow_hashref()) {
-        push @result, $class->new($res);
+        my $item = $class->new($res);
+        $item->on_load if $class->can('on_load');
+        push @result, $item;
     }
     return wantarray ? @result : $result[0];
 }

@@ -59,11 +59,11 @@ sub store {
     my $class = ref $self;
     foreach my $in (@{$self->in}) {
         my $txo = QBitcoin::TXO->get($in);
-        $txo->store_spend($self->id),
+        $txo->store_spend($self),
     }
     foreach my $num (0 .. @{$self->out}-1) {
         my $txo = $self->out->[$num];
-        $txo->store($self->id);
+        $txo->store($self);
     }
     # TODO: store tx data (smartcontract)
 }
@@ -133,20 +133,11 @@ sub create_outputs {
 sub load_inputs {
     my ($inputs, $hash) = @_;
 
+    # tx inputs are not sorted in the database, so sort them here for get deterministic transaction hash
+    my @loaded_inputs;
     my @need_load_txo;
     foreach my $in (@$inputs) {
         # TODO: Coinbase
-        if (!QBitcoin::TXO->get($in)) {
-            push @need_load_txo, $in;
-        }
-    }
-
-    if (@need_load_txo) {
-        QBitcoin::TXO->load(@need_load_txo);
-    }
-
-    my @loaded_inputs;
-    foreach my $in (@$inputs) {
         if (my $txo = QBitcoin::TXO->get($in)) {
             push @loaded_inputs, {
                 txo          => $txo,
@@ -154,13 +145,32 @@ sub load_inputs {
             };
         }
         else {
-            Warningf("input %s:%u not found in transaction %s",
-                unpack("H*", substr($in->{tx_out}, 0, 4)), $in->{num}, unpack("H*", substr($hash, 0, 4)));
-            return undef;
+            push @need_load_txo, $in;
         }
     }
 
-    return \@loaded_inputs;
+    if (@need_load_txo) {
+        QBitcoin::TXO->load(@need_load_txo);
+        foreach my $in (@need_load_txo) {
+            if (my $txo = QBitcoin::TXO->get($in)) {
+                push @loaded_inputs, {
+                    txo          => $txo,
+                    close_script => $in->{close_script},
+                };
+            }
+            else {
+                Warningf("input %s:%u not found in transaction %s",
+                    unpack("H*", substr($in->{tx_out}, 0, 4)), $in->{num}, unpack("H*", substr($hash, 0, 4)));
+                return undef;
+            }
+        }
+    }
+    return [ sort { _cmp_inputs($a, $b) } @loaded_inputs ];
+}
+
+sub _cmp_inputs {
+    my ($in1, $in2) = @_;
+    return $in1->{txo}->tx_in cmp $in2->{txo}->tx_out || $in1->{txo}->num <=> $in2->{txo}->num;
 }
 
 sub calculate_hash {
@@ -197,6 +207,25 @@ sub receive {
     # TODO: Check that transaction is signed correctly
     $TRANSACTION{$self->hash} = $self;
     return 0;
+}
+
+sub on_load {
+    my $self = shift;
+    $self->confirmed = 1;
+    $TRANSACTION{$self->hash} = $self;
+    # Load TXO for inputs and outputs
+    my @outputs = QBitcoin::TXO->load_outputs($self);
+    my @inputs;
+    foreach my $txo (QBitcoin::TXO->load_inputs($self)) {
+        push @inputs, {
+            txo          => $txo,
+            close_script => $txo->close_script,
+        };
+        $txo->close_script = undef;
+    }
+    $self->inputs  = [ sort { _cmp_inputs($a, $b) } @inputs ];
+    $self->outputs = \@outputs;
+    return $self;
 }
 
 1;
