@@ -54,17 +54,17 @@ sub load {
     while (my $hash = $sth->fetchrow_hashref()) {
         my $txo = $class->new($hash);
         $TXO{$hash->{tx_in}}->[$hash->{num}] = $txo;
+        # Keep the txo in the %TXO hash until at least one reference (input or output) exists
+        weaken($TXO{$hash->{tx_in}}->[$hash->{num}]);
         push @txo, $txo;
     }
     return @txo;
 }
 
-sub free {
-    my $class = shift;
-    my ($in) = @_;
-
-    delete $TXO{$in->{tx_out}}->[$in->{num}];
-    delete $TXO{$in->{tx_out}} unless @{$TXO{$in->{tx_out}}};
+sub DESTROY {
+    my $self = shift;
+    delete $TXO{$self->tx_out}->[$self->num];
+    delete $TXO{$self->tx_out} unless @{$TXO{$self->tx_out}};
 }
 
 sub store {
@@ -84,6 +84,14 @@ sub store_spend {
     my $res = $self->dbh->do($sql, undef, $tx_id, $self->close_script, $self->tx_in, $self->num);
     $res == 1
         or die "Can't store txo " . hex($self->tx_in) . ":" . $self->num . " as spend";
+}
+
+sub serialize {
+    my $self = shift;
+    return {
+        value       => $self->value,
+        open_script => $self->open_script,
+    };
 }
 
 1;

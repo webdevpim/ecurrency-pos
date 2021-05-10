@@ -11,6 +11,7 @@ CREATE TABLE transaction (
   id int unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY,
   hash binary(32) NOT NULL,
   block_height int unsigned NOT NULL,
+  fee bigint signed NOT NULL,
   UNIQUE (hash),
   KEY (block_height),
   FOREIGN KEY (block_height) REFERENCES block (height) ON DELETE CASCADE

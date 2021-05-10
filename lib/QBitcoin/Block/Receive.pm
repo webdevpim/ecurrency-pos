@@ -167,41 +167,43 @@ sub receive {
         # then set output in all txo in new branch and check it against possible double-spend
         for (my $b = $class->best_block($new_best->height); $b; $b = $b->next_block) {
             foreach my $tx (@{$b->transactions}) {
+                $tx->confirmed = 0;
                 foreach my $in (@{$tx->in}) {
-                    my $txo = QBitcoin::TXO->get($in);
-                    $txo->tx_out = undef;
+                    $in->{txo}->tx_out = undef;
                 }
             }
         }
         for (my $b = $new_best; $b; $b = $b->next_block) {
-            my @need_load_txo;
             foreach my $tx (@{$b->transactions}) {
+                $tx->confirmed = 1;
                 foreach my $in (@{$tx->in}) {
-                    if (!QBitcoin::TXO->get($in)) {
-                        push @need_load_txo, $in;
+                    my $txo = $in->{txo};
+                    my $correct = 1;
+                    if ($txo->tx_out) {
+                        # double-spend; drop this branch, return to old best branch and decrease reputation for peer $b->received_from
+                        Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %s, block from %s",
+                            unpack("H*", $txo->tx_in), $in->{txo}->num, unpack("H*", $txo->tx_out), unpack("H*", $tx->hash),
+                            $b->received_from ? $b->received_from->ip : "me");
+                        $correct = 0;
                     }
-                }
-            }
-            if (@need_load_txo) {
-                QBitcoin::TXO->load(@need_load_txo);
-            }
-            foreach my $tx (@{$b->transactions}) {
-                foreach my $in (@{$tx->in}) {
-                    my $txo = QBitcoin::TXO->get($in);
-                    if (!$txo || $txo->tx_out) {
-                        if ($txo) {
-                            # double-spend; drop this branch, return to old best branch and decrease reputation for peer $b->received_from
-                            Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %u, block from %s",
-                                unpack("H*", $in->{tx_out}), $in->{num}, unpack("H*", $txo->tx_out), unpack("H*", $tx->hash),
+                    elsif (my $tx_in = QBitcoin::Transaction->get($txo->tx_in)) {
+                        # Transaction whis this output must be already confirmed (in the same best branch)
+                        # Stored (not cached) transactions are always confirmed, not needed to load them
+                        if (!$tx_in->confirmed) {
+                            Warning("Unconfirmed input %s:%u for transaction %s, block from %s",
+                                unpack("H*", $txo->tx_in), $txo->num, unpack("H*", $tx->hash),
                                 $b->received_from ? $b->received_from->ip : "me");
+                            $correct = 0;
                         }
-                        else {
-                            Warningf("Incorrect transaction input %s:%u: in %u, block from %s",
-                                unpack("H*", $in->{tx_out}), $in->{num}, unpack("H*", $tx->hash),
-                                $b->received_from ? $b->received_from->ip : "me");
-                        }
+                    }
+                    if ($correct) {
+                        $txo->tx_out = $tx->hash;
+                        $txo->close_script = $in->{close_script};
+                    }
+                    else {
                         for (my $b1 = $new_best; $b1; $b1++) {
                             foreach my $tx1 ($b1->transactions) {
+                                $tx1->confirmed = 0;
                                 foreach my $in (@{$tx1->in}) {
                                     my $txo = QBitcoin::TXO->get($in);
                                     $txo->tx_out = undef;
@@ -210,6 +212,7 @@ sub receive {
                         }
                         for (my $b1 = $class->best_block($new_best->height); $b; $b = $b->next) {
                             foreach my $tx1 ($b1->transactions) {
+                                $tx1->confirmed = 1;
                                 foreach my $in (@{$tx1->in}) {
                                     my $txo = QBitcoin::TXO->get($in);
                                     $txo->tx_out = $tx1->hash;
@@ -231,10 +234,6 @@ sub receive {
                             $self->received_from->send_line("sendblock " . $b->height);
                         }
                         return 0;
-                    }
-                    else {
-                        # TODO: check close_script and open_script
-                        $txo->tx_out = $tx->hash;
                     }
                 }
             }
