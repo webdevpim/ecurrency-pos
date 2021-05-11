@@ -21,13 +21,15 @@ use strict;
 # >> ...
 
 # << sendmempool
-# >> tx <size>
+# >> mempool <txid> <size> <fee>
 # >> ...
-# >> tx <size>
-# >> ...
-# >> endmempool
+# >> endofmempool
 
 # Send "sendmempool" to the first connected node after start, then (after get it) switch to "synced" mode
+
+# >> ping <payload>
+# << pong <payload>
+# Use "ping syncmempool" -> "pong syncmempool" for set mempool_synced state, this means all mempool transactions requested and sent
 
 # If our last known block height less than height_by_time, then batch request all blocks with height from last known to max available
 
@@ -96,11 +98,7 @@ sub disconnect {
 }
 
 sub receive {
-    my $self = shift;
-    my ($data) = @_;
-
-    $self->recvbuf .= $data;
-    while (1) {
+    while (length($self->sendbuf) < WRITE_BUFFER_SIZE) {
         if ($self->wait_data) {
             return 0 if length($self->recvbuf) < $self->wait_data;
             my $process_func = $self->process_func
@@ -394,19 +392,48 @@ sub cmd_sendtx {
 
 sub cmd_sendmempool {
     my $self = shift;
-    # TODO
-    $self->send_line("endmempool") if mempool_synced();
-    return 0;
-}
-
-sub cmd_endmempool {
-    my $self = shift;
     if (@_) {
-        Errf("Incorrect params from peer %s: [%s]", $self->ip, "endmempool " . join(' ', @_));
+        Errf("Incorrect params from peer %s: [%s]", $self->ip, "sendmempool " . join(' ', @_));
         $self->send_line("abort incorrect_params");
         return -1;
     }
-    mempool_synced(1);
+    foreach my $tx (QBitcoin::Transaction->mempool_list) {
+        $peer->send_line("mempool " . unpack("H*", $tx->hash) . " " . $tx->size . " " . $tx->fee);
+    }
+    $self->send_line("endofmempool") if mempool_synced();
+    return 0;
+}
+
+sub cmd_endofmempool {
+    my $self = shift;
+    if (@_) {
+        Errf("Incorrect params from peer %s: [%s]", $self->ip, "endofmempool " . join(' ', @_));
+        $self->send_line("abort incorrect_params");
+        return -1;
+    }
+    $self->send_line("ping syncmempool");
+    return 0;
+}
+
+sub cmd_ping {
+    my $self = shift;
+    if (@args != 1 || ref($args[0]) || !defined($args[0])) {
+        Errf("Incorrect params from peer %s: [%s]", $self->ip, "ping " . join(' ', @args));
+        $self->send_line("abort incorrect_params");
+        return -1;
+    }
+    $self->send_line("pong $args[0]");
+    return 0;
+}
+
+sub cmd_pong {
+    my $self = shift;
+    if (@args != 1 || ref($args[0]) || !defined($args[0])) {
+        Errf("Incorrect params from peer %s: [%s]", $self->ip, "pong " . join(' ', @args));
+        $self->send_line("abort incorrect_params");
+        return -1;
+    }
+    mempool_synced(1) if $args[0] eq "syncmempool";
     return 0;
 }
 

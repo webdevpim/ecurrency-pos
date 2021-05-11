@@ -44,6 +44,11 @@ sub get {
     return $TRANSACTION{$tx_hash};
 }
 
+sub mempool_list {
+    my $class = shift;
+    return grep { !$_->confirmed && $_->fee >= 0 } values %TRANSACTION;
+}
+
 # We never drop existing transaction b/c it's possible its txo already spend by another one
 # This method calls when the transaction stored in the database and is not needed in memory anymore
 # TXO (input and output) will free from %TXO hash by DESTROY() method, they have weaken reference for this

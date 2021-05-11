@@ -107,7 +107,7 @@ sub main_loop {
                 }
             }
             $peer->socket or next;
-            vec($rin, $peer->socket_fileno, 1) = 1 if length($peer->sendbuf) < WRITE_BUFFER_SIZE && $peer->state ne STATE_CONNECTING;
+            vec($rin, $peer->socket_fileno, 1) = 1 if length($peer->recvbuf) < READ_BUFFER_SIZE && $peer->state ne STATE_CONNECTING;
             vec($win, $peer->socket_fileno, 1) = 1 if $peer->sendbuf || $peer->state eq STATE_CONNECTING;
         }
         $ein = $rin | $win;
@@ -160,11 +160,7 @@ sub main_loop {
                     next;
                 }
                 if ($n > 0) {
-                    my $ret = $peer->receive($data);
-                    if ($ret != 0) {
-                        $peer->disconnect();
-                        next;
-                    }
+                    $peer->recvbuf .= $data;
                 }
                 elsif ($n == 0) {
                     Warningf("Peer %s closed connection", $peer->ip);
@@ -196,6 +192,13 @@ sub main_loop {
                 }
                 if ($n > 0) {
                     $peer->sendbuf = $n == length($peer->sendbuf) ? "" : substr($peer->sendbuf, $n);
+                }
+            }
+            if ($peer->recvbuf) {
+                my $ret = $peer->receive();
+                if ($ret != 0) {
+                    $peer->disconnect();
+                    next;
                 }
             }
         }
