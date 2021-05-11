@@ -60,6 +60,13 @@ sub declared_height {
     return $declared_height;
 }
 
+sub hash_out {
+    my $arg = shift;
+    my $hash = ref($arg) ? $arg->hash : $arg;
+    # TODO: return full hash
+    return unpack("H*", substr($hash, 0, 4));
+}
+
 sub receive {
     my $self = shift;
 
@@ -124,7 +131,7 @@ sub receive {
             next if $b->received_from->ip ne $self->received_from->ip;
             next if $b->prev_hash eq $self->hash;
             Debugf("Remove orphan descendant %s height %s received from this peer %s",
-                unpack("H*", substr($b->hash, 0, 4)), $b->height, $self->received_from->ip);
+                $b->hash_out, $b->height, $self->received_from->ip);
             $b->drop_branch();
         }
     }
@@ -136,7 +143,7 @@ sub receive {
         $self->prev_block->next_block = $self;
     }
     elsif ($self->height) {
-        Debugf("No prev block with height %s hash %s, request it", $self->height-1, unpack("H*", substr($self->prev_hash, 0, 4)));
+        Debugf("No prev block with height %s hash %s, request it", $self->height-1, hash_out($self->prev_hash));
         $self->received_from->send_line("sendblock " . ($self->height-1));
         return 0;
     }
@@ -253,12 +260,12 @@ sub receive {
             $self->generate_new() if $new_best->height < $height;
             Infof("%s block height %u hash %s, best branch altered, weight %u",
                 $self->received_from ? "received" : "loaded", $self->height,
-                unpack("H*", substr($self->hash, 0, 4)), $self->branch_weight);
+                $self->hash_out, $self->branch_weight);
         }
         else {
             Infof("%s block height %u hash %s in best branch, weight %u",
                 $self->received_from ? "received" : "loaded", $self->height,
-                unpack("H*", substr($self->hash, 0, 4)), $self->weight);
+                $self->hash_out, $self->weight);
         }
         my $old_height = $height // -1;
         $height = $self->branch_height();

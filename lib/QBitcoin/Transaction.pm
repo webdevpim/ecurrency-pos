@@ -20,6 +20,7 @@ use constant FIELDS => {
 
 use constant ATTR => qw(
     confirmed
+    coins_upgraded
 );
 
 mk_accessors(keys %{&FIELDS}, ATTR);
@@ -68,6 +69,13 @@ sub store {
     # TODO: store tx data (smartcontract)
 }
 
+sub hash_out {
+    my $arg = shift;
+    my $hash = ref($arg) ? $arg->hash : $arg;
+    # TODO: return full hash
+    return unpack("H*", substr($hash, 0, 4));
+}
+
 sub serialize {
     my $self = shift;
     # TODO: pack as binary data
@@ -109,7 +117,7 @@ sub deserialize {
     $self->validate() == 0
         or return undef;
 
-    $self->fee = sum0(map { $_->value } @$out) - sum0(map { $_->{txo}->value } @$in);
+    $self->fee = sum0(map { $_->value } @$out) - sum0(map { $_->{txo}->value } @$in) + ($self->coins_upgraded // 0);
     QBitcoin::TXO->set_all($self->hash, $out);
 
     return $self;
@@ -137,7 +145,6 @@ sub load_inputs {
     my @loaded_inputs;
     my @need_load_txo;
     foreach my $in (@$inputs) {
-        # TODO: Coinbase
         if (my $txo = QBitcoin::TXO->get($in)) {
             push @loaded_inputs, {
                 txo          => $txo,
@@ -160,7 +167,7 @@ sub load_inputs {
             }
             else {
                 Warningf("input %s:%u not found in transaction %s",
-                    unpack("H*", substr($in->{tx_out}, 0, 4)), $in->{num}, unpack("H*", substr($hash, 0, 4)));
+                    hash_out($in->{tx_out}), $in->{num}, hash_out($hash));
                 return undef;
             }
         }
@@ -179,12 +186,24 @@ sub calculate_hash {
     return sha256($tx_data);
 }
 
+sub validate_coinbase {
+    my $self = shift;
+    if (@{$self->out} != 1) {
+        Warningf("Incorrect transaction %s", $self->hash_out);
+        return -1;
+    }
+    # TODO: Get and validate information about btc upgrade from $self->data
+    my $coins = $self->out->[0]->value;
+    Infof("Coinbase transaction %s, upgraded %u coins", $self->hash_out, $coins);
+    $self->upgraded_coins = $coins;
+    return 0;
+}
+
 sub validate {
     my $self = shift;
     # Transaction must contains at least one input (even coinbase!) and at least one output (can't spend all inputs as fee)
     if (!@{$self->in}) {
-        Warningf("No inputs in transaction");
-        return -1;
+        return $self->validate_coinbase;
     }
     if (!@{$self->out}) {
         Warningf("No outputs in transaction");
