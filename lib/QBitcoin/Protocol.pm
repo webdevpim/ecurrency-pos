@@ -15,7 +15,7 @@ use strict;
 
 # First "ihave" with the best existing height/weight send directly after connection from both sides
 
-# >> mempool <txid> <fee>
+# >> mempool <txid> <size> <fee>
 # << sendtx <txid>
 # >> tx <size>
 # >> ...
@@ -35,9 +35,11 @@ use Tie::IxHash;
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
-use QBitcoin::ProtocolState qw(mempool_synced);
+use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Block;
 use QBitcoin::Peers;
+use QBitcoin::Mempool;
+use QBitcoin::Transaction;
 
 use constant INT_POSITIVE_RE => qw/^[1-9][0-9]*\z/;
 use constant INT_UNSIGNED_RE => qw/^(?:0|[1-9][0-9]*)\z/;
@@ -247,7 +249,7 @@ sub process_block {
 sub cmd_tx {
     my $self = shift;
     my @args = @_;
-    if (@args != 1 || ref($args[0]) || !defined($args[0]) || $args[0] !~ INT_POSITIVE_RE) {
+    if (@args != 2 || ref($args[0]) || !defined($args[0]) || $args[0] !~ INT_POSITIVE_RE) {
         Errf("Incorrect params from peer %s: [%s]", $self->ip, "tx " . join(' ', @args));
         $self->send_line("abort incorrect_params");
         return -1;
@@ -281,6 +283,13 @@ sub process_tx {
                 $block->compact_tx();
                 $block->receive();
             }
+        }
+    }
+    if (blockchain_synced() && mempool_synced() && $tx->fee >= 0) {
+        # announce to peers
+        foreach my $peer (QBitcoin::Peers->peers) {
+            next if $peer->ip eq $self->ip;
+            $peer->send_line("mempool " . unpack("H*", $tx->hash) . " " . $tx->size . " " . $tx->fee);
         }
     }
     return 0;
@@ -333,26 +342,53 @@ sub cmd_sendblock {
     }
     my $height = $args[0];
     my $block = QBitcoin::Block->best_block($height);
-    if (!$block) {
-        Warningf("I have no block with height %u requested by peer %s", $height, $self->ip);
-    }
-    else {
+    if ($block) {
         my $data = $block->serialize;
         $self->send_line("block " . length($data) . " " . $block->height);
         $self->send($data);
+    }
+    else {
+        Warningf("I have no block with height %u requested by peer %s", $height, $self->ip);
     }
     return 0;
 }
 
 sub cmd_mempool {
     my $self = shift;
-    ...;
+    my ($hash, $size, $fee) = @_;
+    if (@_ != 3 || !defined($hash) || ref($hash) ||
+        !defined($size) || ref($size) || $size !~ INT_UNSIGNED_RE || $size == 0 ||
+        !defined($fee)  || ref($fee)  || $fee  !~ INT_UNSIGNED_RE) {
+        Errf("Incorrect params from peer %s: [%s]", $self->ip, "mempool " . join(' ', @_));
+        $self->send_line("abort incorrect_params");
+        return -1;
+    }
+    # Comparing floating points, it's ok, we can randomly accept or reject transaction with fee around lower limit
+    # min_fee() returns -1 if mempool size less than limit
+    QBitcoin::Mempool->want_tx($size, $fee)
+        or return 0;
+    $self->send_line("sendtx $hash");
     return 0;
 }
 
 sub cmd_sendtx {
     my $self = shift;
-    ...;
+    my @args = @_;
+    if (@args != 1 || ref($args[0]) || !defined($args[0])) {
+        Errf("Incorrect params from peer %s: [%s]", $self->ip, "sendtx " . join(' ', @args));
+        $self->send_line("abort incorrect_params");
+        return -1;
+    }
+    my ($hash) = shift;
+    my $tx = QBitcoin::Transaction->get_by_hash(pack("H*", $hash));
+    if ($tx) {
+        my $data = $tx->serialize;
+        $self->send_line("tx " . length($data) . " " . $tx->hash_out);
+        $self->send($data);
+    }
+    else {
+        Warningf("I have no transaction with hash %u requested by peer %s", $hash, $self->ip);
+    }
     return 0;
 }
 

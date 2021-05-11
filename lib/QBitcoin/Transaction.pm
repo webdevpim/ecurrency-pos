@@ -7,7 +7,7 @@ use List::Util qw(sum0);
 use Digest::SHA qw(sha256);
 use QBitcoin::Const;
 use QBitcoin::Log;
-use QBitcoin::Accessors qw(mk_accessors);
+use QBitcoin::Accessors qw(mk_accessors new);
 use QBitcoin::ORM qw(find :types);
 use QBitcoin::TXO;
 
@@ -16,6 +16,7 @@ use constant FIELDS => {
     hash         => BINARY,
     block_height => NUMERIC,
     fee          => NUMERIC,
+    size         => NUMERIC,
 };
 
 use constant ATTR => qw(
@@ -109,6 +110,7 @@ sub deserialize {
         in   => $in,
         out  => $out,
         hash => $hash,
+        size => length($tx_data),
     );
     if ($class->calculate_hash($self->serialize) ne $hash) {
         Warningf("Incorrect serialized transaction has different hash");

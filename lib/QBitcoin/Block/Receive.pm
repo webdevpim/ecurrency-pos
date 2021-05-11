@@ -310,7 +310,11 @@ sub receive {
                 }
             }
         }
-        $self->announce_to_peers();
+
+        if ($self->received_from && blockchain_synced()) {
+            # Do not announce blocks loaded from local database
+            $self->announce_to_peers();
+        }
 
         my $branch_height = $self->branch_height();
         if ($self->received_from && time() >= $self->time_by_height($branch_height+1)) {
