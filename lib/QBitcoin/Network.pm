@@ -10,6 +10,8 @@ use QBitcoin::Config;
 use QBitcoin::Log;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Protocol;
+use QBitcoin::Generate;
+use QBitcoin::Produce;
 
 sub listen_socket {
     my $class = shift;
@@ -65,8 +67,11 @@ sub main_loop {
     }
     # Load last INCORE_LEVELS blocks from database
     foreach my $block (reverse QBitcoin::Block->find(-sortby => "height DESC", -limit => INCORE_LEVELS)) {
-        # TODO: load transactions from the block
         $block->receive();
+    }
+    # Load my UTXO
+    if ($config->{generate}) {
+        QBitcoin::Generate->load_utxo();
     }
 
     my $listen_socket = $class->listen_socket;
@@ -85,6 +90,7 @@ sub main_loop {
     $SIG{TERM} = $SIG{INT} = sub { $sig_killed = 1 };
 
     while () {
+        QBitcoin::Produce->produce() if $config->{produce};
         my $timeout = SELECT_TIMEOUT;
         if ($config->{generate} && mempool_synced() && blockchain_synced()) {
             my $now = Time::HiRes::time();
@@ -93,9 +99,9 @@ sub main_loop {
             if ($now + $timeout > $time_next_block) {
                 $timeout = $time_next_block > $now ? $time_next_block - $now : 0;
             }
-            my $generated_height = QBitcoin::Block->generated_height;
+            my $generated_height = QBitcoin::Generate->generated_height;
             if (!$generated_height || $now >= QBitcoin::Block->time_by_height($generated_height + 1)) {
-                QBitcoin::Block->generate($now >= $time_next_block ? $blockchain_height + 1 : $blockchain_height);
+                QBitcoin::Generate->generate($now >= $time_next_block ? $blockchain_height + 1 : $blockchain_height);
             }
         }
         $rin = $win = $ein = '';

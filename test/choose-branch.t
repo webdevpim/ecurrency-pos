@@ -15,6 +15,16 @@ $ENV{LOG_NULL} //= 1;
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_line', sub { 1 });
+
+my $block_module = Test::MockModule->new('QBitcoin::Block');
+$block_module->mock('self_weight', \&mock_self_weight);
+
+sub mock_self_weight {
+    my $self = shift;
+    return $self->{self_weight} //=
+        $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
+}
+
 my $peer = QBitcoin::Protocol->new(ip => '127.0.0.1');
 
 # parent process accept and check results; child execute subchilds and wait them
@@ -64,7 +74,7 @@ sub send_blocks {
     if ($base_pid) {
         my $res = <$rh>;
         chomp($res);
-        my ($height, $weight, $hash) = split(/\s+/, $res);
+        my ($height, $hash, $weight) = split(/\s+/, $res);
         state $n=1;
         subtest "branch " . $n++ => sub {
             is($height, $expect->[0], "height");
@@ -96,7 +106,7 @@ sub send_blocks {
         my $weight = QBitcoin::Block->best_weight;
         my $block  = $height ? QBitcoin::Block->best_block($height) : undef;
         my $hash   = $block ? $block->hash : undef;
-        print $wh join(' ', $height // "", $weight // "", $hash // "") . "\n";
+        print $wh join(' ', $height // "", $hash // "", $weight // "") . "\n";
         exit(0);
     }
     else {

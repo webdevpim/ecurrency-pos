@@ -8,7 +8,7 @@ use Digest::SHA qw(sha256);
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors new);
-use QBitcoin::ORM qw(find :types);
+use QBitcoin::ORM qw(find replace :types);
 use QBitcoin::TXO;
 
 use constant FIELDS => {
@@ -19,9 +19,13 @@ use constant FIELDS => {
     size         => NUMERIC,
 };
 
+use constant TABLE => 'transaction';
+
 use constant ATTR => qw(
-    confirmed
     coins_upgraded
+    received_time
+    in
+    out
 );
 
 mk_accessors(keys %{&FIELDS}, ATTR);
@@ -34,7 +38,7 @@ sub get_by_hash {
     my $class = shift;
     my ($tx_hash) = @_;
 
-    return $TRANSACTION{$tx_hash} // $class->find(hash => $tx_hash);
+    return ($class->get($tx_hash) // $class->find(hash => $tx_hash));
 }
 
 sub get {
@@ -46,7 +50,7 @@ sub get {
 
 sub mempool_list {
     my $class = shift;
-    return grep { !$_->confirmed && $_->fee >= 0 } values %TRANSACTION;
+    return grep { !$_->block_height && $_->fee >= 0 } values %TRANSACTION;
 }
 
 # We never drop existing transaction b/c it's possible its txo already spend by another one
@@ -65,7 +69,7 @@ sub store {
     $self->replace();
     my $class = ref $self;
     foreach my $in (@{$self->in}) {
-        my $txo = QBitcoin::TXO->get($in);
+        my $txo = $in->{txo};
         $txo->store_spend($self),
     }
     foreach my $num (0 .. @{$self->out}-1) {
@@ -85,6 +89,7 @@ sub hash_out {
 sub serialize {
     my $self = shift;
     # TODO: pack as binary data
+    # TODO: add transaction signature
     return $JSON->encode({
         in  => [ map { serialize_input($_) } @{$self->in}  ],
         out => [ map { $_->serialize       } @{$self->out} ],
@@ -112,10 +117,11 @@ sub deserialize {
     my $out  = create_outputs($decoded->{out}, $hash);
     my $in   = load_inputs($decoded->{in}, $hash);
     my $self = $class->new(
-        in   => $in,
-        out  => $out,
-        hash => $hash,
-        size => length($tx_data),
+        in            => $in,
+        out           => $out,
+        hash          => $hash,
+        size          => length($tx_data),
+        received_time => time(),
     );
     if ($class->calculate_hash($self->serialize) ne $hash) {
         Warningf("Incorrect serialized transaction has different hash");
@@ -124,8 +130,8 @@ sub deserialize {
     $self->validate() == 0
         or return undef;
 
+    QBitcoin::TXO->save_all($self->hash, $out);
     $self->fee = sum0(map { $_->value } @$out) - sum0(map { $_->{txo}->value } @$in) + ($self->coins_upgraded // 0);
-    QBitcoin::TXO->set_all($self->hash, $out);
 
     return $self;
 }
@@ -141,6 +147,9 @@ sub create_outputs {
             open_script => $out->[$num]->{open_script},
         });
         push @txo, $txo;
+        if ($txo->is_my) {
+            $txo->add_my_utxo();
+        }
     }
     return \@txo;
 }
@@ -184,11 +193,11 @@ sub load_inputs {
 
 sub _cmp_inputs {
     my ($in1, $in2) = @_;
-    return $in1->{txo}->tx_in cmp $in2->{txo}->tx_out || $in1->{txo}->num <=> $in2->{txo}->num;
+    return $in1->{txo}->tx_in cmp $in2->{txo}->tx_in || $in1->{txo}->num <=> $in2->{txo}->num;
 }
 
 sub calculate_hash {
-    my $self = shift;
+    my $class = shift;
     my ($tx_data) = @_;
     return sha256($tx_data);
 }
@@ -200,44 +209,55 @@ sub validate_coinbase {
         return -1;
     }
     # TODO: Get and validate information about btc upgrade from $self->data
+    # Each upgrade should correspond fixed and deterministic tx hash for qbitcoin
     my $coins = $self->out->[0]->value;
-    Infof("Coinbase transaction %s, upgraded %u coins", $self->hash_out, $coins);
-    $self->upgraded_coins = $coins;
+    $self->coins_upgraded = $coins; # for calculate fee
     return 0;
 }
 
 sub validate {
     my $self = shift;
-    # Transaction must contains at least one input (even coinbase!) and at least one output (can't spend all inputs as fee)
     if (!@{$self->in}) {
         return $self->validate_coinbase;
     }
+    # Transaction must contains least one output (can't spend all inputs as fee)
     if (!@{$self->out}) {
-        Warningf("No outputs in transaction");
+        Warningf("No outputs in transaction %s", $self->hash_out);
         return -1;
     }
     foreach my $out (@{$self->out}) {
-        if ($out->value < 0 && $out->value > MAX_VALUE) {
-            Warningf("Incorrect output value in transaction");
+        if ($out->value < 0 || $out->value > MAX_VALUE) {
+            Warningf("Incorrect output value in transaction %s", $self->hash_out);
             return -1;
         }
     }
+    my $class = ref $self;
+    my @stored_in;
+    my $input_value = 0;
     foreach my $in (@{$self->in}) {
-        # TODO: check $in->{close_script} matches $in->{txo}->open_script
+        $input_value += $in->{txo}->value;
+        if ($in->{txo}->check_script($in->{close_script}) != 0) {
+            Warningf("Unmatched close script for input %s:%u in transaction %s",
+                unpack("H*", $in->{txo}->tx_in), $in->{txo}->num, $self->hash_out);
+            return -1;
+        }
     }
+    if ($input_value <= 0) {
+        Warning("Zero input in transaction %s", $self->hash_out);
+        return -1;
+    }
+    # TODO: Check that transaction is signed correctly
     return 0;
 }
 
 sub receive {
     my $self = shift;
-    # TODO: Check that transaction is signed correctly
     $TRANSACTION{$self->hash} = $self;
     return 0;
 }
 
 sub on_load {
     my $self = shift;
-    $self->confirmed = 1;
     $TRANSACTION{$self->hash} = $self;
     # Load TXO for inputs and outputs
     my @outputs = QBitcoin::TXO->load_outputs($self);
@@ -247,11 +267,46 @@ sub on_load {
             txo          => $txo,
             close_script => $txo->close_script,
         };
-        $txo->close_script = undef;
+        $txo->close_script = undef; # it's saved as transaction $in->{close_script}, not in $txo object
     }
-    $self->inputs  = [ sort { _cmp_inputs($a, $b) } @inputs ];
-    $self->outputs = \@outputs;
+    $self->in  = [ sort { _cmp_inputs($a, $b) } @inputs ];
+    $self->out = \@outputs;
     return $self;
+}
+
+sub unconfirm {
+    my $self = shift;
+    $self->block_height = undef;
+    foreach my $in (@{$self->in}) {
+        my $txo = $in->{txo};
+        $txo->tx_out = undef;
+        if ($txo->is_my) {
+            $txo->add_my_utxo();
+        }
+    }
+}
+
+sub stake_weight {
+    my $self = shift;
+    my ($block_height) = @_;
+    my $weight = 0;
+    my $class = ref $self;
+    foreach my $in (map { $_->{txo} } @{$self->in}) {
+        if (my $tx = $class->get_by_hash($in->tx_in)) {
+            if (!$tx->block_height) {
+                Warningf("Can't get stake_weight for %s with unconfirmed input %s:%u",
+                    $self->hash_out, unpack("H*", $in->tx_in), $in->num);
+                return undef;
+            }
+            $weight += $in->value * ($block_height - $tx->block_height);
+        }
+        else {
+            # tx generated this txo should be loaded during tx validation
+            Warningf("No input transaction %s for txo", unpack("H*", $in->tx_in));
+            return undef;
+        }
+    }
+    return $weight;
 }
 
 1;

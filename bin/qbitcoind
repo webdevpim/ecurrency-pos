@@ -17,6 +17,7 @@ sub main {
         'port|P=s'   => \$config->{port},
         'base|B'     => \$config->{base},
         'generate|g' => \$config->{generate},
+        'produce'    => \$config->{produce},
     )) {
         select STDERR;
         usage();
@@ -36,7 +37,7 @@ sub usage {
     print "   -h, -? --help            - print this help message and exit,\n";
     print "   -p, --peer <host[:port]> - connect to peer <host> and <port> (default port " . PORT_P2P . "),\n";
     print "   -b, --bind <addr[:port]> - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT_P2P . "),\n";
-    print "   -g, --generate           - generate blocks,\n";
+    print "   -g, --generate <addr>    - generate blocks signed by self address <addr> (private key must be known),\n";
     print "   -B, --base               - run as single node, do not need to synchronize with other nodes for authoritative answers.\n";
 }
 

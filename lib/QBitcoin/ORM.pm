@@ -34,13 +34,15 @@ use constant IGNORE => \undef; # { key => IGNORE } may be used to override defau
 our $DBH; # controlled by QBitcoin::ORM::Transaction
 
 sub open_db {
-    my ($nocache) = @_;
+    my ($transaction) = @_;
     return $DBH if $DBH; # for transaction
     my $dsn = $config->{"dsn"} // "DBI:mysql:" . DB_NAME . ";mysql_read_default_file=$ENV{HOME}/my.cnf:localhost";
     my $login = $config->{"db.login"};
     my $password = $config->{"db.password"};
-    my $method = $nocache ? "connect" : "connect_cached";
-    return DBI->$method($dsn, $login, $password, DB_OPTS);
+    my $db_opts = DB_OPTS;
+    $db_opts->{AutoCommit} = 0 if $transaction;
+    my $method = $transaction ? "connect" : "connect_cached";
+    return DBI->$method($dsn, $login, $password, $db_opts);
 }
 
 sub find {
@@ -69,40 +71,55 @@ sub find {
         $key =~ KEY_RE
             or die "Incorrect search key [$key]";
         my $value = $args->{$key};
-        $condition .= "AND " if $condition;
+        my $type = $class->FIELDS->{$key}
+            or die "Unknown search key [$key] for " . $class->TABLE . "\n";
+        $condition .= " AND" if $condition;
         if (ref $value eq 'ARRAY') {
             # "IN()" is sql syntax error, "IN(NULL)" matches nothing
-            $condition .= "$key IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
+            $condition .= " $key IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
             push @values, @$value;
         }
         elsif (ref $value eq 'HASH') {
             my $first = 1;
             foreach my $op (keys %$value) {
-                $condition .= "AND " unless $first;
+                $condition .= " AND" unless $first;
                 my $v = $value->{$op};
                 if (ref $v eq 'SCALAR') {
-                    $condition .= "$key $op $$v";
+                    $condition .= "$key $op $$v ";
                 }
-                if (ref $v eq 'ARRAY') { # key => { not => [ 'value1', 'value2 ] }
-                    $condition .= "$key $op IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
+                elsif (ref $v eq 'ARRAY') { # key => { not => [ 'value1', 'value2 ] }
+                    $condition .= " $key $op IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
                     push @values, @$value;
                 }
+                elsif (ref $v) {
+                    die "Incorrect search value type " . ref($v) . " key $key\n";
+                }
                 else {
-                    $condition .= "$key $op ?";
+                    $condition .= " $key $op ?";
                     push @values, $v;
                 }
                 $first = 0;
             }
         }
         elsif (ref $value eq 'SCALAR') {
-            $condition .= "$key = $$value" if defined $$value; # \undef is IGNORE
+            $condition .= " $key = $$value" if defined $$value; # \undef is IGNORE
         }
-        elsif (defined $args->{$key}) {
-            $condition .= "$key = ?";
-            push @values, $value;
+        elsif (ref $value) {
+            die "Incorrect search value type " . ref($value) . " key $key\n";
+        }
+        elsif (defined $value) {
+            if ($type == BINARY) {
+                # Is it needed?
+                $condition .= " $key = unhex(?)";
+                push @values, unpack("H*", $value);
+            }
+            else {
+                $condition .= " $key = ?";
+                push @values, $value;
+            }
         }
         else {
-            $condition .= "$key IS NULL";
+            $condition .= " $key IS NULL";
         }
     }
     $sql .= " WHERE $condition" if $condition;

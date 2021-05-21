@@ -3,12 +3,12 @@ use warnings;
 use strict;
 
 use QBitcoin::Log;
-use QBitcoin::ORM qw($DBH);
+use QBitcoin::ORM qw($DBH open_db);
 
 sub new {
     my $class = shift;
     die "Nested sql transactions\n" if $DBH;
-    $DBH = open_db(1); # nocache, prevent keep opened transaction after commit() timeout or something like this
+    $DBH = open_db(1);
     return bless {}, $class; # just guard object
 }
 
@@ -21,7 +21,7 @@ sub commit {
 
 sub DESTROY {
     my $self = shift;
-    Errf("Destroy sql transaction without commit");
+    Errf("Destroy sql transaction without commit") if $DBH;
     undef $DBH;
 }
 

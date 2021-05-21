@@ -44,3 +44,9 @@ CREATE TABLE IF NOT EXISTS txo (
   FOREIGN KEY (tx_out)      REFERENCES transaction (id) ON DELETE SET NULL,
   FOREIGN KEY (open_script) REFERENCES open_script (id) ON DELETE RESTRICT
 );
+
+CREATE TABLE IF NOT EXISTS my_address (
+  address     varchar(255) NOT NULL PRIMARY KEY,
+  private_key varchar(255) NOT NULL, -- encrypted
+  pubkey_crc  varchar(255) NOT NULL
+);

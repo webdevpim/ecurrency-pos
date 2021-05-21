@@ -98,6 +98,7 @@ sub disconnect {
 }
 
 sub receive {
+    my $self = shift;
     while (length($self->sendbuf) < WRITE_BUFFER_SIZE) {
         if ($self->wait_data) {
             return 0 if length($self->recvbuf) < $self->wait_data;
@@ -398,7 +399,7 @@ sub cmd_sendmempool {
         return -1;
     }
     foreach my $tx (QBitcoin::Transaction->mempool_list) {
-        $peer->send_line("mempool " . unpack("H*", $tx->hash) . " " . $tx->size . " " . $tx->fee);
+        $self->send_line("mempool " . unpack("H*", $tx->hash) . " " . $tx->size . " " . $tx->fee);
     }
     $self->send_line("endofmempool") if mempool_synced();
     return 0;
@@ -417,6 +418,7 @@ sub cmd_endofmempool {
 
 sub cmd_ping {
     my $self = shift;
+    my @args = @_;
     if (@args != 1 || ref($args[0]) || !defined($args[0])) {
         Errf("Incorrect params from peer %s: [%s]", $self->ip, "ping " . join(' ', @args));
         $self->send_line("abort incorrect_params");
@@ -428,6 +430,7 @@ sub cmd_ping {
 
 sub cmd_pong {
     my $self = shift;
+    my @args = @_;
     if (@args != 1 || ref($args[0]) || !defined($args[0])) {
         Errf("Incorrect params from peer %s: [%s]", $self->ip, "pong " . join(' ', @args));
         $self->send_line("abort incorrect_params");

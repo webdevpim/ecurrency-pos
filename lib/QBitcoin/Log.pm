@@ -11,11 +11,13 @@ use Time::HiRes;
 
 openlog('qbitcoin', 'nofatal,pid', LOG_LOCAL0) unless $ENV{LOG_STDOUT};
 
+my %indent;
+
 sub Logf {
     my ($prio, $format, @args) = @_;
     if ($ENV{LOG_STDOUT}) {
         my $t = Time::HiRes::time();
-        printf "%s.%03d $format\n", strftime("%F %T", gmtime($t)), ($t-int($t)) * 1000, @args;
+        printf "%s.%03d %s$format\n", strftime("%F %T", gmtime($t)), ($t-int($t)) * 1000, $indent{$prio}, @args;
     }
     elsif (!$ENV{LOG_NULL}) {
         syslog($prio, $format, @args);
@@ -31,7 +33,7 @@ sub Log {
 }
 
 # generate functions Debug(), Debugf(), Info(), Infof(), ...
-foreach my $level (qw(debug info notice warning err crit)) {
+foreach my $level (reverse qw(debug info notice warning err crit)) {
     push @EXPORT, 'LOG_' . uc $level;
     my $func = ucfirst $level;
     my $funcf = $func . 'f';
@@ -40,5 +42,10 @@ foreach my $level (qw(debug info notice warning err crit)) {
     *$func = sub { Log($level, @_) };
     *$funcf = sub { Logf($level, @_) };
 }
+$indent{crit} = $indent{err} = "! ";
+$indent{warning} = "* ";
+$indent{notice} = "+ ";
+$indent{info} = "- ";
+$indent{debug} = "  ";
 
 1;

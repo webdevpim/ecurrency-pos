@@ -17,8 +17,7 @@ sub serialize {
         $JSON->encode({
             height       => $self->height,
             weight       => $self->weight,
-            prev_hash    => unpack("H*", $self->prev_hash),
-            self_weight  => $self->self_weight,
+            prev_hash    => $self->prev_hash ? unpack("H*", $self->prev_hash) : undef,
             transactions => [ map { unpack("H*", $_) } @{$self->tx_hashes} ],
             $self->received_from ? ( rcvd => $self->received_from->ip ) : (),
         }) . "\n";
@@ -36,7 +35,6 @@ sub deserialize {
         height      => $decoded->{height},
         weight      => $decoded->{weight},
         prev_hash   => pack("H*", $decoded->{prev_hash}),
-        self_weight => $decoded->{self_weight},
         rcvd        => $decoded->{rcvd},
         tx_hashes   => [ map { pack("H*", $_) } @{$decoded->{transactions}} ],
     });

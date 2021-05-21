@@ -19,21 +19,16 @@ sub validate {
     if ($block->height == 0) {
 #        $block->hash eq GENESIS_HASH
 #            or return "Incorrect genesis block hash " . unpack("H*", $block->hash) . ", must be " . GENESIS_HASH_HEX;
-        return 0; # Not needed to validate genesis block with correct hash
+        return ""; # Not needed to validate genesis block with correct hash
     }
     my $fee = 0;
     foreach my $transaction (@{$block->transactions}) {
-        foreach my $txin (@{$transaction->in}) {
-            $txin->validate(); # is this txin exists and correctly signed (unlocked)?
-            # is the utxo unspent in this branch (including this block)?
-            ...;
-            $fee += $txin->value;
+        if ($transaction->validate != 0) {
+            return "Incorrect transaction " . $transaction->hash_out;
         }
-        foreach my $txout (@{$transaction->out}) {
-            $txout->value < MAX_VALUE
-                or return "Too large value in transaction output: " . $txout->value;
-            $fee -= $txout->value;
-        }
+        # NB: we do not check that the $txin is unspent in this branch;
+        # we will check this on include this block into the best branch
+        $fee += $transaction->fee;
     }
     $fee == 0
         or return "Total block fee is $fee (not 0)";

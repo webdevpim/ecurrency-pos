@@ -8,6 +8,7 @@ use QBitcoin::Log;
 use QBitcoin::TXO;
 use QBitcoin::ProtocolState qw(blockchain_synced);
 use QBitcoin::Peers;
+use QBitcoin::Generate::Control;
 
 # @block_pool - array (by height) of hashes, block by block->hash
 # @best_block - pointers to blocks in the main branch
@@ -109,8 +110,9 @@ sub receive {
             return 0; # Not needed to drop descendants b/c there were dropped when weight of the current branch become more than their weight
         }
         if ($self->prev_hash && (my $alter_descendants = $prev_block[$self->height]->{$self->prev_hash})) {
+            my $best_block_this = $best_block[$self->height];
             foreach my $alter_descendant (values %$alter_descendants) {
-                next if $alter_descendant->hash eq $best_block[$self->height]->hash; # Do not drop the best branch here
+                next if $best_block_this && $alter_descendant->hash eq $best_block_this->hash; # Do not drop the best branch here
                 if ($alter_descendant->branch_weight > $new_weight) {
                     Debugf("Alternative branch has weight %u more then received one %s, ignore",
                         $alter_descendant->branch_weight, $new_weight);
@@ -130,7 +132,7 @@ sub receive {
             next if !$b->received_from;
             next if $b->received_from->ip ne $self->received_from->ip;
             next if $b->prev_hash eq $self->hash;
-            Debugf("Remove orphan descendant %s height %s received from this peer %s",
+            Debugf("Remove orphan descendant %s height %u received from this peer %s",
                 $b->hash_out, $b->height, $self->received_from->ip);
             $b->drop_branch();
         }
@@ -140,6 +142,11 @@ sub receive {
     $prev_block[$self->height]->{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
 
     if ($self->prev_block) {
+        if ($self->weight != $self->prev_block->weight + $self->self_weight) {
+            Debugf("Incorrect block %s height %u weight %u!=%u+%u",
+                $self->hash_out, $self->height, $self->weight, $self->prev_block->weight, $self->self_weight);
+            return 0;
+        }
         $self->prev_block->next_block = $self;
     }
     elsif ($self->height) {
@@ -174,15 +181,12 @@ sub receive {
         # then set output in all txo in new branch and check it against possible double-spend
         for (my $b = $class->best_block($new_best->height); $b; $b = $b->next_block) {
             foreach my $tx (@{$b->transactions}) {
-                $tx->confirmed = 0;
-                foreach my $in (@{$tx->in}) {
-                    $in->{txo}->tx_out = undef;
-                }
+                $tx->unconfirm();
             }
         }
         for (my $b = $new_best; $b; $b = $b->next_block) {
             foreach my $tx (@{$b->transactions}) {
-                $tx->confirmed = 1;
+                $tx->block_height = $b->height;
                 foreach my $in (@{$tx->in}) {
                     my $txo = $in->{txo};
                     my $correct = 1;
@@ -194,9 +198,9 @@ sub receive {
                         $correct = 0;
                     }
                     elsif (my $tx_in = QBitcoin::Transaction->get($txo->tx_in)) {
-                        # Transaction whis this output must be already confirmed (in the same best branch)
+                        # Transaction with this output must be already confirmed (in the same best branch)
                         # Stored (not cached) transactions are always confirmed, not needed to load them
-                        if (!$tx_in->confirmed) {
+                        if (!$tx_in->block_height) {
                             Warning("Unconfirmed input %s:%u for transaction %s, block from %s",
                                 unpack("H*", $txo->tx_in), $txo->num, unpack("H*", $tx->hash),
                                 $b->received_from ? $b->received_from->ip : "me");
@@ -206,23 +210,22 @@ sub receive {
                     if ($correct) {
                         $txo->tx_out = $tx->hash;
                         $txo->close_script = $in->{close_script};
+                        $txo->del_my_utxo if $txo->is_my;
                     }
                     else {
                         for (my $b1 = $new_best; $b1; $b1++) {
                             foreach my $tx1 ($b1->transactions) {
-                                $tx1->confirmed = 0;
-                                foreach my $in (@{$tx1->in}) {
-                                    my $txo = QBitcoin::TXO->get($in);
-                                    $txo->tx_out = undef;
-                                }
+                                $tx1->unconfirm();
                             }
                         }
                         for (my $b1 = $class->best_block($new_best->height); $b; $b = $b->next) {
                             foreach my $tx1 ($b1->transactions) {
-                                $tx1->confirmed = 1;
+                                $tx1->block_height = $b1->height;
                                 foreach my $in (@{$tx1->in}) {
-                                    my $txo = QBitcoin::TXO->get($in);
+                                    my $txo = $in->{txo};
                                     $txo->tx_out = $tx1->hash;
+                                    $txo->close_script = $in->{close_script};
+                                    $txo->del_my_utxo if $txo->is_my;
                                 }
                             }
                         }
@@ -252,20 +255,21 @@ sub receive {
             if ($b->prev_block && (!$b->prev_block->next_block || $b->prev_block->next_block->hash ne $b->hash)) {
                 $b->prev_block->next_block = $b;
             }
+            last if !$best_block[$b->height-1];
         }
         for (my $b = $self->next_block; $b; $b = $b->next_block) {
             $best_block[$b->height] = $b;
         }
         if (defined($height) && $self->height <= $height) {
-            $self->generate_new() if $new_best->height < $height;
-            Infof("%s block height %u hash %s, best branch altered, weight %u",
+            QBitcoin::Generate::Control->generate_new() if $new_best->height < $height;
+            Debugf("%s block height %u hash %s, best branch altered, weight %u, %u transactions",
                 $self->received_from ? "received" : "loaded", $self->height,
-                $self->hash_out, $self->branch_weight);
+                $self->hash_out, $self->branch_weight, scalar(@{$self->transactions}));
         }
         else {
-            Infof("%s block height %u hash %s in best branch, weight %u",
+            Debugf("%s block height %u hash %s in best branch, weight %u, %u transactions",
                 $self->received_from ? "received" : "loaded", $self->height,
-                $self->hash_out, $self->weight);
+                $self->hash_out, $self->branch_weight, scalar(@{$self->transactions}));
         }
         my $old_height = $height // -1;
         $height = $self->branch_height();

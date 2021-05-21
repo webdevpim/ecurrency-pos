@@ -10,7 +10,6 @@ with 'QBitcoin::Block::Receive';
 with 'QBitcoin::Block::Validate';
 with 'QBitcoin::Block::Serialize';
 with 'QBitcoin::Block::Stored';
-with 'QBitcoin::Block::Generate';
 
 use constant PRIMARY_KEY => 'height';
 
@@ -48,9 +47,9 @@ sub branch_height {
 }
 
 sub self_weight {
-    # TODO: calculate by the first transaction
     my $self = shift;
-    return $self->{self_weight} //= $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
+    return $self->{self_weight} //= @{$self->transactions()} ? $self->transactions->[0]->stake_weight($self->height) : 0;
+    # $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
 }
 
 sub add_tx {
