@@ -1,6 +1,7 @@
 package QBitcoin::ORM;
 use warnings;
 use strict;
+use feature "state";
 
 use DBI;
 use JSON::XS;
@@ -20,7 +21,7 @@ use constant DB_TYPES;
 use constant DEBUG_ORM => 1;
 
 use parent 'Exporter';
-our @EXPORT_OK = qw(open_db find create replace update lock db_start IGNORE $DBH DEBUG_ORM);
+our @EXPORT_OK = qw(find create replace update lock db_start IGNORE $DBH DEBUG_ORM);
 push @EXPORT_OK, keys %{&DB_TYPES};
 our %EXPORT_TAGS = ( types => [ keys %{&DB_TYPES} ] );
 
@@ -36,23 +37,18 @@ use constant IGNORE => \undef; # { key => IGNORE } may be used to override defau
 
 our $DBH; # controlled by QBitcoin::ORM::Transaction
 
-sub open_db {
-    my ($transaction) = @_;
-    return $DBH if $DBH; # for transaction
-    my $dsn = $config->{"dsn"} // "DBI:mysql:" . DB_NAME . ";mysql_read_default_file=$ENV{HOME}/my.cnf:localhost";
+sub INIT {
+    my $db_name = $config->{"database"} // DB_NAME;
+    my $dsn = $config->{"dsn"} // "DBI:mysql:$db_name;mysql_read_default_file=$ENV{HOME}/my.cnf:localhost";
     my $login = $config->{"db.login"};
     my $password = $config->{"db.password"};
-    my $db_opts = DB_OPTS;
-    $db_opts->{AutoCommit} = 0 if $transaction;
-    my $method = $transaction ? "connect" : "connect_cached";
-    return DBI->$method($dsn, $login, $password, $db_opts);
+    $DBH = DBI->connect($dsn, $login, $password, DB_OPTS);
 }
 
 sub find {
     my $class = shift;
     my $args = ref $_[0] ? $_[0] : { @_ };
 
-    my $dbh = open_db();
     my $table = $class->TABLE
         or die "No TABLE defined in $class\n";
     my $sql = "SELECT " .
@@ -134,7 +130,7 @@ sub find {
     $limit = 1 unless wantarray;
     $sql .= " LIMIT $limit" if $limit;
     DEBUG_ORM && Debugf("sql: [%s], values: [%s]", $sql, join(',', map { $_ // "undef" } @values));
-    my $sth = $dbh->prepare($sql);
+    my $sth = $DBH->prepare($sql);
     $sth->execute(@values);
     my @result;
     while (my $res = $sth->fetchrow_hashref()) {
@@ -143,7 +139,7 @@ sub find {
         $item->on_load if $class->can('on_load');
         push @result, $item;
     }
-    DEBUG_ORM && Debugf("orm: found %u entries, errstr [%s]", scalar(@result), $dbh->errstr // '');
+    DEBUG_ORM && Debugf("orm: found %u entries, errstr [%s]", scalar(@result), $DBH->errstr // '');
     return wantarray ? @result : $result[0];
 }
 
@@ -151,7 +147,6 @@ sub create {
     my $class = shift;
     my $args = ref $_[0] ? $_[0] : { @_ };
 
-    my $dbh = open_db();
     my $table = $class->TABLE
         or die "No TABLE defined in $class\n";
     my $sql = "INSERT INTO $table SET ";
@@ -165,10 +160,10 @@ sub create {
         push @values, $args->{$key};
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values));
-    $dbh->do($sql, undef, @values);
+    $DBH->do($sql, undef, @values);
     my $self = $class->new($args);
     if ($class->FIELDS->{id}) {
-        my ($id) = $dbh->selectrow_array("SELECT LAST_INSERT_ID()");
+        my ($id) = $DBH->selectrow_array("SELECT LAST_INSERT_ID()");
         $self->{id} = $id;
         DEBUG_ORM && Debugf("orm: last_insert_id: %u", $id);
     }
@@ -178,7 +173,6 @@ sub create {
 sub replace {
     my $self = shift;
 
-    my $dbh = open_db();
     my $class = ref($self);
     my $table = $class->TABLE
         or die "No TABLE defined in $class\n";
@@ -205,9 +199,9 @@ sub replace {
         }
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values));
-    $dbh->do($sql, undef, @values);
+    $DBH->do($sql, undef, @values);
     if ($class->FIELDS->{id} && !$self->id) {
-        my ($id) = $dbh->selectrow_array("SELECT LAST_INSERT_ID()");
+        my ($id) = $DBH->selectrow_array("SELECT LAST_INSERT_ID()");
         $self->{id} = $id;
         DEBUG_ORM && Debugf("orm: last_insert_id: %u", $id);
     }
@@ -219,7 +213,6 @@ sub update {
     my $args = ref $_[0] ? $_[0] : { @_ };
 
     return unless %$args;
-    my $dbh = open_db();
     my $table = $self->TABLE
         or die "No TABLE defined in " . ref($self) . "\n";
     my $sql = "UPDATE $table SET ";
@@ -248,7 +241,7 @@ sub update {
         @pk_values = ($self->id);
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values, @pk_values));
-    $dbh->do($sql, undef, @values, @pk_values);
+    $DBH->do($sql, undef, @values, @pk_values);
 }
 
 1;

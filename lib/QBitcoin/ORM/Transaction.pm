@@ -3,28 +3,31 @@ use warnings;
 use strict;
 
 use QBitcoin::Log;
-use QBitcoin::ORM qw($DBH open_db DEBUG_ORM);
+use QBitcoin::ORM qw($DBH DEBUG_ORM);
+
+my $SQL_TRANSACTION;
 
 sub new {
     my $class = shift;
-    die "Nested sql transactions\n" if $DBH;
-    $DBH = open_db(1);
+    die "Nested sql transactions\n" if $SQL_TRANSACTION;
     DEBUG_ORM && Debug("Start sql transaction");
+    $SQL_TRANSACTION = 1;
+    $DBH->begin_work;
     return bless {}, $class; # just guard object
 }
 
 sub commit {
     my $self = shift;
-    die "commit without sql transaction\n" unless $DBH;
+    die "commit without sql transaction\n" unless $SQL_TRANSACTION;
     $DBH->commit;
     DEBUG_ORM && Debug("Commit sql transaction");
-    undef $DBH;
+    undef $SQL_TRANSACTION;
 }
 
 sub DESTROY {
     my $self = shift;
-    Err("Destroy sql transaction without commit") if $DBH;
-    undef $DBH;
+    Err("Destroy sql transaction without commit") if $SQL_TRANSACTION;
+    undef $SQL_TRANSACTION;
 }
 
 1;

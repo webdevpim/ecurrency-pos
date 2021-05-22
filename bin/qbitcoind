@@ -18,6 +18,7 @@ sub main {
         'base|B'     => \$config->{base},
         'generate|g' => \$config->{generate},
         'produce'    => \$config->{produce},
+        'database=s' => \$config->{database},
     )) {
         select STDERR;
         usage();

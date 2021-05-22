@@ -4,7 +4,7 @@ use strict;
 
 use Scalar::Util qw(weaken);
 use QBitcoin::Accessors qw(mk_accessors);
-use QBitcoin::ORM qw(:types open_db find DEBUG_ORM);
+use QBitcoin::ORM qw(:types $DBH find DEBUG_ORM);
 use QBitcoin::OpenScript;
 
 use Role::Tiny::With;
@@ -81,7 +81,7 @@ sub load {
     $sql .= " LEFT JOIN " . TRANSACTION_TABLE . " AS tx_out ON (tx_out.id = t.tx_out)";
     $sql .= " WHERE " . join(" OR ", ("(tx_in.hash = ? AND num = ?)")x@in);
     DEBUG_ORM && Debugf("sql: [%s] values [%s]", $sql, join(',', map { $_->{tx_out}, $_->{num} } @in));
-    my $sth = open_db->prepare($sql);
+    my $sth = $DBH->prepare($sql);
     $sth->execute(map { $_->{tx_out}, $_->{num} } @in);
     my @txo;
     while (my $hash = $sth->fetchrow_hashref()) {
@@ -107,10 +107,9 @@ sub store {
     my $sql = "REPLACE " . TABLE;
     $sql .= " SET value = ?, num = ?, tx_in = ?, open_script = ?, tx_out = NULL, close_script = NULL";
     DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%u]", $sql, $self->value, $self->num, $tx->id, $script->id);
-    my $dbh = open_db();
-    my $res = $dbh->do($sql, undef, $self->value, $self->num, $tx->id, $script->id);
+    my $res = $DBH->do($sql, undef, $self->value, $self->num, $tx->id, $script->id);
     $res == 1
-        or die "Can't store txo " . unpack("H*", $self->tx_in) . ":" . $self->num . ": " . ($dbh->errstr // "no error") . "\n";
+        or die "Can't store txo " . unpack("H*", $self->tx_in) . ":" . $self->num . ": " . ($DBH->errstr // "no error") . "\n";
 }
 
 sub store_spend {
@@ -119,10 +118,9 @@ sub store_spend {
     my $sql = "UPDATE " . TABLE . " AS t JOIN " . TRANSACTION_TABLE . " AS tx_in ON (t.tx_in = tx_in.id)";
     $sql .= " SET tx_out = ?, close_script = ? WHERE tx_in.hash = UNHEX(?) AND num = ?";
     DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%s,%u]", $sql, $tx->id, $self->close_script, unpack("H*", $self->tx_in), $self->num);
-    my $dbh = open_db();
-    my $res = $dbh->do($sql, undef, $tx->id, $self->close_script, unpack("H*", $self->tx_in), $self->num);
+    my $res = $DBH->do($sql, undef, $tx->id, $self->close_script, unpack("H*", $self->tx_in), $self->num);
     $res == 1
-        or die "Can't store txo " . unpack("H*", $self->tx_in) . ":" . $self->num . " as spend: " . ($dbh->errstr // "no error") . "\n";
+        or die "Can't store txo " . unpack("H*", $self->tx_in) . ":" . $self->num . " as spend: " . ($DBH->errstr // "no error") . "\n";
 }
 
 sub serialize {
@@ -142,7 +140,7 @@ sub load_inputs {
     $sql .= " FROM " . $class->TABLE . " AS t JOIN " . QBitcoin::OpenScript->TABLE . " s ON (t.open_script = s.id)";
     $sql .= " JOIN " . TRANSACTION_TABLE . " AS tx_in ON (tx_in.id = t.tx_in)";
     $sql .= " WHERE tx_out = ?";
-    my $sth = open_db->prepare($sql);
+    my $sth = $DBH->prepare($sql);
     DEBUG_ORM && Debugf("sql: [%s] values [%u]", $sql, $tx->id);
     $sth->execute($tx->id);
     my @txo;
@@ -164,7 +162,7 @@ sub load_outputs {
     $sql .= " FROM " . $class->TABLE . " AS t JOIN " . QBitcoin::OpenScript->TABLE . " s ON (t.open_script = s.id)";
     $sql .= " LEFT JOIN " . TRANSACTION_TABLE . " AS tx_out ON (tx_out.id = t.tx_out)";
     $sql .= " WHERE tx_in = ?";
-    my $sth = open_db->prepare($sql);
+    my $sth = $DBH->prepare($sql);
     DEBUG_ORM && Debugf("sql: [%s] values [%u]", $sql, $tx->id);
     $sth->execute($tx->id);
     my @txo;
@@ -193,7 +191,7 @@ sub on_load {
     $sql .= " LEFT JOIN " . TRANSACTION_TABLE . " AS tx_out ON (tx_out.id = t.tx_out)" if $self->{tx_out};
     $sql .= " WHERE tx_in.id = ? AND num = ?";
     DEBUG_ORM && Debugf("sql: [%s] values [%u,%u]", $sql, $self->{tx_in}, $self->{num});
-    my $hash = open_db->selectrow_hashref($sql, undef, $self->{tx_in}, $self->{num});
+    my $hash = $DBH->selectrow_hashref($sql, undef, $self->{tx_in}, $self->{num});
     if ($hash) {
         $self->{tx_in}  = $hash->{tx_in};
         $self->{tx_out} = $hash->{tx_out} if $self->{tx_out};
