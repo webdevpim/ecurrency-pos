@@ -4,7 +4,7 @@ use strict;
 
 use Scalar::Util qw(weaken);
 use QBitcoin::Accessors qw(mk_accessors);
-use QBitcoin::ORM qw(:types open_db find);
+use QBitcoin::ORM qw(:types open_db find DEBUG_ORM);
 use QBitcoin::OpenScript;
 
 use Role::Tiny::With;
@@ -83,6 +83,7 @@ sub load {
     $sql .= " JOIN " . TRANSACTION_TABLE . " AS tx_in ON (tx_in.id = t.tx_in)";
     $sql .= " LEFT JOIN " . TRANSACTION_TABLE . " AS tx_out ON (tx_out.id = t.tx_out)";
     $sql .= " WHERE " . join(" OR ", ("(tx_in.hash = ? AND num = ?)")x@in);
+    DEBUG_ORM && Debugf("sql: [%s] values [%s]", $sql, join(',', map { $_->{tx_out}, $_->{num} } @in));
     my $sth = open_db->prepare($sql);
     $sth->execute(map { $_->{tx_out}, $_->{num} } @in);
     my @txo;
@@ -108,6 +109,7 @@ sub store {
     my $script = QBitcoin::OpenScript->store($self->open_script);
     my $sql = "REPLACE " . TABLE;
     $sql .= " SET value = ?, num = ?, tx_in = ?, open_script = ?, tx_out = NULL, close_script = NULL";
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%u]", $sql, $self->value, $self->num, $tx->id, $script->id);
     open_db->do($sql, undef, $self->value, $self->num, $tx->id, $script->id);
 }
 
@@ -116,6 +118,7 @@ sub store_spend {
     my ($tx) = @_;
     my $sql = "UPDATE " . TABLE . " AS t JOIN " . TRANSACTION_TABLE . " AS tx_in ON (t.tx_in = tx_in.hash)";
     $sql .= " SET tx_out = ?, close_script = ? WHERE tx_in.hash = ? AND num = ?";
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%u,%u]", $sql, $tx->id, $self->close_script, $self->tx_in, $self->num);
     my $res = open_db->do($sql, undef, $tx->id, $self->close_script, $self->tx_in, $self->num);
     $res == 1
         or die "Can't store txo " . hex($self->tx_in) . ":" . $self->num . " as spend";
@@ -139,6 +142,7 @@ sub load_inputs {
     $sql .= " JOIN " . TRANSACTION_TABLE . " AS tx_in ON (tx_in.id = t.tx_in)";
     $sql .= " WHERE tx_out = ?";
     my $sth = open_db->prepare($sql);
+    DEBUG_ORM && Debugf("sql: [%s] values [%u]", $sql, $tx->id);
     $sth->execute($tx->id);
     my @txo;
     while (my $hash = $sth->fetchrow_hashref()) {
@@ -160,6 +164,7 @@ sub load_outputs {
     $sql .= " LEFT JOIN " . TRANSACTION_TABLE . " AS tx_out ON (tx_out.id = t.tx_out)";
     $sql .= " WHERE tx_out = ?";
     my $sth = open_db->prepare($sql);
+    DEBUG_ORM && Debugf("sql: [%s] values [%u]", $sql, $tx->id);
     $sth->execute($tx->id);
     my @txo;
     while (my $hash = $sth->fetchrow_hashref()) {
@@ -183,6 +188,7 @@ sub on_load {
     $sql .= " JOIN " . TRANSACTION_TABLE . " AS tx_in ON (tx_in.id = t.tx_in)";
     $sql .= " LEFT JOIN " . TRANSACTION_TABLE . " AS tx_out ON (tx_out.id = t.tx_out)" if $self->{tx_out};
     $sql .= " WHERE tx_in.id = ? AND num = ?";
+    DEBUG_ORM && Debugf("sql: [%s] values [%u,%u]", $sql, $self->{tx_in}, $self->{num});
     my $hash = open_db->selectrow_hashref($sql, undef, $self->{tx_in}, $self->{num});
     if ($hash) {
         $self->{tx_in}  = $hash->{tx_in};
