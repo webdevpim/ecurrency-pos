@@ -14,7 +14,7 @@ sub validate {
     my $block = shift;
 
     my $now = time();
-    $now >= __PACKAGE__->time_by_height($block->height)
+    $now >= time_by_height($block->height)
         or return "Block height " . $block->height . " is too early for now";
     if ($block->height == 0) {
 #        $block->hash eq GENESIS_HASH
@@ -39,13 +39,6 @@ sub validate_tx {
     my $self = shift;
     # TODO
     return 0;
-}
-
-sub time_by_height {
-    my $class = shift;
-    my ($height) = @_;
-
-    return GENESIS_TIME + $height * BLOCK_INTERVAL;
 }
 
 1;

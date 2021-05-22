@@ -205,7 +205,7 @@ sub calculate_hash {
 sub validate_coinbase {
     my $self = shift;
     if (@{$self->out} != 1) {
-        Warningf("Incorrect transaction %s", $self->hash_out);
+        Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_out, scalar @{$self->out});
         return -1;
     }
     # TODO: Get and validate information about btc upgrade from $self->data
@@ -267,10 +267,15 @@ sub on_load {
             txo          => $txo,
             close_script => $txo->close_script,
         };
-        $txo->close_script = undef; # it's saved as transaction $in->{close_script}, not in $txo object
+        # `close_script` saved as transaction $in->{close_script}, not in the $txo object
+        $txo->close_script = undef;
+        # `tx_out` will be set during processing this block by receive() and including it in the best branch
+        # if `tx_out` will be already set here, processing this block will fails as double-spend
+        $txo->tx_out = undef;
     }
     $self->in  = [ sort { _cmp_inputs($a, $b) } @inputs ];
     $self->out = \@outputs;
+    $self->received_time = time_by_height($self->block_height); # for possible unconfirm the transaction
     return $self;
 }
 

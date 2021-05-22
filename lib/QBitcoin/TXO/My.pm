@@ -23,8 +23,8 @@ sub add_my_utxo {
 
 sub del_my_utxo {
     my $self = shift;
-    delete $MY_UTXO{$self->_in_key};
-    Infof("Delete my UTXO %s:%s %s coins", unpack("H*", substr($self->tx_in, 0, 4)), $self->num, $self->value);
+    delete $MY_UTXO{$self->_in_key} &&
+        Infof("Delete my UTXO %s:%s %s coins", unpack("H*", substr($self->tx_in, 0, 4)), $self->num, $self->value);
 }
 
 sub my_utxo {

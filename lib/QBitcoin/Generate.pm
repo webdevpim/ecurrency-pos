@@ -63,9 +63,10 @@ sub make_stake_tx {
         open_script => QBitcoin::OpenScript->script_for_address($my_address),
     );
     my $tx = QBitcoin::Transaction->new(
-        in  => [ map { txo => $_, close_script => my_close_script($_->open_script) }, @my_txo ],
-        out => [ $out ],
-        fee => -$fee,
+        in            => [ map { txo => $_, close_script => my_close_script($_->open_script) }, @my_txo ],
+        out           => [ $out ],
+        fee           => -$fee,
+        received_time => time(),
     );
     $tx->hash = QBitcoin::Transaction->calculate_hash($tx->serialize);
     $tx->out->[0]->tx_in = $tx->hash;

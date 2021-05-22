@@ -317,7 +317,7 @@ sub cmd_ihave {
         $self->send_line("abort incorrect_params");
         return -1;
     }
-    if (time() < QBitcoin::Block->time_by_height($height)) {
+    if (time() < time_by_height($height)) {
         Warningf("Ignore too early block height %u from peer %s", $height, $self->ip);
         return 0;
     }

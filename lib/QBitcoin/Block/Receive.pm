@@ -213,13 +213,13 @@ sub receive {
                         $txo->del_my_utxo if $txo->is_my;
                     }
                     else {
-                        for (my $b1 = $new_best; $b1; $b1++) {
-                            foreach my $tx1 ($b1->transactions) {
+                        for (my $b1 = $new_best; $b1; $b1 = $b1->next_block) {
+                            foreach my $tx1 (@{$b1->transactions}) {
                                 $tx1->unconfirm();
                             }
                         }
-                        for (my $b1 = $class->best_block($new_best->height); $b; $b = $b->next) {
-                            foreach my $tx1 ($b1->transactions) {
+                        for (my $b1 = $class->best_block($new_best->height); $b1; $b1 = $b1->next_block) {
+                            foreach my $tx1 (@{$b1->transactions}) {
                                 $tx1->block_height = $b1->height;
                                 foreach my $in (@{$tx1->in}) {
                                     my $txo = $in->{txo};
@@ -321,7 +321,7 @@ sub receive {
         }
 
         my $branch_height = $self->branch_height();
-        if ($self->received_from && time() >= $self->time_by_height($branch_height+1)) {
+        if ($self->received_from && time() >= time_by_height($branch_height+1)) {
             $self->received_from->send_line("sendblock " . ($branch_height+1));
         }
     }
