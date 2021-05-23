@@ -131,7 +131,7 @@ sub deserialize {
         or return undef;
 
     QBitcoin::TXO->save_all($self->hash, $out);
-    $self->fee = sum0(map { $_->value } @$out) - sum0(map { $_->{txo}->value } @$in) + ($self->coins_upgraded // 0);
+    $self->fee = sum0(map { $_->value } @$out) - sum0(map { $_->{txo}->value } @$in) - ($self->coins_upgraded // 0);
 
     return $self;
 }

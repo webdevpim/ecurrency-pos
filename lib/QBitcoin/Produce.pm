@@ -36,7 +36,7 @@ sub produce {
     }
     {
         my $prob = 1 - 1 / 2**($period / TX_FEE_PROB);
-        _produce_tx(0.1) if $prob > rand();
+        _produce_tx(0.03) if $prob > rand();
     }
     {
         my $prob = 1 - 1 / 2**($period / TX_ZERO_PROB);
