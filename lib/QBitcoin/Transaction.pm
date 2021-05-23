@@ -8,7 +8,7 @@ use Digest::SHA qw(sha256);
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors new);
-use QBitcoin::ORM qw(find replace :types);
+use QBitcoin::ORM qw(find replace delete :types);
 use QBitcoin::TXO;
 
 use constant FIELDS => {
@@ -130,8 +130,11 @@ sub deserialize {
     $self->validate() == 0
         or return undef;
 
-    QBitcoin::TXO->save_all($self->hash, $out);
-    $self->fee = sum0(map { $_->value } @$out) - sum0(map { $_->{txo}->value } @$in) - ($self->coins_upgraded // 0);
+    # Exclude from my utxo spent unconfirmed, do not use them for validate blocks
+    foreach my $in (map { $_->{txo} } @$in) {
+        $in->del_my_utxo() if $in->is_my;
+    }
+    $self->fee = sum0(map { $_->{txo}->value } @$in) + ($self->coins_upgraded // 0) - sum0(map { $_->value } @$out);
 
     return $self;
 }
@@ -147,10 +150,8 @@ sub create_outputs {
             open_script => $out->[$num]->{open_script},
         });
         push @txo, $txo;
-        if ($txo->is_my) {
-            $txo->add_my_utxo();
-        }
     }
+    QBitcoin::TXO->save_all($hash, \@txo);
     return \@txo;
 }
 
@@ -285,9 +286,13 @@ sub unconfirm {
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
         $txo->tx_out = undef;
-        if ($txo->is_my) {
-            $txo->add_my_utxo();
-        }
+        # Return to list of my utxo inputs from stake transaction, but do not use returned to mempool
+        $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my;
+    }
+    if ($self->id) {
+        # We store in the database only confirmed transactions
+        $self->delete;
+        $self->id = undef;
     }
 }
 

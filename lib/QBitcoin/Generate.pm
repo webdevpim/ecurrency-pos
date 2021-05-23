@@ -17,9 +17,11 @@ my %MY_UTXO;
 sub load_utxo {
     my $class = shift;
     foreach my $my_address (my_address()) {
-        foreach my $script (QBitcoin::OpenScript->script_for_address($my_address)) {
-            foreach my $utxo (QBitcoin::TXO->find(open_script => $script, tx_out => undef)) {
-                $utxo->add_my_utxo();
+        my @script_data = QBitcoin::OpenScript->script_for_address($my_address);
+        if (my @script = QBitcoin::OpenScript->find(data => \@script_data)) {
+            foreach my $utxo (QBitcoin::TXO->find(open_script => \@script, tx_out => undef)) {
+                $utxo->save();
+                $utxo->add_my_utxo(); # MB already added during fetch last INCORE blocks, it's ok b/c it's the same TXO object
             }
         }
     }
@@ -69,7 +71,11 @@ sub make_stake_tx {
         received_time => time(),
     );
     $tx->hash = QBitcoin::Transaction->calculate_hash($tx->serialize);
-    $tx->out->[0]->tx_in = $tx->hash;
+    if ($fee) {
+        # stake tx without fee needed only for calculate its size; it will not be used,
+        # so do not set tx_in for txo in zero-fee stake tx to avoid bothering $txo DESTROY() method
+        $_->tx_in = $tx->hash foreach @{$tx->out};
+    }
     sign_my_transaction($tx);
     $tx->size = length $tx->serialize;
     return $tx;
@@ -91,9 +97,10 @@ sub generate {
         my $fee = sum map { $_->fee } @transactions;
         # Generate new stake_tx with correct output value
         $stake_tx = make_stake_tx($fee);
-        $stake_tx->out->[0]->save;
+        Infof("Generated stake tx %s with input amount %u, consume %u fee", $stake_tx->hash_out,
+            sum(map { $_->{txo}->value } @{$stake_tx->in}), -$stake_tx->fee);
+        QBitcoin::TXO->save_all($stake_tx->hash, $stake_tx->out);
         $stake_tx->receive();
-        $stake_tx->out->[0]->add_my_utxo();
         unshift @transactions, $stake_tx;
         $self_weight = $stake_tx->stake_weight($height)
             // return;

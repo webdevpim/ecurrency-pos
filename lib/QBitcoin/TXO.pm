@@ -2,7 +2,7 @@ package QBitcoin::TXO;
 use warnings;
 use strict;
 
-use Scalar::Util qw(weaken);
+use Scalar::Util qw(weaken refaddr);
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ORM qw(:types $DBH find DEBUG_ORM);
 use QBitcoin::OpenScript;
@@ -17,7 +17,7 @@ use constant FIELDS => {
     tx_in        => NUMERIC,
     tx_out       => NUMERIC,
     close_script => BINARY,
-    open_script  => BINARY,
+    open_script  => NUMERIC,
 };
 
 use constant TABLE => "txo";
@@ -45,11 +45,11 @@ sub new {
 
 sub save {
     my $self = shift;
-    if (!defined $TXO{$self->tx_in}->[$self->num]) {
-        $TXO{$self->tx_in}->[$self->num] = $self;
-        # Keep the txo in the %TXO hash until at least one reference (input or output) exists
-        weaken($TXO{$self->tx_in}->[$self->num]);
-    }
+Debugf("Cache txo %s:%u with save", unpack("H*", substr($self->tx_in, 0, 4)), $self->num);
+    $TXO{$self->tx_in}->[$self->num] = $self;
+    # Keep the txo in the %TXO hash until at least one reference (input or output) exists
+    weaken($TXO{$self->tx_in}->[$self->num]);
+    return $self;
 }
 
 sub save_all {
@@ -62,6 +62,17 @@ sub get {
     my $class = shift;
     my ($in) = @_;
     return $TXO{$in->{tx_out}}->[$in->{num}];
+}
+
+sub new_saved {
+    my $class = shift;
+    my $hash = @_ == 1 ? $_[0] : { @_ };
+    my $self = $class->get({ tx_out => $hash->{tx_in}, num => $hash->{num} });
+    if (!$self) {
+        $self = bless $hash, $class;
+        $self->save;
+    }
+    return $self;
 }
 
 sub get_all {
@@ -85,8 +96,7 @@ sub load {
     $sth->execute(map { $_->{tx_out}, $_->{num} } @in);
     my @txo;
     while (my $hash = $sth->fetchrow_hashref()) {
-        my $txo = $class->new($hash);
-        $txo->save;
+        my $txo = $class->new_saved($hash);
         push @txo, $txo;
     }
     return @txo;
@@ -94,9 +104,13 @@ sub load {
 
 sub DESTROY {
     my $self = shift;
+    # Compare pointers to avoid removing from the cache by destroy unlinked object
     if ($self->tx_in) {
-        delete $TXO{$self->tx_in}->[$self->num];
-        delete $TXO{$self->tx_in} unless @{$TXO{$self->tx_in}};
+        my $cached = $TXO{$self->tx_in};
+        if ($cached && $cached->[$self->num] && refaddr($self) == refaddr($cached->[$self->num])) {
+            delete $cached->[$self->num];
+            delete $TXO{$self->tx_in} unless @$cached;
+        }
     }
 }
 
@@ -146,8 +160,7 @@ sub load_inputs {
     my @txo;
     while (my $hash = $sth->fetchrow_hashref()) {
         $hash->{tx_out} = $tx->hash;
-        my $txo = $class->new($hash);
-        $txo->save;
+        my $txo = $class->new_saved($hash);
         push @txo, $txo;
     }
     return @txo;
@@ -168,11 +181,7 @@ sub load_outputs {
     my @txo;
     while (my $hash = $sth->fetchrow_hashref()) {
         $hash->{tx_in} = $tx->hash;
-        my $txo = $class->new($hash);
-        $txo->save;
-        if (!$txo->tx_out && $txo->is_my) {
-            $txo->add_my_utxo;
-        }
+        my $txo = $class->new_saved($hash);
         push @txo, $txo;
     }
     return @txo;
@@ -196,6 +205,13 @@ sub on_load {
         $self->{tx_in}  = $hash->{tx_in};
         $self->{tx_out} = $hash->{tx_out} if $self->{tx_out};
         $self->{open_script} = $hash->{open_script};
+    }
+    # Set to already loaded object if exists
+    if (my $loaded = $self->get({ tx_out => $self->{tx_in}, num => $self->{num} })) {
+        # Prevent removing from the cache by implicit $self->DESTROY() call
+        $self->tx_in = undef;
+        undef $self;
+        $self = $loaded;
     }
     return $self;
 }

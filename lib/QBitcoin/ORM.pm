@@ -20,7 +20,7 @@ use constant DB_TYPES;
 use constant DEBUG_ORM => 1;
 
 use parent 'Exporter';
-our @EXPORT_OK = qw(find create replace update lock db_start IGNORE $DBH DEBUG_ORM);
+our @EXPORT_OK = qw(find create replace update delete IGNORE $DBH DEBUG_ORM);
 push @EXPORT_OK, keys %{&DB_TYPES};
 our %EXPORT_TAGS = ( types => [ keys %{&DB_TYPES} ] );
 
@@ -111,7 +111,6 @@ sub find {
                 push @values, $value;
             }
             if ($type == BINARY) {
-                # Is it needed?
                 $condition .= " $key = UNHEX(?)";
                 push @values, unpack("H*", $value);
             }
@@ -135,7 +134,7 @@ sub find {
     while (my $res = $sth->fetchrow_hashref()) {
         DEBUG_ORM && Debugf("orm: found {%s}", join(',', map { "'$_':" . (!defined($res->{$_}) ? "null" : $class->FIELDS->{$_} == BINARY ? "X'" . unpack("H*", $res->{$_}) . "'" : $class->FIELDS->{$_} == NUMERIC ? $res->{$_} : "'$res->{$_}'") } sort keys %$res));
         my $item = $class->new($res);
-        $item->on_load if $class->can('on_load');
+        $item = $item->on_load if $class->can('on_load');
         push @result, $item;
     }
     DEBUG_ORM && Debugf("orm: found %u entries, errstr [%s]", scalar(@result), $DBH->errstr // '');
@@ -159,7 +158,10 @@ sub create {
         push @values, $args->{$key};
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values));
-    $DBH->do($sql, undef, @values);
+    my $res = $DBH->do($sql, undef, @values);
+    if ($res != 1) {
+        die "Can't create object $table\n";
+    }
     my $self = $class->new($args);
     if ($class->FIELDS->{id}) {
         my ($id) = $DBH->selectrow_array("SELECT LAST_INSERT_ID()");
@@ -184,7 +186,11 @@ sub replace {
         $sql .= "$key = ";
         my $type = $class->FIELDS->{$key}
             or die "Unknown key [$key] for $table\n";
-        if ($type == TIMESTAMP) {
+        if (!defined $self->$key) {
+            $sql .= "?";
+            push @values, undef;
+        }
+        elsif ($type == TIMESTAMP) {
             $sql .= "FROM_UNIXTIME(?)";
             push(@values, $self->$key);
         }
@@ -241,6 +247,31 @@ sub update {
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values, @pk_values));
     $DBH->do($sql, undef, @values, @pk_values);
+}
+
+sub delete {
+    my $self = shift;
+
+    my $table = $self->TABLE
+        or die "No TABLE defined in " . ref($self) . "\n";
+    my $sql = "DELETE $table ";
+    my @pk_values;
+    if ($self->can('PRIMARY_KEY')) {
+        $sql .= " WHERE " . join(" AND ", map { "$_ = ?" } $self->PRIMARY_KEY);
+        @pk_values = map { $self->$_ } $self->PRIMARY_KEY;
+    }
+    else {
+        $sql .= " WHERE id = ?";
+        @pk_values = ($self->id);
+    }
+    if (grep { !defined } @pk_values) {
+        die "Object primary key undefined on delete $table\n";
+    }
+    DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', @pk_values));
+    my $res = $DBH->do($sql, undef, @pk_values);
+    if (!$res != 1) {
+        die "Can't delete $table\n";
+    }
 }
 
 1;

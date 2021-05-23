@@ -69,24 +69,28 @@ sub _produce_my_utxo {
     );
     $tx->hash = QBitcoin::Transaction->calculate_hash($tx->serialize);
     QBitcoin::Generate::sign_my_transaction($tx);
-    $tx->out->[0]->tx_in = $tx->hash;
-    $tx->out->[0]->save;
+    $_->tx_in = $tx->hash foreach @{$tx->out};
+    QBitcoin::TXO->save_all($tx->hash, $tx->out);
     $tx->size = length $tx->serialize;
     if ($tx->validate() != 0) {
         Errf("Produced incorrect coinbase transaction");
         return;
     }
     $tx->receive();
-    $out->add_my_utxo();
     Noticef("Produced coinbase transaction %s", $tx->hash_out);
     return $tx;
 }
 
 sub _produce_tx {
     my ($fee_part) = @_;
-    my @txo = shuffle(QBitcoin::TXO->find(tx_out => undef, -limit => 100))
+
+    my @txo = QBitcoin::TXO->find(tx_out => undef, -limit => 100);
+    # Exclude loaded txo to avoid double-spend
+    # b/c its may be included as input into another mempool transaction
+    @txo = shuffle grep { !QBitcoin::TXO->get({ tx_out => $_->tx_in, num => $_->tx_num }) } @txo
         or return;
     @txo = splice(@txo, 0, 2);
+    $_->save foreach @txo;
     my $amount = sum map { $_->value } @txo;
     my $fee = int($amount * $fee_part);
     my $address = $txo[0]->open_script; # fake; out to the address from first input txo
@@ -103,17 +107,15 @@ sub _produce_tx {
     );
     $tx->hash = QBitcoin::Transaction->calculate_hash($tx->serialize);
     QBitcoin::Generate::sign_my_transaction($tx); # fake; it's not my transaction
-    $tx->out->[0]->tx_in = $tx->hash;
-    $tx->out->[0]->save;
+    $_->tx_in = $tx->hash foreach @{$tx->out};
+    QBitcoin::TXO->save_all($tx->hash, $tx->out);
     $tx->size = length $tx->serialize;
+    $_->del_my_utxo() foreach grep { $_->is_my } @txo;
     if ($tx->validate() != 0) {
         Errf("Produced incorrect transaction");
         return;
     }
     $tx->receive();
-    if ($out->is_my) {
-        $out->add_my_utxo();
-    }
     Noticef("Produced transaction %s", $tx->hash_out);
     return $tx;
 }

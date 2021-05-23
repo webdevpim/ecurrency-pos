@@ -210,7 +210,7 @@ sub receive {
                     if ($correct) {
                         $txo->tx_out = $tx->hash;
                         $txo->close_script = $in->{close_script};
-                        $txo->del_my_utxo if $txo->is_my;
+                        $txo->del_my_utxo if $txo->is_my; # for stake transaction
                     }
                     else {
                         for (my $b1 = $new_best; $b1; $b1 = $b1->next_block) {
@@ -226,6 +226,9 @@ sub receive {
                                     $txo->tx_out = $tx1->hash;
                                     $txo->close_script = $in->{close_script};
                                     $txo->del_my_utxo if $txo->is_my;
+                                }
+                                foreach my $txo (@{$tx1->out}) {
+                                    $txo->add_my_utxo if $txo->is_my;
                                 }
                             }
                         }
@@ -245,6 +248,9 @@ sub receive {
                         }
                         return 0;
                     }
+                }
+                foreach my $txo (@{$tx->out}) {
+                    $txo->add_my_utxo if $txo->is_my;
                 }
             }
         }

@@ -25,6 +25,7 @@ sub choose_for_block {
     my ($stake_tx) = @_;
     my @mempool = sort { compare_tx($a, $b) } QBitcoin::Transaction->mempool_list()
         or return ();
+    Debugf("Mempool: %s", join(',', map { unpack("H*", substr($_->hash, 0, 4)) } @mempool));
     if (!$stake_tx) {
         # We can include only transactions with zero fee into block without stake transaction
         @mempool = grep { $_->fee == 0 } @mempool;
