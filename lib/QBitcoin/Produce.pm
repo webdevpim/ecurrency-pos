@@ -22,6 +22,12 @@ use constant {
     FEE_MY_TX    => 0.1,
 };
 
+sub probability {
+    my ($period, $half_period) = @_;
+    # If $period == $half, probability is 1/2
+    return $period > $half_period ? 1 - 1 / 2**($period / $half_period) : $period / $half_period / 2;
+}
+
 sub produce {
     my $class = shift;
     my $time = time();
@@ -31,15 +37,15 @@ sub produce {
     $prev_run = $time;
 
     if (QBitcoin::TXO->my_utxo() < MAX_MY_UTXO) {
-        my $prob = 1 - 1 / 2**($period / MY_UTXO_PROB);
+        my $prob = probability($period, MY_UTXO_PROB);
         _produce_my_utxo() if $prob > rand();
     }
     {
-        my $prob = 1 - 1 / 2**($period / TX_FEE_PROB);
+        my $prob = probability($period, TX_FEE_PROB);
         _produce_tx(0.03) if $prob > rand();
     }
     {
-        my $prob = 1 - 1 / 2**($period / TX_ZERO_PROB);
+        my $prob = probability($period, TX_ZERO_PROB);
         _produce_tx(0) if $prob > rand();
     }
 }
