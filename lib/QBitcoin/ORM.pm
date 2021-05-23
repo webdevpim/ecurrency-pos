@@ -4,7 +4,6 @@ use strict;
 use feature "state";
 
 use DBI;
-use JSON::XS;
 use QBitcoin::Config;
 use QBitcoin::Log;
 
@@ -134,7 +133,7 @@ sub find {
     $sth->execute(@values);
     my @result;
     while (my $res = $sth->fetchrow_hashref()) {
-        DEBUG_ORM && Debugf("orm: found %s", encode_json($res));
+        DEBUG_ORM && Debugf("orm: found {%s}", join(',', map { "'$_':" . (!defined($res->{$_}) ? "null" : $class->FIELDS->{$_} == BINARY ? "X'" . unpack("H*", $res->{$_}) . "'" : $class->FIELDS->{$_} == NUMERIC ? $res->{$_} : "'$res->{$_}'") } sort keys %$res));
         my $item = $class->new($res);
         $item->on_load if $class->can('on_load');
         push @result, $item;
