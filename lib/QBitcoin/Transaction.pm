@@ -268,7 +268,7 @@ sub receive {
 sub announce {
     my $self = shift;
     my ($received_from) = @_;
-    foreach my $peer (QBitcoin::Peers->peers) {
+    foreach my $peer (QBitcoin::Peers->connected) {
         next if $received_from && $peer->ip eq $received_from->ip;
         $peer->send_line("mempool " . unpack("H*", $self->hash) . " " . $self->size . " " . $self->fee);
     }

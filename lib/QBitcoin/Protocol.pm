@@ -87,9 +87,9 @@ sub disconnect {
     }
     if ($self->state eq STATE_CONNECTED) {
         Infof("Disconnected from peer %s", $self->ip);
-        $self->state_time = time();
         $self->greeted = undef;
     }
+    $self->state_time = time();
     $self->state = STATE_DISCONNECTED;
     $self->sendbuf = "";
     $self->recvbuf = "";
@@ -145,6 +145,10 @@ sub send {
     my $self = shift;
     my ($data) = @_;
 
+    if ($self->state ne STATE_CONNECTED) {
+        Errf("Attempt to send to peer %s with state %s", $self->ip // "unknown", $self->state);
+        return -1;
+    }
     if ($self->sendbuf eq '' && $self->socket) {
         my $n = syswrite($self->socket, $data);
         if (!defined($n)) {

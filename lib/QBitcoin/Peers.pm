@@ -2,6 +2,8 @@ package QBitcoin::Peers;
 use warnings;
 use strict;
 
+use QBitcoin::Const;
+
 my %PEERS;
 
 sub peers {
@@ -12,6 +14,11 @@ sub peer {
     my $class = shift;
     my ($ip) = @_;
     return $PEERS{$ip};
+}
+
+sub connected {
+    my $class = shift;
+    return grep { $_->state eq STATE_CONNECTED } $class->peers;
 }
 
 sub add_peer {

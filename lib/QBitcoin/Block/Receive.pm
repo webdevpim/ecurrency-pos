@@ -385,7 +385,7 @@ sub set_linked {
 sub announce_to_peers {
     my $self = shift;
 
-    foreach my $peer (QBitcoin::Peers->peers) {
+    foreach my $peer (QBitcoin::Peers->connected) {
         next if $self->received_from && $peer->ip eq $self->received_from->ip;
         $peer->send_line("ihave " . $self->height . " " . $self->weight);
     }

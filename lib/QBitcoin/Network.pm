@@ -107,7 +107,7 @@ sub main_loop {
         $rin = $win = $ein = '';
         vec($rin, fileno($listen_socket), 1) = 1 if $listen_socket;
         foreach my $peer (QBitcoin::Peers->peers) {
-            if (!$peer->socket) {
+            if (!$peer->socket && $peer->state eq STATE_DISCONNECTED && $peer->direction eq DIR_OUT) {
                 if (time() - $peer->state_time >= PEER_RECONNECT_TIME) {
                     connect_to($peer);
                 }
