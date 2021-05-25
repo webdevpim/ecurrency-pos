@@ -77,6 +77,7 @@ sub _produce_my_utxo {
     }
     $tx->receive();
     Noticef("Produced coinbase transaction %s", $tx->hash_out);
+    $tx->announce();
     return $tx;
 }
 
@@ -117,6 +118,7 @@ sub _produce_tx {
     Noticef("Produced transaction %s with fee %i", $tx->hash_out, $tx->fee);
     Debugf("Produced transaction inputs:");
     Debugf("  tx_in: %s, num: %u", unpack("H*", substr($_->tx_in, 0, 4)), $_->num) foreach @txo;
+    $tx->announce();
     return $tx;
 }
 

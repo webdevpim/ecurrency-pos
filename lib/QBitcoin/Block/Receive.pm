@@ -321,8 +321,8 @@ sub receive {
             }
         }
 
-        if ($self->received_from && blockchain_synced()) {
-            # Do not announce blocks loaded from local database
+        if (blockchain_synced() && ($self->received_from || time() >= time_by_height($self->height))) {
+            # Do not announce old blocks loaded from the local database or generated
             $self->announce_to_peers();
         }
 

@@ -285,11 +285,8 @@ sub process_tx {
         }
     }
     if (blockchain_synced() && mempool_synced() && $tx->fee >= 0) {
-        # announce to peers
-        foreach my $peer (QBitcoin::Peers->peers) {
-            next if $peer->ip eq $self->ip;
-            $peer->send_line("mempool " . unpack("H*", $tx->hash) . " " . $tx->size . " " . $tx->fee);
-        }
+        # announce to other peers
+        $tx->announce($self);
     }
     return 0;
 }

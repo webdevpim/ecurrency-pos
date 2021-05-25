@@ -10,6 +10,7 @@ use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ORM qw(find replace delete :types);
 use QBitcoin::TXO;
+use QBitcoin::Peers;
 
 use constant FIELDS => {
     id           => NUMERIC, # db primary key for reference links
@@ -262,6 +263,15 @@ sub receive {
     my $self = shift;
     $TRANSACTION{$self->hash} = $self;
     return 0;
+}
+
+sub announce {
+    my $self = shift;
+    my ($received_from) = @_;
+    foreach my $peer (QBitcoin::Peers->peers) {
+        next if $received_from && $peer->ip eq $received_from->ip;
+        $peer->send_line("mempool " . unpack("H*", $self->hash) . " " . $self->size . " " . $self->fee);
+    }
 }
 
 sub pre_load {
