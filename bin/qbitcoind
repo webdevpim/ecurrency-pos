@@ -19,6 +19,7 @@ sub main {
         'generate|g' => \$config->{generate},
         'produce'    => \$config->{produce},
         'database=s' => \$config->{database},
+        'log=s'      => \$config->{log},
     )) {
         select STDERR;
         usage();
@@ -39,7 +40,8 @@ sub usage {
     print "   -p, --peer <host[:port]> - connect to peer <host> and <port> (default port " . PORT_P2P . "),\n";
     print "   -b, --bind <addr[:port]> - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT_P2P . "),\n";
     print "   -g, --generate <addr>    - generate blocks signed by self address <addr> (private key must be known),\n";
-    print "   -B, --base               - run as single node, do not need to synchronize with other nodes for authoritative answers.\n";
+    print "   -B, --base               - run as single node, do not need to synchronize with other nodes for authoritative answers,\n";
+    print "   --log <file>             - write log to <file>, 'syslog' for syslog.\n";
 }
 
 exit main();

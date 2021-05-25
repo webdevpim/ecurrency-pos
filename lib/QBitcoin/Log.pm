@@ -8,6 +8,7 @@ our @EXPORT = qw(Log);
 use Sys::Syslog qw(:standard :macros);
 use POSIX qw(strftime);
 use Time::HiRes;
+use QBitcoin::Config;
 
 openlog('qbitcoin', 'nofatal,pid', LOG_LOCAL0) unless $ENV{LOG_STDOUT};
 
@@ -19,8 +20,16 @@ sub Logf {
         my $t = Time::HiRes::time();
         printf "%s.%03d %s$format\n", strftime("%F %T", gmtime($t)), ($t-int($t)) * 1000, $indent{$prio}, @args;
     }
-    elsif (!$ENV{LOG_NULL}) {
+    my $log = $config->{log} // 'syslog';
+    if ($log eq 'syslog') {
         syslog($prio, $format, @args);
+    }
+    else {
+        open my $fh, '>>', $log
+            or die "Can't open log file [$log]\n";
+        my $t = Time::HiRes::time();
+        printf $fh "%s.%03d %s$format\n", strftime("%F %T", gmtime($t)), ($t-int($t)) * 1000, $indent{$prio}, @args;
+        close $fh;
     }
 }
 
