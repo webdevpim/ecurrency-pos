@@ -123,8 +123,12 @@ sub deserialize {
         return undef;
     }
     my $hash = calculate_hash($tx_data);
-    my $out  = create_outputs($decoded->{out}, $hash);
     my $in   = load_inputs($decoded->{in}, $hash);
+    if (!$in) {
+        # TODO: put the transaction into separate "waiting" pull (limited size) and reprocess it by each received transaction
+        return ""; # Ignore transactions with unknown inputs
+    }
+    my $out  = create_outputs($decoded->{out}, $hash);
     my $self = $class->new(
         in            => $in,
         out           => $out,

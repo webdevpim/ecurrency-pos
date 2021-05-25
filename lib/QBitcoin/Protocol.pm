@@ -272,9 +272,13 @@ sub process_tx {
     my $self = shift;
     my ($tx_data) = @_;
     my $tx = QBitcoin::Transaction->deserialize($tx_data);
-    if (!$tx) {
+    if (!defined $tx) {
         $self->send_line("abort bad_tx_data");
         return -1;
+    }
+    elsif (!$tx) {
+        # Ignore (skip) but do not drop connection, for example transaction has unknown input
+        return 0;
     }
     $tx->receive() == 0
         or return -1;
