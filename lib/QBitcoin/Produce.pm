@@ -87,7 +87,7 @@ sub _produce_tx {
     my @txo = QBitcoin::TXO->find(tx_out => undef, -limit => 100);
     # Exclude loaded txo to avoid double-spend
     # b/c its may be included as input into another mempool transaction
-    @txo = shuffle grep { !QBitcoin::TXO->get({ tx_out => $_->tx_in, num => $_->tx_num }) } @txo
+    @txo = shuffle grep { !QBitcoin::TXO->get({ tx_out => $_->tx_in, num => $_->num }) } @txo
         or return;
     @txo = splice(@txo, 0, 2);
     $_->save foreach @txo;
@@ -116,7 +116,9 @@ sub _produce_tx {
         return;
     }
     $tx->receive();
-    Noticef("Produced transaction %s", $tx->hash_out);
+    Noticef("Produced transaction %s with fee %i", $tx->hash_out, $tx->fee);
+    Debugf("Produced transaction inputs:");
+    Debugf("  tx_in: %s, num: %u", unpack("H*", substr($_->tx_in, 0, 4)), $_->num) foreach @txo;
     return $tx;
 }
 

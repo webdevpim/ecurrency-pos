@@ -45,7 +45,6 @@ sub new {
 
 sub save {
     my $self = shift;
-Debugf("Cache txo %s:%u with save", unpack("H*", substr($self->tx_in, 0, 4)), $self->num);
     $TXO{$self->tx_in}->[$self->num] = $self;
     # Keep the txo in the %TXO hash until at least one reference (input or output) exists
     weaken($TXO{$self->tx_in}->[$self->num]);
