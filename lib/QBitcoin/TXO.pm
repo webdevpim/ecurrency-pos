@@ -28,21 +28,6 @@ mk_accessors(keys %{&FIELDS});
 # hash by tx and out-num
 my %TXO;
 
-sub new {
-    my $class = shift;
-    my $hash = @_ == 1 ? $_[0] : { @_ };
-    my $self;
-    if ($hash->{tx_in}) {
-        if (!($self = $TXO{$hash->{tx_in}}->[$hash->{num}])) {
-            $self = bless $hash, $class;
-        }
-    }
-    else {
-        $self = bless $hash, $class;
-    }
-    return $self;
-}
-
 sub save {
     my $self = shift;
     $TXO{$self->tx_in}->[$self->num] = $self;
@@ -63,21 +48,40 @@ sub get {
     return $TXO{$in->{tx_out}}->[$in->{num}];
 }
 
-sub new_saved {
-    my $class = shift;
-    my $hash = @_ == 1 ? $_[0] : { @_ };
-    my $self = $class->get({ tx_out => $hash->{tx_in}, num => $hash->{num} });
-    if (!$self) {
-        $self = bless $hash, $class;
-        $self->save;
-    }
-    return $self;
-}
-
 sub get_all {
     my $class = shift;
     my ($tx_hash) = @_;
     return $TXO{$tx_hash};
+}
+
+# Create new transaction output, it cannot be already cached
+sub new_txo {
+    my $class = shift;
+    my $hash = @_ == 1 ? $_[0] : { @_ };
+    return bless $hash, $class;
+}
+
+# Create TXO by load from the database, use cached if any but do not store in cache if not
+# b/c we want to ignore already loaded (and used in some transaction) txo in produce new transaction
+sub new {
+    my $class = shift;
+    my $hash = @_ == 1 ? $_[0] : { @_ };
+    return $class->get({ tx_out => $hash->{tx_in}, num => $hash->{num} })
+        // $class->new_txo($hash);
+}
+
+# Create TXO, use cached if any and save in cache otherwise
+sub new_saved {
+    my $class = shift;
+    my $hash = @_ == 1 ? $_[0] : { @_ };
+    if (my $self = $class->get({ tx_out => $hash->{tx_in}, num => $hash->{num} })) {
+        return $self;
+    }
+    else {
+        my $self = $class->new_txo($hash);
+        $self->save;
+        return $self;
+    }
 }
 
 # For new transaction load list of its input txo
@@ -136,29 +140,21 @@ sub store_spend {
         or die "Can't store txo " . unpack("H*", $self->tx_in) . ":" . $self->num . " as spend: " . ($DBH->errstr // "no error") . "\n";
 }
 
-sub serialize {
-    my $self = shift;
-    return {
-        value       => $self->value,
-        open_script => $self->open_script,
-    };
-}
-
 # Load all inputs for stored transaction after load from database
-sub load_inputs {
+sub load_stored_inputs {
     my $class = shift;
-    my ($tx) = @_;
+    my ($tx_id, $tx_hash) = @_;
     # TODO: move this to QBitcoin::ORM
     my $sql = "SELECT value, num, tx_in.hash AS tx_in, close_script, s.data as open_script";
     $sql .= " FROM " . $class->TABLE . " AS t JOIN " . QBitcoin::OpenScript->TABLE . " s ON (t.open_script = s.id)";
     $sql .= " JOIN " . TRANSACTION_TABLE . " AS tx_in ON (tx_in.id = t.tx_in)";
     $sql .= " WHERE tx_out = ?";
     my $sth = $DBH->prepare($sql);
-    DEBUG_ORM && Debugf("sql: [%s] values [%u]", $sql, $tx->id);
-    $sth->execute($tx->id);
+    DEBUG_ORM && Debugf("sql: [%s] values [%u]", $sql, $tx_id);
+    $sth->execute($tx_id);
     my @txo;
     while (my $hash = $sth->fetchrow_hashref()) {
-        $hash->{tx_out} = $tx->hash;
+        $hash->{tx_out} = $tx_hash;
         my $txo = $class->new_saved($hash);
         push @txo, $txo;
     }
@@ -166,53 +162,47 @@ sub load_inputs {
 }
 
 # Load all outputs for stored transaction after load from database
-sub load_outputs {
+sub load_stored_outputs {
     my $class = shift;
-    my ($tx) = @_;
+    my ($tx_id, $tx_hash) = @_;
     # TODO: move this to QBitcoin::ORM
     my $sql = "SELECT value, num, tx_out.hash AS tx_out, close_script, s.data as open_script";
     $sql .= " FROM " . $class->TABLE . " AS t JOIN " . QBitcoin::OpenScript->TABLE . " s ON (t.open_script = s.id)";
     $sql .= " LEFT JOIN " . TRANSACTION_TABLE . " AS tx_out ON (tx_out.id = t.tx_out)";
     $sql .= " WHERE tx_in = ?";
     my $sth = $DBH->prepare($sql);
-    DEBUG_ORM && Debugf("sql: [%s] values [%u]", $sql, $tx->id);
-    $sth->execute($tx->id);
+    DEBUG_ORM && Debugf("sql: [%s] values [%u]", $sql, $tx_id);
+    $sth->execute($tx_id);
     my @txo;
     while (my $hash = $sth->fetchrow_hashref()) {
-        $hash->{tx_in} = $tx->hash;
+        $hash->{tx_in} = $tx_hash;
         my $txo = $class->new_saved($hash);
         push @txo, $txo;
     }
     return @txo;
 }
 
-# Called from find() after create new object
+# Called from find() just before create new object
 # Used for load my UTXO on startup and for "produce" random transaction, so optimization is not a point here
-sub on_load {
-    my $self = shift;
+sub pre_load {
+    my $class = shift;
+    my ($attr) = @_;
     # load tx_in, tx_out as hashes; open_script as data instead of id
     # TODO: move this to QBitcoin::ORM
     my $sql = "SELECT value, num, tx_in.hash AS tx_in, s.data as open_script";
-    $sql .= ", tx_out.hash AS tx_out" if $self->{tx_out};
-    $sql .= " FROM " . $self->TABLE . " AS t JOIN " . QBitcoin::OpenScript->TABLE . " s ON (t.open_script = s.id)";
+    $sql .= ", tx_out.hash AS tx_out" if $attr->{tx_out};
+    $sql .= " FROM " . $class->TABLE . " AS t JOIN " . QBitcoin::OpenScript->TABLE . " s ON (t.open_script = s.id)";
     $sql .= " JOIN " . TRANSACTION_TABLE . " AS tx_in ON (tx_in.id = t.tx_in)";
-    $sql .= " LEFT JOIN " . TRANSACTION_TABLE . " AS tx_out ON (tx_out.id = t.tx_out)" if $self->{tx_out};
+    $sql .= " LEFT JOIN " . TRANSACTION_TABLE . " AS tx_out ON (tx_out.id = t.tx_out)" if $attr->{tx_out};
     $sql .= " WHERE tx_in.id = ? AND num = ?";
-    DEBUG_ORM && Debugf("sql: [%s] values [%u,%u]", $sql, $self->{tx_in}, $self->{num});
-    my $hash = $DBH->selectrow_hashref($sql, undef, $self->{tx_in}, $self->{num});
+    DEBUG_ORM && Debugf("sql: [%s] values [%u,%u]", $sql, $attr->{tx_in}, $attr->{num});
+    my $hash = $DBH->selectrow_hashref($sql, undef, $attr->{tx_in}, $attr->{num});
     if ($hash) {
-        $self->{tx_in}  = $hash->{tx_in};
-        $self->{tx_out} = $hash->{tx_out} if $self->{tx_out};
-        $self->{open_script} = $hash->{open_script};
+        $attr->{tx_in}       = $hash->{tx_in};
+        $attr->{tx_out}      = $hash->{tx_out} if $attr->{tx_out};
+        $attr->{open_script} = $hash->{open_script};
     }
-    # Set to already loaded object if exists
-    if (my $loaded = $self->get({ tx_out => $self->{tx_in}, num => $self->{num} })) {
-        # Prevent removing from the cache by implicit $self->DESTROY() call
-        $self->tx_in = undef;
-        undef $self;
-        $self = $loaded;
-    }
-    return $self;
+    return $attr;
 }
 
 sub check_script {

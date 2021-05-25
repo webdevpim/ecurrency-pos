@@ -7,7 +7,7 @@ use List::Util qw(sum0);
 use Digest::SHA qw(sha256);
 use QBitcoin::Const;
 use QBitcoin::Log;
-use QBitcoin::Accessors qw(mk_accessors new);
+use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ORM qw(find replace delete :types);
 use QBitcoin::TXO;
 
@@ -91,8 +91,8 @@ sub serialize {
     # TODO: pack as binary data
     # TODO: add transaction signature
     return $JSON->encode({
-        in  => [ map { serialize_input($_) } @{$self->in}  ],
-        out => [ map { $_->serialize       } @{$self->out} ],
+        in  => [ map { serialize_input($_)  } @{$self->in}  ],
+        out => [ map { serialize_output($_) } @{$self->out} ],
     }) . "\n";
 }
 
@@ -105,6 +105,14 @@ sub serialize_input {
     };
 }
 
+sub serialize_output {
+    my $out = shift;
+	return {
+        value       => $out->value,
+        open_script => $out->open_script,
+    };
+}
+
 sub deserialize {
     my $class = shift;
     my ($tx_data) = @_;
@@ -113,7 +121,7 @@ sub deserialize {
         Warningf("Incorrect transaction data: %s", $@);
         return undef;
     }
-    my $hash = $class->calculate_hash($tx_data);
+    my $hash = calculate_hash($tx_data);
     my $out  = create_outputs($decoded->{out}, $hash);
     my $in   = load_inputs($decoded->{in}, $hash);
     my $self = $class->new(
@@ -123,8 +131,8 @@ sub deserialize {
         size          => length($tx_data),
         received_time => time(),
     );
-    if ($class->calculate_hash($self->serialize) ne $hash) {
-        Warningf("Incorrect serialized transaction has different hash");
+    if (calculate_hash($self->serialize) ne $hash) {
+        Warning("Incorrect serialized transaction has different hash");
         return undef;
     }
     $self->validate() == 0
@@ -143,7 +151,7 @@ sub create_outputs {
     my ($out, $hash) = @_;
     my @txo;
     foreach my $num (0 .. $#$out) {
-        my $txo = QBitcoin::TXO->new({
+        my $txo = QBitcoin::TXO->new_txo({
             tx_in       => $hash,
             num         => $num,
             value       => $out->[$num]->{value},
@@ -189,7 +197,7 @@ sub load_inputs {
             }
         }
     }
-    return [ sort { _cmp_inputs($a, $b) } @loaded_inputs ];
+    return \@loaded_inputs;
 }
 
 sub _cmp_inputs {
@@ -198,7 +206,6 @@ sub _cmp_inputs {
 }
 
 sub calculate_hash {
-    my $class = shift;
     my ($tx_data) = @_;
     return sha256($tx_data);
 }
@@ -257,13 +264,13 @@ sub receive {
     return 0;
 }
 
-sub on_load {
-    my $self = shift;
-    $TRANSACTION{$self->hash} = $self;
+sub pre_load {
+    my $class = shift;
+    my ($attr) = @_;
     # Load TXO for inputs and outputs
-    my @outputs = QBitcoin::TXO->load_outputs($self);
+    my @outputs = QBitcoin::TXO->load_stored_outputs($attr->{id}, $attr->{hash});
     my @inputs;
-    foreach my $txo (QBitcoin::TXO->load_inputs($self)) {
+    foreach my $txo (QBitcoin::TXO->load_stored_inputs($attr->{id}, $attr->{hash})) {
         push @inputs, {
             txo          => $txo,
             close_script => $txo->close_script,
@@ -274,9 +281,24 @@ sub on_load {
         # if `tx_out` will be already set here, processing this block will fails as double-spend
         $txo->tx_out = undef;
     }
-    $self->in  = [ sort { _cmp_inputs($a, $b) } @inputs ];
-    $self->out = \@outputs;
-    $self->received_time = time_by_height($self->block_height); # for possible unconfirm the transaction
+    $attr->{in}  = \@inputs;
+    $attr->{out} = \@outputs;
+    $attr->{received_time} = time_by_height($attr->{block_height}); # for possible unconfirm the transaction
+    return $attr;
+}
+
+sub new {
+    my $class = shift;
+    my $attr = @_ == 1 ? $_[0] : { @_ };
+    $attr->{in} = [ sort { _cmp_inputs($a, $b) } @{$attr->{in}} ];
+    my $self = bless $attr, $class;
+    $self->hash //= calculate_hash($self->serialize);
+    return $self;
+}
+
+sub on_load {
+    my $self = shift;
+    $TRANSACTION{$self->hash} = $self;
     return $self;
 }
 

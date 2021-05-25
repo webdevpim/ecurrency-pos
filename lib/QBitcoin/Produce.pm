@@ -56,7 +56,7 @@ sub _produce_my_utxo {
     my $time = time();
     my $age = int($time - GENESIS_TIME);
     $last_time = $last_time < $age ? $age : $last_time+1;
-    my $out = QBitcoin::TXO->new(
+    my $out = QBitcoin::TXO->new_txo(
         value       => $last_time, # vary for get unique hash for each coinbase transaction
         num         => 0,
         open_script => QBitcoin::OpenScript->script_for_address($my_address, 1),
@@ -67,7 +67,6 @@ sub _produce_my_utxo {
         fee           => 0,
         received_time => $time,
     );
-    $tx->hash = QBitcoin::Transaction->calculate_hash($tx->serialize);
     QBitcoin::Generate::sign_my_transaction($tx);
     $_->tx_in = $tx->hash foreach @{$tx->out};
     QBitcoin::TXO->save_all($tx->hash, $tx->out);
@@ -94,7 +93,7 @@ sub _produce_tx {
     my $amount = sum map { $_->value } @txo;
     my $fee = int($amount * $fee_part);
     my $address = $txo[0]->open_script; # fake; out to the address from first input txo
-    my $out = QBitcoin::TXO->new(
+    my $out = QBitcoin::TXO->new_txo(
         value       => $amount - $fee,
         num         => 0,
         open_script => QBitcoin::OpenScript->script_for_address($address, 1),
@@ -105,7 +104,6 @@ sub _produce_tx {
         fee           => $fee,
         received_time => time(),
     );
-    $tx->hash = QBitcoin::Transaction->calculate_hash($tx->serialize);
     QBitcoin::Generate::sign_my_transaction($tx); # fake; it's not my transaction
     $_->tx_in = $tx->hash foreach @{$tx->out};
     QBitcoin::TXO->save_all($tx->hash, $tx->out);

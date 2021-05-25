@@ -59,7 +59,7 @@ sub make_stake_tx {
         or return undef;
     my $my_amount = sum map { $_->value } @my_txo;
     my ($my_address) = my_address(); # first one
-    my $out = QBitcoin::TXO->new(
+    my $out = QBitcoin::TXO->new_txo(
         value       => $my_amount + $fee,
         num         => 0,
         open_script => QBitcoin::OpenScript->script_for_address($my_address),
@@ -70,7 +70,6 @@ sub make_stake_tx {
         fee           => -$fee,
         received_time => time(),
     );
-    $tx->hash = QBitcoin::Transaction->calculate_hash($tx->serialize);
     if ($fee) {
         # stake tx without fee needed only for calculate its size; it will not be used,
         # so do not set tx_in for txo in zero-fee stake tx to avoid bothering $txo DESTROY() method
@@ -113,7 +112,7 @@ sub generate {
         transactions => \@transactions,
     });
     my $data = $generated->serialize;
-    $generated->hash($generated->calculate_hash($data));
+    $generated->hash = $generated->calculate_hash($data);
     QBitcoin::Generate::Control->generated_height($height);
     Debugf("Generated block height %u weight %u, %u transactions", $height, $generated->weight, scalar(@transactions));
     $generated->receive();

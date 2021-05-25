@@ -133,6 +133,7 @@ sub find {
     my @result;
     while (my $res = $sth->fetchrow_hashref()) {
         DEBUG_ORM && Debugf("orm: found {%s}", join(',', map { "'$_':" . (!defined($res->{$_}) ? "null" : $class->FIELDS->{$_} == BINARY ? "X'" . unpack("H*", $res->{$_}) . "'" : $class->FIELDS->{$_} == NUMERIC ? $res->{$_} : "'$res->{$_}'") } sort keys %$res));
+        $res = $class->pre_load($res) if $class->can('pre_load');
         my $item = $class->new($res);
         $item = $item->on_load if $class->can('on_load');
         push @result, $item;
