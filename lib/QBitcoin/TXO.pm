@@ -39,6 +39,7 @@ sub save {
 sub save_all {
     my $class = shift;
     my ($tx_hash, $out) = @_;
+    $_->tx_in = $tx_hash foreach @$out;
     $TXO{$tx_hash} = $out;
 }
 

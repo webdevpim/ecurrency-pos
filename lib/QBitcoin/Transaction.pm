@@ -166,7 +166,6 @@ sub create_outputs {
     my @txo;
     foreach my $num (0 .. $#$out) {
         my $txo = QBitcoin::TXO->new_txo({
-            tx_in       => $hash,
             num         => $num,
             value       => $out->[$num]->{value},
             open_script => pack("H*", $out->[$num]->{open_script}),
@@ -180,7 +179,6 @@ sub create_outputs {
 sub load_inputs {
     my ($inputs, $hash) = @_;
 
-    # tx inputs are not sorted in the database, so sort them here for get deterministic transaction hash
     my @loaded_inputs;
     my @need_load_txo;
     foreach my $in (@$inputs) {
@@ -313,6 +311,7 @@ sub pre_load {
 sub new {
     my $class = shift;
     my $attr = @_ == 1 ? $_[0] : { @_ };
+    # tx inputs are not sorted in the database, so sort them here for get deterministic transaction hash
     $attr->{in} = [ sort { _cmp_inputs($a, $b) } @{$attr->{in}} ];
     my $self = bless $attr, $class;
     $self->hash //= calculate_hash($self->serialize);

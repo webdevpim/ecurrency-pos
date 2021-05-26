@@ -70,11 +70,6 @@ sub make_stake_tx {
         fee           => -$fee,
         received_time => time(),
     );
-    if ($fee) {
-        # stake tx without fee needed only for calculate its size; it will not be used,
-        # so do not set tx_in for txo in zero-fee stake tx to avoid bothering $txo DESTROY() method
-        $_->tx_in = $tx->hash foreach @{$tx->out};
-    }
     sign_my_transaction($tx);
     $tx->size = length $tx->serialize;
     return $tx;

@@ -68,7 +68,6 @@ sub _produce_my_utxo {
         received_time => $time,
     );
     QBitcoin::Generate::sign_my_transaction($tx);
-    $_->tx_in = $tx->hash foreach @{$tx->out};
     QBitcoin::TXO->save_all($tx->hash, $tx->out);
     $tx->size = length $tx->serialize;
     if ($tx->validate() != 0) {
@@ -106,7 +105,6 @@ sub _produce_tx {
         received_time => time(),
     );
     QBitcoin::Generate::sign_my_transaction($tx); # fake; it's not my transaction
-    $_->tx_in = $tx->hash foreach @{$tx->out};
     QBitcoin::TXO->save_all($tx->hash, $tx->out);
     $tx->size = length $tx->serialize;
     $_->del_my_utxo() foreach grep { $_->is_my } @txo;
