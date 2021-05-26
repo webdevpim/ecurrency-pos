@@ -136,8 +136,20 @@ sub receive {
 
     if ($self->prev_block) {
         if ($self->weight != $self->prev_block->weight + $self->self_weight) {
-            Debugf("Incorrect block %s height %u weight %u!=%u+%u",
+            Warningf("Incorrect block %s height %u weight %u!=%u+%u",
                 $self->hash_out, $self->height, $self->weight, $self->prev_block->weight, $self->self_weight);
+            if ($self->received_from && ($self->prev_block->linked ||
+                ($self->prev_block->received_from && $self->received_from->ip eq $self->prev_block->received_from->ip))) {
+                $self->received_from->decrease_reputation();
+                $self->received_from->send_line("abort invalid_block");
+                return -1;
+            }
+            else {
+                # We're not sure is wrong weight has $self or $self->prev_block,
+                # so do not decrease reputation, keep session and just ignore block
+                # drop unlinked previous block to avoid receiving $self in loop
+                $self->prev_block->drop_branch();
+            }
             return 0;
         }
         $self->prev_block->next_block = $self;
@@ -149,8 +161,9 @@ sub receive {
     }
     if (!$self->height || $self->prev_block->linked) {
         if ($self->set_linked() != 0) { # with descendants
-            # Invalid branch, dropped
-            return 0;
+            # Invalid branch, dropped inside set_linked() call
+            $self->received_from->send_line("abort invalid_block");
+            return -1;
         }
         # zero weight for new block is ok, accept it
         if ($height && ($self->branch_weight < $best_block[$height]->weight ||
@@ -351,6 +364,11 @@ sub prev_block {
 sub drop_branch {
     my $self = shift;
 
+    if ($self->prev_block) {
+        if ($self->prev_block->next_block && $self->prev_block->next_block->hash eq $self->hash) {
+            $self->prev_block->next_block = undef;
+        }
+    }
     $self->prev_block(undef);
     delete $block_pool[$self->height]->{$self->hash};
     delete $prev_block[$self->height]->{$self->prev_hash}->{$self->hash};
@@ -370,6 +388,7 @@ sub set_linked {
     if ($prev_block[$self->height+1] && (my $descendants = $prev_block[$self->height+1]->{$self->hash})) {
         foreach my $descendant (values %$descendants) {
             $descendant->set_linked(); # recursively
+            # Do not return -1 here b/c the remote peer is not responsible for descendant blocks
         }
     }
     return 0;
