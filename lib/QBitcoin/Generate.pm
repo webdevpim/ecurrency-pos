@@ -89,7 +89,6 @@ sub generate {
     }
 
     my $stake_tx = make_stake_tx(0);
-    my $self_weight = 0;
     my @transactions = QBitcoin::Mempool->choose_for_block($stake_tx);
     if (@transactions && $transactions[0]->fee > 0) {
         return unless $stake_tx;
@@ -101,16 +100,13 @@ sub generate {
         QBitcoin::TXO->save_all($stake_tx->hash, $stake_tx->out);
         $stake_tx->receive();
         unshift @transactions, $stake_tx;
-        $self_weight = $stake_tx->stake_weight($height)
-            // return;
     }
     my $generated = QBitcoin::Block->new({
         height       => $height,
-        weight       => $prev_block ? $prev_block->weight + $self_weight : $self_weight,
-        self_weight  => $self_weight,
         prev_hash    => $prev_block ? $prev_block->hash : undef,
         transactions => \@transactions,
     });
+    $generated->weight = $generated->self_weight + ( $prev_block ? $prev_block->weight : 0 );
     my $data = $generated->serialize;
     $generated->hash = $generated->calculate_hash($data);
     QBitcoin::Generate::Control->generated_height($height);

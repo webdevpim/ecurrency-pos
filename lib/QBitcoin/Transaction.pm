@@ -349,20 +349,22 @@ sub stake_weight {
     my $self = shift;
     my ($block_height) = @_;
     my $weight = 0;
-    my $class = ref $self;
-    foreach my $in (map { $_->{txo} } @{$self->in}) {
-        if (my $tx = $class->get_by_hash($in->tx_in)) {
-            if (!$tx->block_height) {
-                Warningf("Can't get stake_weight for %s with unconfirmed input %s:%u",
-                    $self->hash_out, unpack("H*", $in->tx_in), $in->num);
+    if ($self->fee < 0) {
+        my $class = ref $self;
+        foreach my $in (map { $_->{txo} } @{$self->in}) {
+            if (my $tx = $class->get_by_hash($in->tx_in)) {
+                if (!$tx->block_height) {
+                    Warningf("Can't get stake_weight for %s with unconfirmed input %s:%u",
+                        $self->hash_out, $in->tx_in_log, $in->num);
+                    return undef;
+                }
+                $weight += $in->value * ($block_height - $tx->block_height);
+            }
+            else {
+                # tx generated this txo should be loaded during tx validation
+                Warningf("No input transaction %s for txo", $in->tx_in_log);
                 return undef;
             }
-            $weight += $in->value * ($block_height - $tx->block_height);
-        }
-        else {
-            # tx generated this txo should be loaded during tx validation
-            Warningf("No input transaction %s for txo", unpack("H*", $in->tx_in));
-            return undef;
         }
     }
     return $weight;

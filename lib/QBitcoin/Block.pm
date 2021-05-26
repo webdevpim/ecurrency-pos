@@ -48,7 +48,8 @@ sub branch_height {
 
 sub self_weight {
     my $self = shift;
-    return $self->{self_weight} //= @{$self->transactions()} ? $self->transactions->[0]->stake_weight($self->height) : 0;
+    return $self->{self_weight} //=
+        @{$self->transactions} ? $self->transactions->[0]->stake_weight($self->height) + @{$self->transactions} : 0;
     # $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
 }
 
