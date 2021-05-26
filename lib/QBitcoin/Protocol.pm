@@ -225,6 +225,7 @@ sub process_block {
         }
         else {
             $block->pending_tx($tx_hash);
+            $pending_tx{$tx_hash}->{$block->hash} = 1;
             $self->send_line("sendtx " . unpack("H*", $tx_hash));
         }
     }
@@ -232,7 +233,8 @@ sub process_block {
         $pending_blocks{$block->hash} = $block;
         if (keys %pending_blocks > MAX_PENDING_BLOCKS) {
             my ($oldest_block) = values %pending_blocks;
-            foreach my $tx_hash (@{$oldest_block->pending_tx}) {
+            Debugf("Drop pending block %s", $oldest_block->hash_out);
+            foreach my $tx_hash (keys %{$oldest_block->pending_tx}) {
                 delete $pending_tx{$tx_hash}->{$oldest_block->hash};
                 if (!%{$pending_tx{$tx_hash}}) {
                     delete $pending_tx{$tx_hash};
@@ -283,7 +285,8 @@ sub process_tx {
     $tx->receive() == 0
         or return -1;
     if (my $blocks = delete $pending_tx{$tx->hash}) {
-        foreach my $block (values %$blocks) {
+        foreach my $block_hash (keys %$blocks) {
+            my $block = $pending_blocks{$block_hash};
             $block->add_tx($tx);
             if (!$block->pending_tx) {
                 delete $pending_blocks{$block->hash};
