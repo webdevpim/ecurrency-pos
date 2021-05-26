@@ -34,7 +34,7 @@ sub deserialize {
     my $block = $class->new({
         height      => $decoded->{height},
         weight      => $decoded->{weight},
-        prev_hash   => pack("H*", $decoded->{prev_hash}),
+        prev_hash   => $decoded->{prev_hash} ? pack("H*", $decoded->{prev_hash}) : undef,
         rcvd        => $decoded->{rcvd},
         tx_hashes   => [ map { pack("H*", $_) } @{$decoded->{transactions}} ],
     });

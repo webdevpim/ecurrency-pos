@@ -33,7 +33,7 @@ mk_accessors(keys %{&FIELDS}, ATTR);
 
 my %TRANSACTION;
 
-my $JSON = JSON::XS->new;
+my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
 
 sub get_by_hash {
     my $class = shift;
@@ -100,17 +100,26 @@ sub serialize {
 sub serialize_input {
     my $in = shift;
     return {
-        tx_out       => $in->{txo}->tx_in,
-        num          => $in->{txo}->num,
-        close_script => $in->{close_script},
+        tx_out       => unpack("H*", $in->{txo}->tx_in),
+        num          => $in->{txo}->num+0,
+        close_script => unpack("H*", $in->{close_script}),
     };
+}
+
+sub deserialize_input {
+    my $in = shift;
+    return {
+        tx_out       => pack("H*", $in->{tx_out}),
+        num          => $in->{num},
+        close_script => pack("H*", $in->{close_script}),
+    }
 }
 
 sub serialize_output {
     my $out = shift;
 	return {
-        value       => $out->value,
-        open_script => $out->open_script,
+        value       => $out->value+0,
+        open_script => unpack("H*", $out->open_script),
     };
 }
 
@@ -118,12 +127,12 @@ sub deserialize {
     my $class = shift;
     my ($tx_data) = @_;
     my $decoded = eval { $JSON->decode($tx_data) };
-    if (!$decoded) {
+    if (!$decoded || ref($decoded) ne 'HASH' || ref($decoded->{in}) ne 'ARRAY' || ref($decoded->{out}) ne 'ARRAY') {
         Warningf("Incorrect transaction data: %s", $@);
         return undef;
     }
     my $hash = calculate_hash($tx_data);
-    my $in   = load_inputs($decoded->{in}, $hash);
+    my $in   = load_inputs([ map { deserialize_input($_) } @{$decoded->{in}} ], $hash);
     if (!$in) {
         # TODO: put the transaction into separate "waiting" pull (limited size) and reprocess it by each received transaction
         return ""; # Ignore transactions with unknown inputs
@@ -160,7 +169,7 @@ sub create_outputs {
             tx_in       => $hash,
             num         => $num,
             value       => $out->[$num]->{value},
-            open_script => $out->[$num]->{open_script},
+            open_script => pack("H*", $out->[$num]->{open_script}),
         });
         push @txo, $txo;
     }
@@ -312,6 +321,10 @@ sub new {
 
 sub on_load {
     my $self = shift;
+    if ($self->hash ne calculate_hash($self->serialize)) {
+        Errf("Serialized transaction: %s", $self->serialize);
+        die "Incorrect hash for loaded transaction " . $self->hash_out . " != " . unpack("H*", substr(calculate_hash($self->serialize), 0, 4)) . "\n";
+    }
     $TRANSACTION{$self->hash} = $self;
     return $self;
 }
