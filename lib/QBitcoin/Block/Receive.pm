@@ -199,7 +199,7 @@ sub receive {
                     if ($txo->tx_out) {
                         # double-spend; drop this branch, return to old best branch and decrease reputation for peer $b->received_from
                         Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %s, block from %s",
-                            $tx->hash_out($txo->tx_in), $in->{txo}->num, $tx->hash_out($txo->tx_out), $tx->hash_out,
+                            $txo->tx_in_log, $txo->num, $txo->tx_out_log, $tx->hash_out,
                             $b->received_from ? $b->received_from->ip : "me");
                         $correct = 0;
                     }
@@ -208,7 +208,7 @@ sub receive {
                         # Stored (not cached) transactions are always confirmed, not needed to load them
                         if (!$tx_in->block_height) {
                             Warning("Unconfirmed input %s:%u for transaction %s, block from %s",
-                                $tx->hash_out($txo->tx_in), $txo->num, $tx->hash_out,
+                                $txo->tx_in_log, $txo->num, $tx->hash_out,
                                 $b->received_from ? $b->received_from->ip : "me");
                             $correct = 0;
                         }
