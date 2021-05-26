@@ -85,4 +85,10 @@ sub tx_hashes {
         [ map { $_->hash } @{$self->{transactions}} ];
 }
 
+sub hash_out {
+    my $self = shift;
+    # TODO: return full hash
+    return unpack("H*", substr($self->hash, 0, 4));
+}
+
 1;

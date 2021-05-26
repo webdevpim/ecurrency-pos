@@ -61,13 +61,6 @@ sub declared_height {
     return $declared_height;
 }
 
-sub hash_out {
-    my $arg = shift;
-    my $hash = ref($arg) ? $arg->hash : $arg;
-    # TODO: return full hash
-    return unpack("H*", substr($hash, 0, 4));
-}
-
 sub receive {
     my $self = shift;
 
@@ -150,7 +143,7 @@ sub receive {
         $self->prev_block->next_block = $self;
     }
     elsif ($self->height) {
-        Debugf("No prev block with height %s hash %s, request it", $self->height-1, hash_out($self->prev_hash));
+        Debugf("No prev block with height %s hash %s, request it", $self->height-1, unpack("H*", substr($self->prev_hash, 0, 4)));
         $self->received_from->send_line("sendblock " . ($self->height-1));
         return 0;
     }
