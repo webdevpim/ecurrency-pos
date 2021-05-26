@@ -87,9 +87,10 @@ sub tx_hashes {
 }
 
 sub hash_out {
-    my $self = shift;
+    my $arg  = pop;
+    my $hash = ref($arg) ? $arg->hash : $arg;
     # TODO: return full hash
-    return unpack("H*", substr($self->hash, 0, 4));
+    return unpack("H*", substr($hash, 0, 4));
 }
 
 1;

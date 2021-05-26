@@ -143,7 +143,7 @@ sub receive {
         $self->prev_block->next_block = $self;
     }
     elsif ($self->height) {
-        Debugf("No prev block with height %s hash %s, request it", $self->height-1, unpack("H*", substr($self->prev_hash, 0, 4)));
+        Debugf("No prev block with height %s hash %s, request it", $self->height-1, $self->hash_out($self->prev_hash));
         $self->received_from->send_line("sendblock " . ($self->height-1));
         return 0;
     }
@@ -186,7 +186,7 @@ sub receive {
                     if ($txo->tx_out) {
                         # double-spend; drop this branch, return to old best branch and decrease reputation for peer $b->received_from
                         Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %s, block from %s",
-                            unpack("H*", $txo->tx_in), $in->{txo}->num, unpack("H*", $txo->tx_out), unpack("H*", $tx->hash),
+                            $tx->hash_out($txo->tx_in), $in->{txo}->num, $tx->hash_out($txo->tx_out), $tx->hash_out,
                             $b->received_from ? $b->received_from->ip : "me");
                         $correct = 0;
                     }
@@ -195,7 +195,7 @@ sub receive {
                         # Stored (not cached) transactions are always confirmed, not needed to load them
                         if (!$tx_in->block_height) {
                             Warning("Unconfirmed input %s:%u for transaction %s, block from %s",
-                                unpack("H*", $txo->tx_in), $txo->num, unpack("H*", $tx->hash),
+                                $tx->hash_out($txo->tx_in), $txo->num, $tx->hash_out,
                                 $b->received_from ? $b->received_from->ip : "me");
                             $correct = 0;
                         }

@@ -117,7 +117,7 @@ sub _produce_tx {
     $tx->receive();
     Noticef("Produced transaction %s with fee %i", $tx->hash_out, $tx->fee);
     Debugf("Produced transaction inputs:");
-    Debugf("  tx_in: %s, num: %u", unpack("H*", substr($_->tx_in, 0, 4)), $_->num) foreach @txo;
+    Debugf("  tx_in: %s, num: %u", $_->tx_in_log, $_->num) foreach @txo;
     $tx->announce();
     return $tx;
 }

@@ -126,7 +126,7 @@ sub store {
     DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%u]", $sql, $self->value, $self->num, $tx->id, $script->id);
     my $res = dbh->do($sql, undef, $self->value, $self->num, $tx->id, $script->id);
     $res == 1
-        or die "Can't store txo " . unpack("H*", $self->tx_in) . ":" . $self->num . ": " . (dbh->errstr // "no error") . "\n";
+        or die "Can't store txo " . $self->tx_in_log . ":" . $self->num . ": " . (dbh->errstr // "no error") . "\n";
 }
 
 sub store_spend {
@@ -137,7 +137,7 @@ sub store_spend {
     DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%s,%u]", $sql, $tx->id, $self->close_script, unpack("H*", $self->tx_in), $self->num);
     my $res = dbh->do($sql, undef, $tx->id, $self->close_script, unpack("H*", $self->tx_in), $self->num);
     $res == 1
-        or die "Can't store txo " . unpack("H*", $self->tx_in) . ":" . $self->num . " as spend: " . (dbh->errstr // "no error") . "\n";
+        or die "Can't store txo " . $self->tx_in_log . ":" . $self->num . " as spend: " . (dbh->errstr // "no error") . "\n";
 }
 
 # Load all inputs for stored transaction after load from database
@@ -209,6 +209,16 @@ sub check_script {
     my $self = shift;
     my ($close_script) = @_;
     return QBitcoin::OpenScript->check_input($self->open_script, $close_script);
+}
+
+sub tx_in_log {
+    my $self = shift;
+    return unpack("H*", substr($self->tx_in, 0, 4));
+}
+
+sub tx_out_log {
+    my $self = shift;
+    return unpack("H*", substr($self->tx_out, 0, 4));
 }
 
 1;

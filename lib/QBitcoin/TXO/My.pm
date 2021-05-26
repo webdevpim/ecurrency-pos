@@ -18,13 +18,13 @@ sub _in_key {
 sub add_my_utxo {
     my $self = shift;
     $MY_UTXO{$self->_in_key} = $self;
-    Infof("Add my UTXO %s:%s %s coins", unpack("H*", substr($self->tx_in, 0, 4)), $self->num, $self->value);
+    Infof("Add my UTXO %s:%s %s coins", $self->tx_in_log, $self->num, $self->value);
 }
 
 sub del_my_utxo {
     my $self = shift;
     delete $MY_UTXO{$self->_in_key} &&
-        Infof("Delete my UTXO %s:%s %s coins", unpack("H*", substr($self->tx_in, 0, 4)), $self->num, $self->value);
+        Infof("Delete my UTXO %s:%s %s coins", $self->tx_in_log, $self->num, $self->value);
 }
 
 sub my_utxo {

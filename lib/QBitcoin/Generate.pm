@@ -48,7 +48,7 @@ sub generated_height {
 sub txo_confirmed {
     my ($txo) = @_;
     my $tx = QBitcoin::Transaction->get_by_hash($txo->tx_in)
-        or die "No input transaction " . unpack("H*", substr($txo->tx_in, 0, 4)) . " for my utxo\n";
+        or die "No input transaction " . $txo->tx_in_log . " for my utxo\n";
     return $tx->block_height;
 }
 

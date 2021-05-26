@@ -81,7 +81,7 @@ sub store {
 }
 
 sub hash_out {
-    my $arg = shift;
+    my $arg = pop;
     my $hash = ref($arg) ? $arg->hash : $arg;
     # TODO: return full hash
     return unpack("H*", substr($hash, 0, 4));
@@ -260,7 +260,7 @@ sub validate {
         $input_value += $in->{txo}->value;
         if ($in->{txo}->check_script($in->{close_script}) != 0) {
             Warningf("Unmatched close script for input %s:%u in transaction %s",
-                unpack("H*", $in->{txo}->tx_in), $in->{txo}->num, $self->hash_out);
+                $in->{txo}->tx_in_log, $in->{txo}->num, $self->hash_out);
             return -1;
         }
     }
