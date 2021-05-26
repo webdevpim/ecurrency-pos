@@ -227,10 +227,10 @@ sub receive {
                         for (my $b1 = $class->best_block($new_best->height); $b1; $b1 = $b1->next_block) {
                             foreach my $tx1 (@{$b1->transactions}) {
                                 $tx1->block_height = $b1->height;
-                                foreach my $in (@{$tx1->in}) {
-                                    my $txo = $in->{txo};
+                                foreach my $in1 (@{$tx1->in}) {
+                                    my $txo = $in1->{txo};
                                     $txo->tx_out = $tx1->hash;
-                                    $txo->close_script = $in->{close_script};
+                                    $txo->close_script = $in1->{close_script};
                                     $txo->del_my_utxo if $txo->is_my;
                                 }
                                 foreach my $txo (@{$tx1->out}) {
