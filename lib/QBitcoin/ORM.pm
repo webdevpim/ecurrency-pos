@@ -20,7 +20,7 @@ use constant DB_TYPES;
 use constant DEBUG_ORM => 1;
 
 use parent 'Exporter';
-our @EXPORT_OK = qw(find create replace update delete IGNORE $DBH DEBUG_ORM);
+our @EXPORT_OK = qw(dbh find create replace update delete IGNORE DEBUG_ORM);
 push @EXPORT_OK, keys %{&DB_TYPES};
 our %EXPORT_TAGS = ( types => [ keys %{&DB_TYPES} ] );
 
@@ -34,14 +34,14 @@ use constant KEY_RE => qr/^[a-z][a-z0-9_]*\z/;
 
 use constant IGNORE => \undef; # { key => IGNORE } may be used to override default check for "key" column
 
-our $DBH; # controlled by QBitcoin::ORM::Transaction
-
-sub INIT {
+sub dbh {
+    state $dbh;
+    return $dbh if $dbh;
     my $db_name = $config->{"database"} // DB_NAME;
     my $dsn = $config->{"dsn"} // "DBI:mysql:$db_name;mysql_read_default_file=$ENV{HOME}/my.cnf:localhost";
     my $login = $config->{"db.login"};
     my $password = $config->{"db.password"};
-    $DBH = DBI->connect($dsn, $login, $password, DB_OPTS);
+    return $dbh = DBI->connect($dsn, $login, $password, DB_OPTS);
 }
 
 sub find {
@@ -128,7 +128,7 @@ sub find {
     $limit = 1 unless wantarray;
     $sql .= " LIMIT $limit" if $limit;
     DEBUG_ORM && Debugf("sql: [%s], values: [%s]", $sql, join(',', map { $_ // "undef" } @values));
-    my $sth = $DBH->prepare($sql);
+    my $sth = dbh->prepare($sql);
     $sth->execute(@values);
     my @result;
     while (my $res = $sth->fetchrow_hashref()) {
@@ -138,7 +138,7 @@ sub find {
         $item = $item->on_load if $class->can('on_load');
         push @result, $item;
     }
-    DEBUG_ORM && Debugf("orm: found %u entries, errstr [%s]", scalar(@result), $DBH->errstr // '');
+    DEBUG_ORM && Debugf("orm: found %u entries, errstr [%s]", scalar(@result), dbh->errstr // '');
     return wantarray ? @result : $result[0];
 }
 
@@ -159,13 +159,13 @@ sub create {
         push @values, $args->{$key};
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values));
-    my $res = $DBH->do($sql, undef, @values);
+    my $res = dbh->do($sql, undef, @values);
     if ($res != 1) {
         die "Can't create object $table\n";
     }
     my $self = $class->new($args);
     if ($class->FIELDS->{id}) {
-        my ($id) = $DBH->selectrow_array("SELECT LAST_INSERT_ID()");
+        my ($id) = dbh->selectrow_array("SELECT LAST_INSERT_ID()");
         $self->{id} = $id;
         DEBUG_ORM && Debugf("orm: last_insert_id: %u", $id);
     }
@@ -205,9 +205,9 @@ sub replace {
         }
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values));
-    $DBH->do($sql, undef, @values);
+    dbh->do($sql, undef, @values);
     if ($class->FIELDS->{id} && !$self->id) {
-        my ($id) = $DBH->selectrow_array("SELECT LAST_INSERT_ID()");
+        my ($id) = dbh->selectrow_array("SELECT LAST_INSERT_ID()");
         $self->{id} = $id;
         DEBUG_ORM && Debugf("orm: last_insert_id: %u", $id);
     }
@@ -247,7 +247,7 @@ sub update {
         @pk_values = ($self->id);
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values, @pk_values));
-    $DBH->do($sql, undef, @values, @pk_values);
+    dbh->do($sql, undef, @values, @pk_values);
 }
 
 sub delete {
@@ -269,7 +269,7 @@ sub delete {
         die "Object primary key undefined on delete $table\n";
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', @pk_values));
-    my $res = $DBH->do($sql, undef, @pk_values);
+    my $res = dbh->do($sql, undef, @pk_values);
     if (!$res != 1) {
         die "Can't delete $table\n";
     }
