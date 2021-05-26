@@ -194,7 +194,8 @@ sub load_inputs {
     }
 
     if (@need_load_txo) {
-        QBitcoin::TXO->load(@need_load_txo);
+        # var @txo here needed to prevent free txo objects as unused just after load
+        my @txo = QBitcoin::TXO->load(@need_load_txo);
         foreach my $in (@need_load_txo) {
             if (my $txo = QBitcoin::TXO->get($in)) {
                 push @loaded_inputs, {
@@ -334,6 +335,7 @@ sub unconfirm {
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
         $txo->tx_out = undef;
+        $txo->close_script = undef;
         # Return to list of my utxo inputs from stake transaction, but do not use returned to mempool
         $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my;
     }
