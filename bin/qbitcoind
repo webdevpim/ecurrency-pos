@@ -39,7 +39,7 @@ sub usage {
     print "   -h, -? --help            - print this help message and exit,\n";
     print "   -p, --peer <host[:port]> - connect to peer <host> and <port> (default port " . PORT_P2P . "),\n";
     print "   -b, --bind <addr[:port]> - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT_P2P . "),\n";
-    print "   -g, --generate <addr>    - generate blocks signed by self address <addr> (private key must be known),\n";
+    print "   -g, --generate           - generate blocks signed by self address <addr> (private key must be known),\n";
     print "   -B, --base               - run as single node, do not need to synchronize with other nodes for authoritative answers,\n";
     print "   --log <file>             - write log to <file>, 'syslog' for syslog.\n";
 }
