@@ -39,20 +39,18 @@ sub save {
 sub save_all {
     my $class = shift;
     my ($tx_hash, $out) = @_;
-    $_->tx_in = $tx_hash foreach @$out;
-    $TXO{$tx_hash} = $out;
+    my $num = 0;
+    foreach (@$out) {
+        $_->tx_in = $tx_hash;
+        $_->num   = $num++;
+        $_->save;
+    }
 }
 
 sub get {
     my $class = shift;
     my ($in) = @_;
     return $TXO{$in->{tx_out}}->[$in->{num}];
-}
-
-sub get_all {
-    my $class = shift;
-    my ($tx_hash) = @_;
-    return $TXO{$tx_hash};
 }
 
 # Create new transaction output, it cannot be already cached

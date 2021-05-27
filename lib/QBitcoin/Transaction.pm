@@ -162,13 +162,13 @@ sub deserialize {
 }
 
 sub create_outputs {
-    my ($out, $hash) = @_;
+    my ($outputs, $hash) = @_;
     my @txo;
     foreach my $num (0 .. $#$out) {
+    foreach my $out (@$outputs) {
         my $txo = QBitcoin::TXO->new_txo({
-            num         => $num,
-            value       => $out->[$num]->{value},
-            open_script => pack("H*", $out->[$num]->{open_script}),
+            value       => $out->{value},
+            open_script => pack("H*", $out->{open_script}),
         });
         push @txo, $txo;
     }

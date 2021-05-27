@@ -61,7 +61,6 @@ sub make_stake_tx {
     my ($my_address) = my_address(); # first one
     my $out = QBitcoin::TXO->new_txo(
         value       => $my_amount + $fee,
-        num         => 0,
         open_script => QBitcoin::OpenScript->script_for_address($my_address),
     );
     my $tx = QBitcoin::Transaction->new(
