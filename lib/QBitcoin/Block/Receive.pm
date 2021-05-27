@@ -228,13 +228,13 @@ sub receive {
                             foreach my $tx1 (@{$b1->transactions}) {
                                 $tx1->block_height = $b1->height;
                                 foreach my $in1 (@{$tx1->in}) {
-                                    my $txo = $in1->{txo};
-                                    $txo->tx_out = $tx1->hash;
-                                    $txo->close_script = $in1->{close_script};
-                                    $txo->del_my_utxo if $txo->is_my;
+                                    my $txo1 = $in1->{txo};
+                                    $txo1->tx_out = $tx1->hash;
+                                    $txo1->close_script = $in1->{close_script};
+                                    $txo1->del_my_utxo if $txo1->is_my;
                                 }
-                                foreach my $txo (@{$tx1->out}) {
-                                    $txo->add_my_utxo if $txo->is_my;
+                                foreach my $txo1 (@{$tx1->out}) {
+                                    $txo1->add_my_utxo if $txo1->is_my;
                                 }
                             }
                         }
