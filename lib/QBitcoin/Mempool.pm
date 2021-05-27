@@ -32,7 +32,47 @@ sub choose_for_block {
     }
     my $size = $stake_tx ? $stake_tx->size : 0;
     my $empty_tx = 0;
-    for (my $i=0; $i<$#mempool; $i++) {
+    # It's not possible that input was spent in stake transaction
+    # b/c we do not use inputs existing in any mempool transaction for stake tx
+    my %spent;
+    my %mempool_out; # for allow spend unconfirmed in the same block
+    for (my $i=0; $i<=$#mempool; $i++) {
+        my $skip = 0;
+        foreach my $in (@{$mempool[$i]->in}) {
+            my $txo = $in->{txo};
+            if ($txo->tx_out) {
+                # Already confirmed spent
+                # TODO: drop it and save as "replaced-by", so it's theoretically possible to receive it again and include into best branch
+                $skip = 1;
+                last;
+            }
+            if (exists $spent{$txo->tx_in . $txo->num}) {
+                # Spent in previous mempool transaction
+                $skip = 1;
+                last;
+            }
+            # the input must be created in earlier mempool transaction or confirmed in the best branch
+            # TODO: build transaction dependencies and process mempool tx-chains as single transaction-group with cululative size and fee
+            # i.e. if A depends on B then in sort mempool assume weight for A as (A+B); then if include A then include "B;A" (and skip B)
+            if (!exists $mempool_out{$txo->tx_in}) {
+                # If the transaction is not cached than it's already stored onto database, so it definitely in the best branch
+                if (my $tx_in = QBitcoin::Transaction->get($txo->tx_in)) {
+                    if (!$tx_in->block_height) {
+                        $skip = 1;
+                        last;
+                    }
+                }
+            }
+            # otherwise it's suitable transaction
+        }
+        if ($skip) {
+            $mempool[$i] = undef;
+            next;
+        }
+        foreach my $in (@{$mempool[$i]->in}) {
+            $spent{$in->{txo}->tx_in . $in->{txo}->num} = 1;
+        }
+        $mempool_out{$mempool[$i]->hash} = scalar @{$mempool[$i]->out};
         $empty_tx++ if $mempool[$i]->fee == 0;
         $size += $mempool[$i]->size;
         if ($empty_tx > MAX_EMPTY_TX_IN_BLOCK || $size > MAX_BLOCK_SIZE - BLOCK_HEADER_SIZE) {
@@ -40,7 +80,7 @@ sub choose_for_block {
             last;
         }
     }
-    return @mempool;
+    return grep { defined } @mempool;
 }
 
 sub compare_tx {

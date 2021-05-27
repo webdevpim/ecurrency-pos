@@ -207,6 +207,7 @@ sub receive {
                             $txo->tx_in_log, $txo->num, $txo->tx_out_log, $tx->hash_out,
                             $b->received_from ? $b->received_from->ip : "me");
                         $fail_tx = $tx->hash;
+                        last;
                     }
                     elsif (my $tx_in = QBitcoin::Transaction->get($txo->tx_in)) {
                         # Transaction with this output must be already confirmed (in the same best branch)
@@ -216,6 +217,7 @@ sub receive {
                                 $txo->tx_in_log, $txo->num, $tx->hash_out,
                                 $b->received_from ? $b->received_from->ip : "me");
                             $fail_tx = $tx->hash;
+                            last;
                         }
                     }
                 }
