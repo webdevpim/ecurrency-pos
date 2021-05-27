@@ -104,7 +104,8 @@ sub generate {
     my $data = $generated->serialize;
     $generated->hash = $generated->calculate_hash($data);
     QBitcoin::Generate::Control->generated_height($height);
-    Debugf("Generated block height %u weight %u, %u transactions", $height, $generated->weight, scalar(@transactions));
+    Debugf("Generated block %s height %u weight %u, %u transactions",
+        $generated->hash_out, $height, $generated->weight, scalar(@transactions));
     $generated->receive();
 }
 

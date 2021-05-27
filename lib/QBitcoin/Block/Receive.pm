@@ -191,11 +191,11 @@ sub receive {
             }
         }
         for (my $b = $new_best; $b; $b = $b->next_block) {
-            my $correct = 1;
+            my $fail_tx;
             foreach my $tx (@{$b->transactions}) {
                 if ($tx->block_height && $tx->block_height != $b->height) {
                     Warningf("Transaction %s included in blocks %u and %u", $tx->hash_out, $tx->block_height, $b->height);
-                    $correct = 0;
+                    $fail_tx = $tx->hash;
                     last;
                 }
                 $tx->block_height = $b->height;
@@ -207,7 +207,7 @@ sub receive {
                         Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %s, block from %s",
                             $txo->tx_in_log, $txo->num, $txo->tx_out_log, $tx->hash_out,
                             $b->received_from ? $b->received_from->ip : "me");
-                        $correct = 0;
+                        $fail_tx = $tx->hash;
                     }
                     elsif (my $tx_in = QBitcoin::Transaction->get($txo->tx_in)) {
                         # Transaction with this output must be already confirmed (in the same best branch)
@@ -216,24 +216,31 @@ sub receive {
                             Warning("Unconfirmed input %s:%u for transaction %s, block from %s",
                                 $txo->tx_in_log, $txo->num, $tx->hash_out,
                                 $b->received_from ? $b->received_from->ip : "me");
-                            $correct = 0;
+                            $fail_tx = $tx->hash;
                         }
                     }
-                    $correct or last;
+                }
+                last if $fail_tx;
+                foreach my $in (@{$tx->in}) {
+                    my $txo = $in->{txo};
                     $txo->tx_out = $tx->hash;
                     $txo->close_script = $in->{close_script};
                     $txo->del_my_utxo if $txo->is_my; # for stake transaction
                 }
-                $correct or last;
                 foreach my $txo (@{$tx->out}) {
                     $txo->add_my_utxo if $txo->is_my;
                 }
             }
-            if (!$correct) {
+            if ($fail_tx) {
                 for (my $b1 = $new_best; $b1; $b1 = $b1->next_block) {
                     foreach my $tx (@{$b1->transactions}) {
+                        if ($fail_tx eq $tx->hash) {
+                            $fail_tx = undef;
+                            last;
+                        }
                         $tx->unconfirm();
                     }
+                    last unless $fail_tx;
                 }
                 for (my $b1 = $class->best_block($new_best->height); $b1; $b1 = $b1->next_block) {
                     foreach my $tx (@{$b1->transactions}) {
