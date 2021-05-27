@@ -50,7 +50,7 @@ sub save_all {
 sub get {
     my $class = shift;
     my ($in) = @_;
-    return $TXO{$in->{tx_out}}->[$in->{num}];
+    return $TXO{$in->{tx_out}} ? $TXO{$in->{tx_out}}->[$in->{num}] : undef;
 }
 
 # Create new transaction output, it cannot be already cached
@@ -102,6 +102,17 @@ sub load {
         push @txo, $txo;
     }
     return @txo;
+}
+
+sub is_cached {
+    my $self = shift;
+    if ($self->tx_in) {
+        my $cached = $TXO{$self->tx_in};
+        if ($cached && $cached->[$self->num] && refaddr($self) == refaddr($cached->[$self->num])) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 sub DESTROY {

@@ -19,9 +19,9 @@ sub load_utxo {
     foreach my $my_address (my_address()) {
         my @script_data = QBitcoin::OpenScript->script_for_address($my_address);
         if (my @script = QBitcoin::OpenScript->find(data => \@script_data)) {
-            foreach my $utxo (QBitcoin::TXO->find(open_script => [ map { $_->id } @script ], tx_out => undef)) {
+            foreach my $utxo (grep { !$_->is_cached } QBitcoin::TXO->find(open_script => [ map { $_->id } @script ], tx_out => undef)) {
                 $utxo->save();
-                $utxo->add_my_utxo(); # MB already added during fetch last INCORE blocks, it's ok b/c it's the same TXO object
+                $utxo->add_my_utxo();
             }
         }
     }
