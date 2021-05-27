@@ -22,7 +22,11 @@ sub validate {
         return ""; # Not needed to validate genesis block with correct hash
     }
     my $fee = 0;
+    my %tx_in_block;
     foreach my $transaction (@{$block->transactions}) {
+        if ($tx_in_block{$transaction->hash}++) {
+            return "Transaction " . $transaction->hash_out . " included in the block twice";
+        }
         if ($transaction->validate != 0) {
             return "Incorrect transaction " . $transaction->hash_out;
         }

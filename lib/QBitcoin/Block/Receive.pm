@@ -191,12 +191,18 @@ sub receive {
             }
         }
         for (my $b = $new_best; $b; $b = $b->next_block) {
+            my $correct = 1;
             foreach my $tx (@{$b->transactions}) {
+                if ($tx->block_height && $tx->block_height != $b->height) {
+                    Warningf("Transaction %s included in blocks %u and %u", $tx->hash_out, $tx->block_height, $b->height);
+                    $correct = 0;
+                    last;
+                }
                 $tx->block_height = $b->height;
                 foreach my $in (@{$tx->in}) {
                     my $txo = $in->{txo};
-                    my $correct = 1;
-                    if ($txo->tx_out) {
+                    # It's possible that $txo->tx_out already set for rebuild blockchain loaded from local database
+                    if ($txo->tx_out && $txo->tx_out ne $tx->hash) {
                         # double-spend; drop this branch, return to old best branch and decrease reputation for peer $b->received_from
                         Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %s, block from %s",
                             $txo->tx_in_log, $txo->num, $txo->tx_out_log, $tx->hash_out,
@@ -213,51 +219,51 @@ sub receive {
                             $correct = 0;
                         }
                     }
-                    if ($correct) {
-                        $txo->tx_out = $tx->hash;
-                        $txo->close_script = $in->{close_script};
-                        $txo->del_my_utxo if $txo->is_my; # for stake transaction
-                    }
-                    else {
-                        for (my $b1 = $new_best; $b1; $b1 = $b1->next_block) {
-                            foreach my $tx1 (@{$b1->transactions}) {
-                                $tx1->unconfirm();
-                            }
-                        }
-                        for (my $b1 = $class->best_block($new_best->height); $b1; $b1 = $b1->next_block) {
-                            foreach my $tx1 (@{$b1->transactions}) {
-                                $tx1->block_height = $b1->height;
-                                foreach my $in1 (@{$tx1->in}) {
-                                    my $txo1 = $in1->{txo};
-                                    $txo1->tx_out = $tx1->hash;
-                                    $txo1->close_script = $in1->{close_script};
-                                    $txo1->del_my_utxo if $txo1->is_my;
-                                }
-                                foreach my $txo1 (@{$tx1->out}) {
-                                    $txo1->add_my_utxo if $txo1->is_my;
-                                }
-                            }
-                        }
-                        $b->drop_branch();
-                        # $self may be correct block, so we have no reasons for decrease reputation of the current peer
-                        # but we can decrease reputation of the peer which sent us block with double-spend transaction
-                        $b->received_from->decrease_reputation if $b->received_from;
-                        if ($b->height == $self->height) {
-                            $self->received_from->send_line("abort incorrect_block") if $self->received_from;
-                            return -1;
-                        }
-                        # Ok, it's theoretically possible that branch from $new_best to $b->prev_block is better than our best branch.
-                        # But we have not all blocks there, so we can switch to this branch (or keep in our best) later,
-                        # not needed to change the best branch immediately.
-                        if ($self->received_from) {
-                            $self->received_from->send_line("sendblock " . $b->height);
-                        }
-                        return 0;
-                    }
+                    $correct or last;
+                    $txo->tx_out = $tx->hash;
+                    $txo->close_script = $in->{close_script};
+                    $txo->del_my_utxo if $txo->is_my; # for stake transaction
                 }
+                $correct or last;
                 foreach my $txo (@{$tx->out}) {
                     $txo->add_my_utxo if $txo->is_my;
                 }
+            }
+            if (!$correct) {
+                for (my $b1 = $new_best; $b1; $b1 = $b1->next_block) {
+                    foreach my $tx (@{$b1->transactions}) {
+                        $tx->unconfirm();
+                    }
+                }
+                for (my $b1 = $class->best_block($new_best->height); $b1; $b1 = $b1->next_block) {
+                    foreach my $tx (@{$b1->transactions}) {
+                        $tx->block_height = $b1->height;
+                        foreach my $in (@{$tx->in}) {
+                            my $txo = $in->{txo};
+                            $txo->tx_out = $tx->hash;
+                            $txo->close_script = $in->{close_script};
+                            $txo->del_my_utxo if $txo->is_my;
+                        }
+                        foreach my $txo (@{$tx->out}) {
+                            $txo->add_my_utxo if $txo->is_my;
+                        }
+                    }
+                }
+                $b->drop_branch();
+                # $self may be correct block, so we have no reasons for decrease reputation of the current peer
+                # but we can decrease reputation of the peer which sent us block with double-spend transaction
+                $b->received_from->decrease_reputation if $b->received_from;
+                if ($b->height == $self->height) {
+                    $self->received_from->send_line("abort incorrect_block") if $self->received_from;
+                    return -1;
+                }
+                # Ok, it's theoretically possible that branch from $new_best to $b->prev_block is better than our best branch.
+                # But we have not all blocks there, so we can switch to this branch (or keep in our best) later,
+                # not needed to change the best branch immediately.
+                if ($self->received_from) {
+                    $self->received_from->send_line("sendblock " . $b->height);
+                }
+                return 0;
             }
         }
 

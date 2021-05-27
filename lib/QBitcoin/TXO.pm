@@ -155,6 +155,8 @@ sub load_stored_inputs {
     while (my $hash = $sth->fetchrow_hashref()) {
         $hash->{tx_out} = $tx_hash;
         my $txo = $class->new_saved($hash);
+        $txo->tx_out && $txo->tx_out eq $tx_hash
+            or die sprintf("Cached txo %s:%u has no tx_out %s\n", $txo->tx_in_log, $txo->num, unpack("H*", substr($tx_hash, 0, 4)));
         push @txo, $txo;
     }
     return @txo;

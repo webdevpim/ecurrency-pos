@@ -164,7 +164,6 @@ sub deserialize {
 sub create_outputs {
     my ($outputs, $hash) = @_;
     my @txo;
-    foreach my $num (0 .. $#$out) {
     foreach my $out (@$outputs) {
         my $txo = QBitcoin::TXO->new_txo({
             value       => $out->{value},
@@ -297,11 +296,6 @@ sub pre_load {
             txo          => $txo,
             close_script => $txo->close_script,
         };
-        # `close_script` saved as transaction $in->{close_script}, not in the $txo object
-        $txo->close_script = undef;
-        # `tx_out` will be set during processing this block by receive() and including it in the best branch
-        # if `tx_out` will be already set here, processing this block will fails as double-spend
-        $txo->tx_out = undef;
     }
     $attr->{in}  = \@inputs;
     $attr->{out} = \@outputs;
