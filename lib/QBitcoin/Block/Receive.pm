@@ -198,7 +198,6 @@ sub receive {
                     $fail_tx = $tx->hash;
                     last;
                 }
-                $tx->block_height = $b->height;
                 foreach my $in (@{$tx->in}) {
                     my $txo = $in->{txo};
                     # It's possible that $txo->tx_out already set for rebuild blockchain loaded from local database
@@ -221,6 +220,7 @@ sub receive {
                     }
                 }
                 last if $fail_tx;
+                $tx->block_height = $b->height;
                 foreach my $in (@{$tx->in}) {
                     my $txo = $in->{txo};
                     $txo->tx_out = $tx->hash;
@@ -232,16 +232,18 @@ sub receive {
                 }
             }
             if ($fail_tx) {
-                for (my $b1 = $new_best; $b1; $b1 = $b1->next_block) {
+                # If we have tx included in two different blocks then process rollback until second tx occurence
+                # It's not possible to include a tx twice in the same block, it's checked on block validation
+                for (my $b1 = $new_best; $b1->height < $b->height; $b1 = $b1->next_block) {
                     foreach my $tx (@{$b1->transactions}) {
-                        if ($fail_tx eq $tx->hash) {
-                            $fail_tx = undef;
-                            last;
-                        }
                         $tx->unconfirm();
                     }
-                    last unless $fail_tx;
                 }
+                foreach my $tx (@{$b->transactions}) {
+                    last if $fail_tx eq $tx->hash;
+                    $tx->unconfirm();
+                }
+
                 for (my $b1 = $class->best_block($new_best->height); $b1; $b1 = $b1->next_block) {
                     foreach my $tx (@{$b1->transactions}) {
                         $tx->block_height = $b1->height;
