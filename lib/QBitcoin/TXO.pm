@@ -28,11 +28,17 @@ mk_accessors(keys %{&FIELDS});
 # hash by tx and out-num
 my %TXO;
 
+sub key {
+    my $self = shift;
+    return $self->tx_in . $self->num;
+}
+
 sub save {
     my $self = shift;
-    $TXO{$self->tx_in}->[$self->num] = $self;
+    my $key = $self->key;
+    $TXO{$key} = $self;
     # Keep the txo in the %TXO hash until at least one reference (input or output) exists
-    weaken($TXO{$self->tx_in}->[$self->num]);
+    weaken($TXO{$key});
     return $self;
 }
 
@@ -50,7 +56,7 @@ sub save_all {
 sub get {
     my $class = shift;
     my ($in) = @_;
-    return $TXO{$in->{tx_out}} ? $TXO{$in->{tx_out}}->[$in->{num}] : undef;
+    return $TXO{$in->{tx_out} . $in->{num}};
 }
 
 # Create new transaction output, it cannot be already cached
@@ -107,8 +113,8 @@ sub load {
 sub is_cached {
     my $self = shift;
     if ($self->tx_in) {
-        my $cached = $TXO{$self->tx_in};
-        if ($cached && $cached->[$self->num] && refaddr($self) == refaddr($cached->[$self->num])) {
+        my $key = $self->key;
+        if ($TXO{$key} && refaddr($self) == refaddr($TXO{$key})) {
             return 1;
         }
     }
@@ -119,10 +125,10 @@ sub DESTROY {
     my $self = shift;
     # Compare pointers to avoid removing from the cache by destroy unlinked object
     if ($self->tx_in) {
+        my $key = $self->key;
         my $cached = $TXO{$self->tx_in};
-        if ($cached && $cached->[$self->num] && refaddr($self) == refaddr($cached->[$self->num])) {
-            delete $cached->[$self->num];
-            delete $TXO{$self->tx_in} unless @$cached;
+        if ($TXO{$key} && refaddr($self) == refaddr($TXO{$key})) {
+            delete $TXO{$key};
         }
     }
 }
