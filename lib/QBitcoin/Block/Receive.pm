@@ -31,6 +31,13 @@ my $height;
 
 my $declared_height = 0;
 
+END {
+    # free structures
+    undef @best_block;
+    undef @prev_block;
+    undef @block_pool;
+};
+
 sub best_weight {
     return defined($height) ? $best_block[$height]->weight : -1;
 }

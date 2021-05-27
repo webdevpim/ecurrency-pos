@@ -31,9 +31,14 @@ use constant ATTR => qw(
 
 mk_accessors(keys %{&FIELDS}, ATTR);
 
+my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
+
 my %TRANSACTION;
 
-my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
+END {
+    # Free all references to txo for graceful free %TXO hash
+    undef %TRANSACTION;
+};
 
 sub get_by_hash {
     my $class = shift;
