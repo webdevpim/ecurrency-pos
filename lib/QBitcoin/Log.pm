@@ -16,7 +16,7 @@ my %indent;
 
 sub Logf {
     my ($prio, $format, @args) = @_;
-    if ($ENV{LOG_STDOUT}) {
+    if ($config->{verbose}) {
         my $t = Time::HiRes::time();
         printf "%s.%03d %s$format\n", strftime("%F %T", localtime($t)), ($t-int($t)) * 1000, $indent{$prio}, @args;
     }

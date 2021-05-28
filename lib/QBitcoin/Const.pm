@@ -55,7 +55,7 @@ sub time_by_height {
 sub height_by_time {
     my ($time) = @_;
 
-    return int($time - GENESIS_TIME / BLOCK_INTERVAL);
+    return int(($time - GENESIS_TIME) / BLOCK_INTERVAL);
 }
 
 use Exporter qw(import);

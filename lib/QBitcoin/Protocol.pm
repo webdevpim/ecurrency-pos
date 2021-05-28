@@ -179,7 +179,7 @@ sub startup {
     my $self = shift;
     $self->send_line("qbtc " . GENESIS_HASH_HEX) == 0
         or return -1;
-    $self->send_line("sendmempool") if blockchain_synced() && !mempool_synced() && $self->direction eq DIR_OUT;
+    $self->send_line("sendmempool") if blockchain_synced() && !mempool_synced();
     my $height = QBitcoin::Block->blockchain_height;
     if (defined($height)) {
         my $best_block = QBitcoin::Block->best_block($height);
@@ -329,7 +329,6 @@ sub cmd_ihave {
         Warningf("Ignore too early block height %u from peer %s", $height, $self->ip);
         return 0;
     }
-    QBitcoin::Block->declared_height($height);
     if ($height > (QBitcoin::Block->blockchain_height // -1)) {
         $self->send_line("sendblock " . ((QBitcoin::Block->blockchain_height // -1) + 1));
     }

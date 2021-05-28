@@ -13,9 +13,10 @@ sub main {
     unless (GetOptions(
         'help|h|?'   => \$help,
         'peer|p=s'   => \@peer_hosts,
+        'verbose|v'  => \$config->{verbose},
         'bind|b=s'   => \$config->{bind_addr},
         'port|P=s'   => \$config->{port},
-        'base|B'     => \$config->{base},
+        'genesis|G'  => \$config->{genesis},
         'generate|g' => \$config->{generate},
         'produce'    => \$config->{produce},
         'database=s' => \$config->{database},
@@ -37,11 +38,12 @@ sub usage {
     print "Usage:  qbitcoind [options]\n";
     print "Options:\n";
     print "   -h, -? --help            - print this help message and exit,\n";
+    print "   -v, --verbose            - output logs to stdout,\n";
     print "   -p, --peer <host[:port]> - connect to peer <host> and <port> (default port " . PORT_P2P . "),\n";
     print "   -b, --bind <addr[:port]> - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT_P2P . "),\n";
-    print "   -g, --generate           - generate blocks signed by self address <addr> (private key must be known),\n";
-    print "   -B, --base               - run as single node, do not need to synchronize with other nodes for authoritative answers,\n";
-    print "   --log <file>             - write log to <file>, 'syslog' for syslog.\n";
+    print "   -g, --generate           - generate blocks (private key must be stored in the database),\n";
+    print "   -G, --genesis            - run as genesis node, do not need to synchronize with other nodes for authoritative answers,\n";
+    print "   --log <file>             - write log to <file>, 'syslog' for syslog (default).\n";
 }
 
 exit main();

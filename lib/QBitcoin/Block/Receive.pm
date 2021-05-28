@@ -29,8 +29,6 @@ my @best_block;
 my @prev_block;
 my $height;
 
-my $declared_height = 0; # heighest block we seen in "ihave" from remote peer
-
 END {
     # free structures
     undef @best_block;
@@ -57,15 +55,6 @@ sub block_pool {
     my $class = shift;
     my ($block_height, $hash) = @_;
     return $block_pool[$block_height]->{$hash};
-}
-
-sub declared_height {
-    my $class = shift;
-    if (@_) {
-        my ($height) = @_;
-        $declared_height = $height if $declared_height < $height;
-    }
-    return $declared_height;
 }
 
 sub receive {
@@ -359,7 +348,7 @@ sub receive {
 sub check_synced {
     my $self = shift;
     # Is it OK to synchronize and request mempool from incoming peer?
-    if ($self->received_from && $height >= $declared_height && !blockchain_synced()) {
+    if ($self->received_from && $height >= height_by_time(time()) && !blockchain_synced()) {
         Infof("Blockchain is synced");
         blockchain_synced(1);
         if (!mempool_synced()) {

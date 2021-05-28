@@ -61,7 +61,7 @@ sub main_loop {
     my $class = shift;
     my @peer_hosts = @_;
 
-    if ($config->{base}) {
+    if ($config->{genesis}) {
         mempool_synced(1);
         blockchain_synced(1);
     }
