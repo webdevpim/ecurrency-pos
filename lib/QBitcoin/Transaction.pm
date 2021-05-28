@@ -289,7 +289,13 @@ sub validate {
     my $class = ref $self;
     my @stored_in;
     my $input_value = 0;
+    my %inputs;
     foreach my $in (@{$self->in}) {
+        if ($inputs{$in->{txo}->key}++) {
+            Warningf("Input %s:%u included in transaction %s twice",
+                $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
+            return -1;
+        }
         $input_value += $in->{txo}->value;
         if ($in->{txo}->check_script($in->{close_script}) != 0) {
             Warningf("Unmatched close script for input %s:%u in transaction %s",

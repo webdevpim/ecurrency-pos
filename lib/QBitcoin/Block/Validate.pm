@@ -23,6 +23,7 @@ sub validate {
     }
     my $fee = 0;
     my %tx_in_block;
+    my $empty_tx = 0;
     foreach my $transaction (@{$block->transactions}) {
         if ($tx_in_block{$transaction->hash}++) {
             return "Transaction " . $transaction->hash_str . " included in the block twice";
@@ -32,7 +33,14 @@ sub validate {
         }
         # NB: we do not check that the $txin is unspent in this branch;
         # we will check this on include this block into the best branch
-        $fee += $transaction->fee;
+        if ($transaction->fee == 0) {
+            if (++$empty_tx > MAX_EMPTY_TX_IN_BLOCK) {
+                return "Too many empty transactions";
+            }
+        }
+        else {
+            $fee += $transaction->fee;
+        }
     }
     $fee == 0
         or return "Total block fee is $fee (not 0)";
