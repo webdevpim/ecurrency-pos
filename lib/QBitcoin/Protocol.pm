@@ -282,6 +282,9 @@ sub process_tx {
         # Ignore (skip) but do not drop connection, for example transaction has unknown input
         return 0;
     }
+    if (QBitcoin::Transaction->get_by_hash(pack("H*", $tx->hash))) {
+        return 0;
+    }
     $tx->receive() == 0
         or return -1;
     if (my $blocks = delete $pending_tx{$tx->hash}) {
@@ -368,6 +371,9 @@ sub cmd_mempool {
         Errf("Incorrect params from peer %s: [%s]", $self->ip, "mempool " . join(' ', @_));
         $self->send_line("abort incorrect_params");
         return -1;
+    }
+    if (QBitcoin::Transaction->get_by_hash(pack("H*", $hash))) {
+        return 0;
     }
     # Comparing floating points, it's ok, we can randomly accept or reject transaction with fee around lower limit
     # min_fee() returns -1 if mempool size less than limit
