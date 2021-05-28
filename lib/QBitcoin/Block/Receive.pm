@@ -93,11 +93,7 @@ sub receive {
     my $descendant;
     if ($prev_block[$self->height+1] && (my $descendants = $prev_block[$self->height+1]->{$self->hash})) {
         foreach my $descendant (values %$descendants) {
-            if ($descendant->weight != $self->weight + $descendant->self_weight) {
-                Warningf("Incorrect descendant weight %u != %u, drop it", $descendant->weight, $self->weight + $descendant->self_weight);
-                $descendant->drop_branch();
-            }
-            elsif ($new_weight < $descendant->branch_weight) {
+            if ($new_weight < $descendant->branch_weight) {
                 $new_weight = $descendant->branch_weight;
                 $self->next_block = $descendant;
             }
@@ -142,23 +138,6 @@ sub receive {
     $prev_block[$self->height]->{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
 
     if ($self->prev_block) {
-        if ($self->weight != $self->prev_block->weight + $self->self_weight) {
-            Warningf("Incorrect block %s height %u weight %u!=%u+%u",
-                $self->hash_str, $self->height, $self->weight, $self->prev_block->weight, $self->self_weight);
-            if ($self->received_from && ($self->prev_block->linked ||
-                ($self->prev_block->received_from && $self->received_from->ip eq $self->prev_block->received_from->ip))) {
-                $self->received_from->decrease_reputation();
-                $self->received_from->send_line("abort invalid_block");
-                return -1;
-            }
-            else {
-                # We're not sure is wrong weight has $self or $self->prev_block,
-                # so do not decrease reputation, keep session and just ignore block
-                # drop unlinked previous block to avoid receiving $self in loop
-                $self->prev_block->drop_branch();
-            }
-            return 0;
-        }
         $self->prev_block->next_block = $self;
     }
     elsif ($self->height) {
@@ -240,6 +219,21 @@ sub receive {
                     $txo->add_my_utxo if $txo->is_my;
                 }
             }
+
+            if (!$fail_tx) {
+                my $self_weight = $b->self_weight;
+                if (!defined($self_weight)) {
+                    $fail_tx = "block"; # does not match any transaction hash
+                    last;
+                }
+                if ($self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ) != $self->weight) {
+                    Warningf("Incorrect weight for block %s: %u != %u", $self->weight,
+                        $self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ));
+                    $fail_tx = "block";
+                    last;
+                }
+            }
+
             if ($fail_tx) {
                 # If we have tx included in two different blocks then process rollback until second tx occurence
                 # It's not possible to include a tx twice in the same block, it's checked on block validation
@@ -269,7 +263,7 @@ sub receive {
                 }
                 $b->drop_branch();
                 # $self may be correct block, so we have no reasons for decrease reputation of the current peer
-                # but we can decrease reputation of the peer which sent us block with double-spend transaction
+                # but we can decrease reputation of the peer which sent us block with double-spend transaction or incorrect weight
                 $b->received_from->decrease_reputation if $b->received_from;
                 if ($b->height == $self->height) {
                     $self->received_from->send_line("abort incorrect_block") if $self->received_from;

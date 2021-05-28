@@ -48,9 +48,18 @@ sub branch_height {
 
 sub self_weight {
     my $self = shift;
-    return $self->{self_weight} //=
-        @{$self->transactions} ? $self->transactions->[0]->stake_weight($self->height) + @{$self->transactions} : 0;
-    # $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
+    if (!defined $self->{self_weight}) {
+        if (@{$self->transactions}) {
+            if (defined(my $stake_weight = $self->transactions->[0]->stake_weight($self->height))) {
+                $self->{self_weight} = $stake_weight + @{$self->transactions};
+            }
+            # otherwise we have unknown input in stake transaction; return undef and calculate next time
+        }
+        else {
+            $self->{self_weight} = 0;
+        }
+    }
+    return $self->{self_weight};
 }
 
 sub add_tx {
