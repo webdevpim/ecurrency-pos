@@ -223,6 +223,25 @@ sub pre_load {
     return $attr;
 }
 
+# $self->{spent} is not complete list of spent transactions for the txo; here are only in-memory transactions (mempool dependency)
+sub spent_add {
+    my $self = shift;
+    my ($tx) = @_;
+    $self->{spent} //= {}; # I am suspicious of autovivification
+    $self->{spent}->{$tx->hash} = $tx;
+}
+
+sub spent_del {
+    my $self = shift;
+    my ($tx) = @_;
+    delete $self->{spent}->{$tx->hash};
+}
+
+sub spent_list {
+    my $self = shift;
+    return $self->{spent} ? values %{$self->{spent}} : ();
+}
+
 sub check_script {
     my $self = shift;
     my ($close_script) = @_;

@@ -54,16 +54,47 @@ sub get {
     return $TRANSACTION{$tx_hash};
 }
 
+sub receive {
+    my $self = shift;
+    foreach my $in (@{$self->in}) {
+        $in->{txo}->spent_add($self);
+    }
+    $TRANSACTION{$self->hash} = $self;
+    return 0;
+}
+
 sub mempool_list {
     my $class = shift;
     return grep { !$_->block_height && $_->fee >= 0 } values %TRANSACTION;
 }
 
-# We never drop existing transaction b/c it's possible its txo already spend by another one
-# This method calls when the transaction stored in the database and is not needed in memory anymore
+# This method calls when the confirmed transaction stored into the database and is not needed in memory anymore
 # TXO (input and output) will free from %TXO hash by DESTROY() method, they have weaken reference for this
 sub free {
     my $self = shift;
+    foreach my $in (@{$self->in}) {
+        $in->{txo}->spent_del($self);
+    }
+    delete $TRANSACTION{$self->hash};
+}
+
+# Drop the transaction from mempool and all dependent transactions if any
+sub drop {
+    my $self = shift;
+    if ($self->block_height) {
+        Errf("Attempt to drop confirmed transaction %s, block height %u", $self->hash_str, $self->block_height);
+        die "Can't drop confirmed transaction " . $self->hash_str . "\n";
+    }
+    Debugf("Drop transaction %s from mempool", $self->hash_str);
+    foreach my $out (@{$self->out}) {
+        foreach my $dep_tx ($out->spent_list) {
+            Infof("Drop transaction %s dependent on %s", $dep_tx->hash_str, $self->hash_str);
+            $dep_tx->drop;
+        }
+    }
+    foreach my $in (@{$self->in}) {
+        $in->{txo}->spent_del($self);
+    }
     delete $TRANSACTION{$self->hash};
 }
 
@@ -271,12 +302,6 @@ sub validate {
         return -1;
     }
     # TODO: Check that transaction is signed correctly
-    return 0;
-}
-
-sub receive {
-    my $self = shift;
-    $TRANSACTION{$self->hash} = $self;
     return 0;
 }
 

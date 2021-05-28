@@ -42,7 +42,9 @@ sub choose_for_block {
             my $txo = $in->{txo};
             if ($txo->tx_out) {
                 # Already confirmed spent
-                # TODO: drop it and save as "replaced-by", so it's theoretically possible to receive it again and include into best branch
+                Infof("Drop mempool tx %s b/c input %s:%u was already spent in %s",
+                    $mempool[$i]->hash_str, $txo->tx_in_str, $txo->num, $mempool[$i]->hash_str($txo->tx_out));
+                $mempool[$i]->drop;
                 $skip = 1;
                 last;
             }
