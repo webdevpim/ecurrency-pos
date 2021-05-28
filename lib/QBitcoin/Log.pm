@@ -18,7 +18,7 @@ sub Logf {
     my ($prio, $format, @args) = @_;
     if ($ENV{LOG_STDOUT}) {
         my $t = Time::HiRes::time();
-        printf "%s.%03d %s$format\n", strftime("%F %T", gmtime($t)), ($t-int($t)) * 1000, $indent{$prio}, @args;
+        printf "%s.%03d %s$format\n", strftime("%F %T", localtime($t)), ($t-int($t)) * 1000, $indent{$prio}, @args;
     }
     my $log = $config->{log} // 'syslog';
     if ($log eq 'syslog') {
@@ -28,7 +28,7 @@ sub Logf {
         open my $fh, '>>', $log
             or die "Can't open log file [$log]\n";
         my $t = Time::HiRes::time();
-        printf $fh "%s.%03d %s$format\n", strftime("%F %T", gmtime($t)), ($t-int($t)) * 1000, $indent{$prio}, @args;
+        printf $fh "%s.%03d %s$format\n", strftime("%F %T", localtime($t)), ($t-int($t)) * 1000, $indent{$prio}, @args;
         close $fh;
     }
 }

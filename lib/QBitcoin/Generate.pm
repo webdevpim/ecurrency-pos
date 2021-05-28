@@ -48,7 +48,7 @@ sub generated_height {
 sub txo_confirmed {
     my ($txo) = @_;
     my $tx = QBitcoin::Transaction->get_by_hash($txo->tx_in)
-        or die "No input transaction " . $txo->tx_in_log . " for my utxo\n";
+        or die "No input transaction " . $txo->tx_in_str . " for my utxo\n";
     return $tx->block_height;
 }
 
@@ -89,7 +89,7 @@ sub generate {
         my $fee = sum map { $_->fee } @transactions;
         # Generate new stake_tx with correct output value
         $stake_tx = make_stake_tx($fee);
-        Infof("Generated stake tx %s with input amount %u, consume %u fee", $stake_tx->hash_out,
+        Infof("Generated stake tx %s with input amount %u, consume %u fee", $stake_tx->hash_str,
             sum(map { $_->{txo}->value } @{$stake_tx->in}), -$stake_tx->fee);
         QBitcoin::TXO->save_all($stake_tx->hash, $stake_tx->out);
         $stake_tx->receive();
@@ -105,7 +105,7 @@ sub generate {
     $generated->hash = $generated->calculate_hash($data);
     QBitcoin::Generate::Control->generated_height($height);
     Debugf("Generated block %s height %u weight %u, %u transactions",
-        $generated->hash_out, $height, $generated->weight, scalar(@transactions));
+        $generated->hash_str, $height, $generated->weight, scalar(@transactions));
     $generated->receive();
 }
 

@@ -86,10 +86,9 @@ sub tx_hashes {
         [ map { $_->hash } @{$self->{transactions}} ];
 }
 
-sub hash_out {
+sub hash_str {
     my $arg  = pop;
     my $hash = ref($arg) ? $arg->hash : $arg;
-    # TODO: return full hash
     return unpack("H*", substr($hash, 0, 4));
 }
 

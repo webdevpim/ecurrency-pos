@@ -233,7 +233,7 @@ sub process_block {
         $pending_blocks{$block->hash} = $block;
         if (keys %pending_blocks > MAX_PENDING_BLOCKS) {
             my ($oldest_block) = values %pending_blocks;
-            Debugf("Drop pending block %s", $oldest_block->hash_out);
+            Debugf("Drop pending block %s", $oldest_block->hash_str);
             foreach my $tx_hash (keys %{$oldest_block->pending_tx}) {
                 delete $pending_tx{$tx_hash}->{$oldest_block->hash};
                 if (!%{$pending_tx{$tx_hash}}) {
@@ -390,7 +390,7 @@ sub cmd_sendtx {
     my $tx = QBitcoin::Transaction->get_by_hash(pack("H*", $hash));
     if ($tx) {
         my $data = $tx->serialize;
-        $self->send_line("tx " . length($data) . " " . $tx->hash_out);
+        $self->send_line("tx " . length($data) . " " . $tx->hash_str);
         $self->send($data);
     }
     else {

@@ -25,10 +25,10 @@ sub validate {
     my %tx_in_block;
     foreach my $transaction (@{$block->transactions}) {
         if ($tx_in_block{$transaction->hash}++) {
-            return "Transaction " . $transaction->hash_out . " included in the block twice";
+            return "Transaction " . $transaction->hash_str . " included in the block twice";
         }
         if ($transaction->validate != 0) {
-            return "Incorrect transaction " . $transaction->hash_out;
+            return "Incorrect transaction " . $transaction->hash_str;
         }
         # NB: we do not check that the $txin is unspent in this branch;
         # we will check this on include this block into the best branch

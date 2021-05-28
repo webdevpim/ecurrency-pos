@@ -99,7 +99,7 @@ sub load {
     $sql .= " JOIN " . TRANSACTION_TABLE . " AS tx_in ON (tx_in.id = t.tx_in)";
     $sql .= " LEFT JOIN " . TRANSACTION_TABLE . " AS tx_out ON (tx_out.id = t.tx_out)";
     $sql .= " WHERE " . join(" OR ", ("(tx_in.hash = ? AND num = ?)")x@in);
-    DEBUG_ORM && Debugf("sql: [%s] values [%s]", $sql, join(',', map { $_->{tx_out}, $_->{num} } @in));
+    DEBUG_ORM && Debugf("sql: [%s] values [%s]", $sql, join(',', map { "X'" . unpack("H*", $_->{tx_out}) . "'", $_->{num} } @in));
     my $sth = dbh->prepare($sql);
     $sth->execute(map { $_->{tx_out}, $_->{num} } @in);
     my @txo;
@@ -142,18 +142,18 @@ sub store {
     DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%u]", $sql, $self->value, $self->num, $tx->id, $script->id);
     my $res = dbh->do($sql, undef, $self->value, $self->num, $tx->id, $script->id);
     $res == 1
-        or die "Can't store txo " . $self->tx_in_log . ":" . $self->num . ": " . (dbh->errstr // "no error") . "\n";
+        or die "Can't store txo " . $self->tx_in_str . ":" . $self->num . ": " . (dbh->errstr // "no error") . "\n";
 }
 
 sub store_spend {
     my $self = shift;
     my ($tx) = @_;
     my $sql = "UPDATE " . TABLE . " AS t JOIN " . TRANSACTION_TABLE . " AS tx_in ON (t.tx_in = tx_in.id)";
-    $sql .= " SET tx_out = ?, close_script = ? WHERE tx_in.hash = UNHEX(?) AND num = ?";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%s,%u]", $sql, $tx->id, $self->close_script, unpack("H*", $self->tx_in), $self->num);
-    my $res = dbh->do($sql, undef, $tx->id, $self->close_script, unpack("H*", $self->tx_in), $self->num);
+    $sql .= " SET tx_out = ?, close_script = ? WHERE tx_in.hash = ? AND num = ?";
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,'%s',X'%s',%u]", $sql, $tx->id, $self->close_script, unpack("H*", $self->tx_in), $self->num);
+    my $res = dbh->do($sql, undef, $tx->id, $self->close_script, $self->tx_in, $self->num);
     $res == 1
-        or die "Can't store txo " . $self->tx_in_log . ":" . $self->num . " as spend: " . (dbh->errstr // "no error") . "\n";
+        or die "Can't store txo " . $self->tx_in_str . ":" . $self->num . " as spend: " . (dbh->errstr // "no error") . "\n";
 }
 
 # Load all inputs for stored transaction after load from database
@@ -173,7 +173,7 @@ sub load_stored_inputs {
         $hash->{tx_out} = $tx_hash;
         my $txo = $class->new_saved($hash);
         $txo->tx_out && $txo->tx_out eq $tx_hash
-            or die sprintf("Cached txo %s:%u has no tx_out %s\n", $txo->tx_in_log, $txo->num, unpack("H*", substr($tx_hash, 0, 4)));
+            or die sprintf("Cached txo %s:%u has no tx_out %s\n", $txo->tx_in_str, $txo->num, unpack("H*", substr($tx_hash, 0, 4)));
         push @txo, $txo;
     }
     return @txo;
@@ -229,12 +229,12 @@ sub check_script {
     return QBitcoin::OpenScript->check_input($self->open_script, $close_script);
 }
 
-sub tx_in_log {
+sub tx_in_str {
     my $self = shift;
     return unpack("H*", substr($self->tx_in, 0, 4));
 }
 
-sub tx_out_log {
+sub tx_out_str {
     my $self = shift;
     return unpack("H*", substr($self->tx_out, 0, 4));
 }

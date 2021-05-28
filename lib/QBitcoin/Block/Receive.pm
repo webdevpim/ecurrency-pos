@@ -133,7 +133,7 @@ sub receive {
             next if $b->received_from->ip ne $self->received_from->ip;
             next if $b->prev_hash eq $self->hash;
             Debugf("Remove orphan descendant %s height %u received from this peer %s",
-                $b->hash_out, $b->height, $self->received_from->ip);
+                $b->hash_str, $b->height, $self->received_from->ip);
             $b->drop_branch();
         }
     }
@@ -144,7 +144,7 @@ sub receive {
     if ($self->prev_block) {
         if ($self->weight != $self->prev_block->weight + $self->self_weight) {
             Warningf("Incorrect block %s height %u weight %u!=%u+%u",
-                $self->hash_out, $self->height, $self->weight, $self->prev_block->weight, $self->self_weight);
+                $self->hash_str, $self->height, $self->weight, $self->prev_block->weight, $self->self_weight);
             if ($self->received_from && ($self->prev_block->linked ||
                 ($self->prev_block->received_from && $self->received_from->ip eq $self->prev_block->received_from->ip))) {
                 $self->received_from->decrease_reputation();
@@ -162,7 +162,7 @@ sub receive {
         $self->prev_block->next_block = $self;
     }
     elsif ($self->height) {
-        Debugf("No prev block with height %s hash %s, request it", $self->height-1, $self->hash_out($self->prev_hash));
+        Debugf("No prev block with height %s hash %s, request it", $self->height-1, $self->hash_str($self->prev_hash));
         $self->received_from->send_line("sendblock " . ($self->height-1));
         return 0;
     }
@@ -201,7 +201,7 @@ sub receive {
             my $fail_tx;
             foreach my $tx (@{$b->transactions}) {
                 if ($tx->block_height && $tx->block_height != $b->height) {
-                    Warningf("Transaction %s included in blocks %u and %u", $tx->hash_out, $tx->block_height, $b->height);
+                    Warningf("Transaction %s included in blocks %u and %u", $tx->hash_str, $tx->block_height, $b->height);
                     $fail_tx = $tx->hash;
                     last;
                 }
@@ -211,7 +211,7 @@ sub receive {
                     if ($txo->tx_out && $txo->tx_out ne $tx->hash) {
                         # double-spend; drop this branch, return to old best branch and decrease reputation for peer $b->received_from
                         Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %s, block from %s",
-                            $txo->tx_in_log, $txo->num, $txo->tx_out_log, $tx->hash_out,
+                            $txo->tx_in_str, $txo->num, $txo->tx_out_str, $tx->hash_str,
                             $b->received_from ? $b->received_from->ip : "me");
                         $fail_tx = $tx->hash;
                         last;
@@ -221,7 +221,7 @@ sub receive {
                         # Stored (not cached) transactions are always confirmed, not needed to load them
                         if (!$tx_in->block_height) {
                             Warning("Unconfirmed input %s:%u for transaction %s, block from %s",
-                                $txo->tx_in_log, $txo->num, $tx->hash_out,
+                                $txo->tx_in_str, $txo->num, $tx->hash_str,
                                 $b->received_from ? $b->received_from->ip : "me");
                             $fail_tx = $tx->hash;
                             last;
@@ -300,12 +300,12 @@ sub receive {
             QBitcoin::Generate::Control->generate_new() if $new_best->height < $height;
             Debugf("%s block height %u hash %s, best branch altered, weight %u, %u transactions",
                 $self->received_from ? "received" : "loaded", $self->height,
-                $self->hash_out, $self->branch_weight, scalar(@{$self->transactions}));
+                $self->hash_str, $self->branch_weight, scalar(@{$self->transactions}));
         }
         else {
             Debugf("%s block height %u hash %s in best branch, weight %u, %u transactions",
                 $self->received_from ? "received" : "loaded", $self->height,
-                $self->hash_out, $self->branch_weight, scalar(@{$self->transactions}));
+                $self->hash_str, $self->branch_weight, scalar(@{$self->transactions}));
         }
         my $old_height = $height // -1;
         $height = $self->branch_height();

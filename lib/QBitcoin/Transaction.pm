@@ -85,10 +85,9 @@ sub store {
     # TODO: store tx data (smartcontract)
 }
 
-sub hash_out {
+sub hash_str {
     my $arg = pop;
     my $hash = ref($arg) ? $arg->hash : $arg;
-    # TODO: return full hash
     return unpack("H*", substr($hash, 0, 4));
 }
 
@@ -209,7 +208,7 @@ sub load_inputs {
             }
             else {
                 Warningf("input %s:%u not found in transaction %s",
-                    hash_out($in->{tx_out}), $in->{num}, hash_out($hash));
+                    hash_str($in->{tx_out}), $in->{num}, hash_str($hash));
                 return undef;
             }
         }
@@ -230,7 +229,7 @@ sub calculate_hash {
 sub validate_coinbase {
     my $self = shift;
     if (@{$self->out} != 1) {
-        Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_out, scalar @{$self->out});
+        Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_str, scalar @{$self->out});
         return -1;
     }
     # TODO: Get and validate information about btc upgrade from $self->data
@@ -247,12 +246,12 @@ sub validate {
     }
     # Transaction must contains least one output (can't spend all inputs as fee)
     if (!@{$self->out}) {
-        Warningf("No outputs in transaction %s", $self->hash_out);
+        Warningf("No outputs in transaction %s", $self->hash_str);
         return -1;
     }
     foreach my $out (@{$self->out}) {
         if ($out->value < 0 || $out->value > MAX_VALUE) {
-            Warningf("Incorrect output value in transaction %s", $self->hash_out);
+            Warningf("Incorrect output value in transaction %s", $self->hash_str);
             return -1;
         }
     }
@@ -263,12 +262,12 @@ sub validate {
         $input_value += $in->{txo}->value;
         if ($in->{txo}->check_script($in->{close_script}) != 0) {
             Warningf("Unmatched close script for input %s:%u in transaction %s",
-                $in->{txo}->tx_in_log, $in->{txo}->num, $self->hash_out);
+                $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
             return -1;
         }
     }
     if ($input_value <= 0) {
-        Warning("Zero input in transaction %s", $self->hash_out);
+        Warning("Zero input in transaction %s", $self->hash_str);
         return -1;
     }
     # TODO: Check that transaction is signed correctly
@@ -322,7 +321,7 @@ sub on_load {
     my $self = shift;
     if ($self->hash ne calculate_hash($self->serialize)) {
         Errf("Serialized transaction: %s", $self->serialize);
-        die "Incorrect hash for loaded transaction " . $self->hash_out . " != " . unpack("H*", substr(calculate_hash($self->serialize), 0, 4)) . "\n";
+        die "Incorrect hash for loaded transaction " . $self->hash_str . " != " . unpack("H*", substr(calculate_hash($self->serialize), 0, 4)) . "\n";
     }
     $TRANSACTION{$self->hash} = $self;
     return $self;
@@ -355,14 +354,14 @@ sub stake_weight {
             if (my $tx = $class->get_by_hash($in->tx_in)) {
                 if (!$tx->block_height) {
                     Warningf("Can't get stake_weight for %s with unconfirmed input %s:%u",
-                        $self->hash_out, $in->tx_in_log, $in->num);
+                        $self->hash_str, $in->tx_in_str, $in->num);
                     return undef;
                 }
                 $weight += $in->value * ($block_height - $tx->block_height);
             }
             else {
                 # tx generated this txo should be loaded during tx validation
-                Warningf("No input transaction %s for txo", $in->tx_in_log);
+                Warningf("No input transaction %s for txo", $in->tx_in_str);
                 return undef;
             }
         }
