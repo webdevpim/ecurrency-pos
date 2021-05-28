@@ -3,6 +3,7 @@ use warnings;
 use strict;
 
 use JSON::XS;
+use Tie::IxHash;
 use List::Util qw(sum0);
 use Digest::SHA qw(sha256);
 use QBitcoin::Const;
@@ -34,6 +35,9 @@ mk_accessors(keys %{&FIELDS}, ATTR);
 my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
 
 my %TRANSACTION;
+my %PENDING_INPUT_TX;
+my %PENDING_TX_INPUT;
+tie(%PENDING_TX_INPUT, 'Tie::IxHash'); # Ordered by age
 
 END {
     # Free all references to txo for graceful free %TXO hash
@@ -59,8 +63,23 @@ sub receive {
     foreach my $in (@{$self->in}) {
         $in->{txo}->spent_add($self);
     }
+
     $TRANSACTION{$self->hash} = $self;
     return 0;
+}
+
+sub process_pending {
+    my $self = shift;
+    my ($peer) = @_;
+    if (my $pending = delete $PENDING_INPUT_TX{$self->hash}) {
+        foreach my $hash (keys %$pending) {
+            my $tx_data_p = delete $PENDING_TX_INPUT{$hash}->{$self->hash};
+            if (!%{$PENDING_TX_INPUT{$hash}}) {
+                delete $PENDING_TX_INPUT{$hash};
+                $peer->process_tx($$tx_data_p);
+            }
+        }
+    }
 }
 
 sub mempool_list {
@@ -167,11 +186,26 @@ sub deserialize {
         return undef;
     }
     my $hash = calculate_hash($tx_data);
-    my $in   = $class->load_inputs([ map { deserialize_input($_) } @{$decoded->{in}} ], $hash, $peer);
+    my ($in, $unknown) = $class->load_inputs([ map { deserialize_input($_) } @{$decoded->{in}} ], $hash, $peer);
     if (!$in) {
-        # TODO: put the transaction into separate "waiting" pull (limited size) and reprocess it by each received transaction
+        return undef;
+    }
+    if (@$unknown) {
+        # put the transaction into separate "waiting" pull (limited size) and reprocess it by each received transaction
+        foreach my $tx_in (@$unknown) {
+            $PENDING_INPUT_TX{$tx_in}->{$hash} = 1;
+            $PENDING_TX_INPUT{$hash}->{$tx_in} = \$tx_data;
+        }
+        if (keys %PENDING_TX_INPUT > MAX_PENDING_TX) {
+            my ($oldest_hash) = keys %PENDING_TX_INPUT;
+            foreach my $tx_in (keys %{$PENDING_TX_INPUT{$oldest_hash}}) {
+                delete $PENDING_INPUT_TX{$tx_in}->{$oldest_hash};
+            }
+            delete $PENDING_TX_INPUT{$oldest_hash};
+        }
         return ""; # Ignore transactions with unknown inputs
     }
+
     my $out  = create_outputs($decoded->{out}, $hash);
     my $self = $class->new(
         in            => $in,
@@ -228,10 +262,10 @@ sub load_inputs {
         }
     }
 
+    my %unknown_inputs;
     if (@need_load_txo) {
         # var @txo here needed to prevent free txo objects as unused just after load
         my @txo = QBitcoin::TXO->load(@need_load_txo);
-        my $unknown_input = 0;
         foreach my $in (@need_load_txo) {
             if (my $txo = QBitcoin::TXO->get($in)) {
                 push @loaded_inputs, {
@@ -240,17 +274,23 @@ sub load_inputs {
                 };
             }
             else {
-                Warningf("input %s:%u not found in transaction %s",
-                    hash_str($in->{tx_out}), $in->{num}, hash_str($hash));
-                if ($peer && !$class->get_by_hash($in->{tx_out})) {
-                    $peer->send_line("sendtx " . unpack("H*", $in->{tx_out}));
+                if (my $tx_in = $class->get_by_hash($in->{tx_out})) {
+                    Warningf("Transaction %s has no output %u for tx %s input",
+                        $tx_in->hash_str, $in->{num}, $tx_in->hash_str($hash));
+                    return undef;
                 }
-                $unknown_input++;
+                else {
+                    Infof("input %s:%u not found in transaction %s",
+                        hash_str($in->{tx_out}), $in->{num}, hash_str($hash));
+                    if (!$unknown_inputs{$in->{tx_out}} && !$PENDING_TX_INPUT{$in->{tx_out}}) {
+                        $peer->send_line("sendtx " . unpack("H*", $in->{tx_out})) if $peer;
+                    }
+                    $unknown_inputs{$in->{tx_out}} = 1;
+                }
             }
         }
-        return undef if $unknown_input;
     }
-    return \@loaded_inputs;
+    return(\@loaded_inputs, [ keys %unknown_inputs ]);
 }
 
 sub _cmp_inputs {

@@ -302,6 +302,7 @@ sub process_tx {
         # announce to other peers
         $tx->announce($self);
     }
+    $tx->process_pending($self);
     return 0;
 }
 

@@ -28,6 +28,7 @@ use constant QBITCOIN_CONST => {
     BLOCK_HEADER_SIZE     => 200, # TODO: calculate precise value
     MAX_TX_SIZE           => 2*1024*1024,
     MAX_PENDING_BLOCKS    => 128,
+    MAX_PENDING_TX        => 128,
     MAX_EMPTY_TX_IN_BLOCK => 1,
 };
 
