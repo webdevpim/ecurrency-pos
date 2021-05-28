@@ -179,7 +179,7 @@ sub startup {
     my $self = shift;
     $self->send_line("qbtc " . GENESIS_HASH_HEX) == 0
         or return -1;
-    $self->send_line("sendmempool") if !mempool_synced() && $self->direction eq DIR_OUT;
+    $self->send_line("sendmempool") if blockchain_synced() && !mempool_synced() && $self->direction eq DIR_OUT;
     my $height = QBitcoin::Block->blockchain_height;
     if (defined($height)) {
         my $best_block = QBitcoin::Block->best_block($height);

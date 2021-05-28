@@ -6,7 +6,7 @@ use Role::Tiny; # This is role for QBitcoin::Block;
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::TXO;
-use QBitcoin::ProtocolState qw(blockchain_synced);
+use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Peers;
 use QBitcoin::Generate::Control;
 
@@ -29,7 +29,7 @@ my @best_block;
 my @prev_block;
 my $height;
 
-my $declared_height = 0;
+my $declared_height = 0; # heighest block we seen in "ihave" from remote peer
 
 END {
     # free structures
@@ -128,7 +128,7 @@ sub receive {
         # Remove blocks received from this peer and not linked with this one
         # The best branch was changed on the peer
         foreach my $b (values %{$block_pool[$self->height+1]}) {
-            next if $best_block[$b->height]->hash eq $b->hash;
+            next if $best_block[$b->height] && $best_block[$b->height]->hash eq $b->hash;
             next if !$b->received_from;
             next if $b->received_from->ip ne $self->received_from->ip;
             next if $b->prev_hash eq $self->hash;
@@ -312,10 +312,7 @@ sub receive {
         if ($height > $old_height) {
             # It's the first block in this level
             # Store and free old level (if it's linked and in best branch)
-            if ($self->received_from && $height >= $declared_height && !blockchain_synced()) {
-                Infof("Blockchain is synced");
-                blockchain_synced(1);
-            }
+            $self->check_synced();
             if ((my $first_free_height = $height - INCORE_LEVELS) >= 0) {
                 if ($best_block[$first_free_height]) {
                     $best_block[$first_free_height]->store();
@@ -362,6 +359,19 @@ sub receive {
         }
     }
     return 0;
+}
+
+# Call after successful block receive, best or not
+sub check_synced {
+    my $self = shift;
+    # Is it OK to synchronize and request mempool from incoming peer?
+    if ($self->received_from && $height >= $declared_height && !blockchain_synced()) {
+        Infof("Blockchain is synced");
+        blockchain_synced(1);
+        if (!mempool_synced()) {
+            $self->received_from->send_line("sendmempool");
+        }
+    }
 }
 
 sub prev_block {
