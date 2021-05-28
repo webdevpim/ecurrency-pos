@@ -160,14 +160,14 @@ sub serialize_output {
 
 sub deserialize {
     my $class = shift;
-    my ($tx_data) = @_;
+    my ($tx_data, $peer) = @_;
     my $decoded = eval { $JSON->decode($tx_data) };
     if (!$decoded || ref($decoded) ne 'HASH' || ref($decoded->{in}) ne 'ARRAY' || ref($decoded->{out}) ne 'ARRAY') {
         Warningf("Incorrect transaction data: %s", $@);
         return undef;
     }
     my $hash = calculate_hash($tx_data);
-    my $in   = load_inputs([ map { deserialize_input($_) } @{$decoded->{in}} ], $hash);
+    my $in   = $class->load_inputs([ map { deserialize_input($_) } @{$decoded->{in}} ], $hash, $peer);
     if (!$in) {
         # TODO: put the transaction into separate "waiting" pull (limited size) and reprocess it by each received transaction
         return ""; # Ignore transactions with unknown inputs
@@ -211,7 +211,8 @@ sub create_outputs {
 }
 
 sub load_inputs {
-    my ($inputs, $hash) = @_;
+    my $class = shift;
+    my ($inputs, $hash, $peer) = @_;
 
     my @loaded_inputs;
     my @need_load_txo;
@@ -230,6 +231,7 @@ sub load_inputs {
     if (@need_load_txo) {
         # var @txo here needed to prevent free txo objects as unused just after load
         my @txo = QBitcoin::TXO->load(@need_load_txo);
+        my $unknown_input = 0;
         foreach my $in (@need_load_txo) {
             if (my $txo = QBitcoin::TXO->get($in)) {
                 push @loaded_inputs, {
@@ -240,9 +242,13 @@ sub load_inputs {
             else {
                 Warningf("input %s:%u not found in transaction %s",
                     hash_str($in->{tx_out}), $in->{num}, hash_str($hash));
-                return undef;
+                if ($peer && !$class->get_by_hash($in->{tx_out})) {
+                    $peer->send_line("sendtx " . unpack("H*", $in->{tx_out}));
+                }
+                $unknown_input++;
             }
         }
+        return undef if $unknown_input;
     }
     return \@loaded_inputs;
 }

@@ -273,7 +273,7 @@ sub cmd_tx {
 sub process_tx {
     my $self = shift;
     my ($tx_data) = @_;
-    my $tx = QBitcoin::Transaction->deserialize($tx_data);
+    my $tx = QBitcoin::Transaction->deserialize($tx_data, $self);
     if (!defined $tx) {
         $self->send_line("abort bad_tx_data");
         return -1;
