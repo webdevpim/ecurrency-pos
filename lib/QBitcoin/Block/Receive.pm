@@ -188,7 +188,7 @@ sub receive {
                         # Transaction with this output must be already confirmed (in the same best branch)
                         # Stored (not cached) transactions are always confirmed, not needed to load them
                         if (!$tx_in->block_height) {
-                            Warning("Unconfirmed input %s:%u for transaction %s, block from %s",
+                            Warningf("Unconfirmed input %s:%u for transaction %s, block from %s",
                                 $txo->tx_in_str, $txo->num, $tx->hash_str,
                                 $b->received_from ? $b->received_from->ip : "me");
                             $fail_tx = $tx->hash;
