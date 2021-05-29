@@ -213,13 +213,11 @@ sub receive {
                 my $self_weight = $b->self_weight;
                 if (!defined($self_weight)) {
                     $fail_tx = "block"; # does not match any transaction hash
-                    last;
                 }
-                if ($self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ) != $self->weight) {
+                elsif ($self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ) != $self->weight) {
                     Warningf("Incorrect weight for block %s: %u != %u", $self->hash_str,
                         $self->weight, $self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ));
                     $fail_tx = "block";
-                    last;
                 }
             }
 
