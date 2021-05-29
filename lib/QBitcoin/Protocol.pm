@@ -373,6 +373,9 @@ sub cmd_mempool {
         $self->send_line("abort incorrect_params");
         return -1;
     }
+    if (!blockchain_synced()) {
+        return 0;
+    }
     if (QBitcoin::Transaction->get_by_hash(pack("H*", $hash))) {
         return 0;
     }
