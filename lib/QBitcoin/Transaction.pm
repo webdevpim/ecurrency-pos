@@ -424,8 +424,8 @@ sub unconfirm {
         $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my;
     }
     if ($self->id) {
-        # We store in the database only confirmed transactions
-        $self->delete;
+        # Transaction will be deleted due to "foreign key (block_height) references block (height) on delete cascade" on replace block
+        # $self->delete;
         $self->id = undef;
     }
 }
