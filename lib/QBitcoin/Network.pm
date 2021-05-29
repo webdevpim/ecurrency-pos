@@ -90,7 +90,7 @@ sub main_loop {
     $SIG{TERM} = $SIG{INT} = sub { $sig_killed = 1 };
 
     while () {
-        QBitcoin::Produce->produce() if $config->{produce};
+        QBitcoin::Produce->produce() if $config->{produce} && mempool_synced() && blockchain_synced();
         my $timeout = SELECT_TIMEOUT;
         if ($config->{generate} && mempool_synced() && blockchain_synced()) {
             my $now = Time::HiRes::time();
