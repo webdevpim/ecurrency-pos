@@ -279,17 +279,16 @@ sub process_tx {
         return -1;
     }
     elsif (!$tx) {
-        # Ignore (skip) but do not drop connection, for example transaction has unknown input
-        return 0;
-    }
-    if (QBitcoin::Transaction->get_by_hash(pack("H*", $tx->hash))) {
+        # Ignore (skip) but do not drop connection, for example transaction already exists or has unknown input
         return 0;
     }
     $tx->receive() == 0
         or return -1;
+    Debugf("Received tx %s fee %i size %u", $tx->hash_str, $tx->fee, $tx->size);
     if (my $blocks = delete $pending_tx{$tx->hash}) {
         foreach my $block_hash (keys %$blocks) {
             my $block = $pending_blocks{$block_hash};
+            Debugf("Block %s is pending received tx %s", $block->hash_str, $tx->hash_str);
             $block->add_tx($tx);
             if (!$block->pending_tx) {
                 delete $pending_blocks{$block->hash};
