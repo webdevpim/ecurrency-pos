@@ -77,6 +77,7 @@ sub receive {
         }
         return -1;
     }
+
     # Do we have a descendant for this block?
     my $new_weight = $self->weight;
     my $descendant;
@@ -89,6 +90,7 @@ sub receive {
             }
         }
     }
+
     if (COMPACT_MEMORY) {
         if (defined($height) && $best_block[$height] && $new_weight < $best_block[$height]->branch_weight) {
             Debugf("Received branch weight %u not more than our best branch weight %u, ignore",
@@ -110,8 +112,13 @@ sub receive {
             }
         }
     }
-    # TODO: move this up and move decsendants linking logic here
+
     if ($height && $self->height < $height && $self->received_from) {
+        # It's possible to link descendands in this block, but...
+        # this is optional memory optimization and may be switched off for speedup if there are many blocks in-core
+        # but linking descendands is fast and mandatory,
+        # so it's better to keep this code separate to avoid possible degradation in future
+
         # Remove blocks received from this peer and not linked with this one
         # The best branch was changed on the peer
         foreach my $b (values %{$block_pool[$self->height+1]}) {
