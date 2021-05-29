@@ -290,7 +290,7 @@ sub load_inputs {
                 }
                 else {
                     Infof("input %s:%u not found in transaction %s",
-                        hash_str($in->{tx_out}), $in->{num}, hash_str($hash));
+                        $class->hash_str($in->{tx_out}), $in->{num}, $class->hash_str($hash));
                     if (!$unknown_inputs{$in->{tx_out}} && !$PENDING_TX_INPUT{$in->{tx_out}}) {
                         $peer->send_line("sendtx " . unpack("H*", $in->{tx_out})) if $peer;
                     }
