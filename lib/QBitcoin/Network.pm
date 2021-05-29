@@ -156,7 +156,12 @@ sub main_loop {
             if (vec($rin, $peer->socket_fileno, 1) == 1) {
                 my $n = sysread($peer->socket, my $data, READ_BUFFER_SIZE);
                 if (!defined $n) {
-                    if ($peer->state eq STATE_CONNECTING) {
+                    if ($sig_killed) {
+                        Notice("Killed by signal");
+                        $peer->disconnect();
+                        last;
+                    }
+                    elsif ($peer->state eq STATE_CONNECTING) {
                         Warningf("Peer connection error: %s", $!);
                     }
                     else {
@@ -192,6 +197,11 @@ sub main_loop {
                 }
                 my $n = syswrite($peer->socket, $peer->sendbuf, length($peer->sendbuf));
                 if (!defined $n) {
+                    if ($sig_killed) {
+                        Notice("Interrupted by signal");
+                        $peer->disconnect();
+                        last;
+                    }
                     Warningf("Write error to peer %s", $peer->ip);
                     $peer->disconnect();
                     next;
