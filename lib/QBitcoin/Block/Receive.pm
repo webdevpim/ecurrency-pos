@@ -82,6 +82,7 @@ sub receive {
     my $descendant;
     if ($prev_block[$self->height+1] && (my $descendants = $prev_block[$self->height+1]->{$self->hash})) {
         foreach my $descendant (values %$descendants) {
+            $descendant->prev_block($self);
             if ($new_weight < $descendant->branch_weight) {
                 $new_weight = $descendant->branch_weight;
                 $self->next_block = $descendant;
@@ -109,6 +110,7 @@ sub receive {
             }
         }
     }
+    # TODO: move this up and move decsendants linking logic here
     if ($height && $self->height < $height && $self->received_from) {
         # Remove blocks received from this peer and not linked with this one
         # The best branch was changed on the peer
