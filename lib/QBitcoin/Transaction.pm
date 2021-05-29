@@ -60,6 +60,11 @@ sub get {
 
 sub receive {
     my $self = shift;
+
+    if ($TRANSACTION{$self->hash}) {
+        die "receive already loaded transaction " . $self->hash_str . "\n";
+    }
+
     foreach my $in (@{$self->in}) {
         $in->{txo}->spent_add($self);
     }
