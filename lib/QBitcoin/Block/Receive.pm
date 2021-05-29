@@ -216,8 +216,8 @@ sub receive {
                     last;
                 }
                 if ($self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ) != $self->weight) {
-                    Warningf("Incorrect weight for block %s: %u != %u", $self->weight,
-                        $self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ));
+                    Warningf("Incorrect weight for block %s: %u != %u", $self->hash_str,
+                        $self->weight, $self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ));
                     $fail_tx = "block";
                     last;
                 }
