@@ -255,14 +255,14 @@ sub delete {
 
     my $table = $self->TABLE
         or die "No TABLE defined in " . ref($self) . "\n";
-    my $sql = "DELETE $table ";
+    my $sql = "DELETE FROM $table ";
     my @pk_values;
     if ($self->can('PRIMARY_KEY')) {
-        $sql .= " WHERE " . join(" AND ", map { "$_ = ?" } $self->PRIMARY_KEY);
+        $sql .= "WHERE " . join(" AND ", map { "$_ = ?" } $self->PRIMARY_KEY);
         @pk_values = map { $self->$_ } $self->PRIMARY_KEY;
     }
     else {
-        $sql .= " WHERE id = ?";
+        $sql .= "WHERE id = ?";
         @pk_values = ($self->id);
     }
     if (grep { !defined } @pk_values) {
