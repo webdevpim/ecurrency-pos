@@ -74,6 +74,7 @@ sub receive {
 }
 
 sub process_pending {
+    no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my $self = shift;
     my ($peer) = @_;
     if (my $pending = delete $PENDING_INPUT_TX{$self->hash}) {
@@ -105,6 +106,7 @@ sub free {
 
 # Drop the transaction from mempool and all dependent transactions if any
 sub drop {
+    no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my $self = shift;
     if ($self->block_height) {
         Errf("Attempt to drop confirmed transaction %s, block height %u", $self->hash_str, $self->block_height);
