@@ -368,7 +368,7 @@ sub prev_block {
     my $self = shift;
     if (@_) {
         if ($_[0]) {
-            $_->[0]->hash eq $_->prev_hash
+            $_[0]->hash eq $self->prev_hash
                 or die "Incorrect block linking";
             return $self->{prev_block} = $_[0];
         }
