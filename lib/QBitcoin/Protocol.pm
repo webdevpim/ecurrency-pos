@@ -63,9 +63,9 @@ use constant ATTR => qw(
 
 mk_accessors(ATTR);
 
-my %pending_blocks;
-tie(%pending_blocks, 'Tie::IxHash'); # Ordered by age
-my %pending_tx;
+my %PENDING_BLOCK_TX;
+tie(%PENDING_BLOCK_TX, 'Tie::IxHash'); # Ordered by age
+my %PENDING_TX_BLOCK;
 
 sub new {
     my $class = shift;
@@ -216,7 +216,7 @@ sub process_block {
         return -1;
     }
     return 0 if QBitcoin::Block->block_pool($block->height, $block->hash);
-    return 0 if $pending_blocks{$block->hash};
+    return 0 if $PENDING_BLOCK_TX{$block->hash};
     $block->received_from = $self;
 
     $self->_block_load_transactions($block);
@@ -228,7 +228,7 @@ sub process_block {
 }
 
 sub _block_load_transactions {
-    # TODO: move this to Block::Receive, take care about %pending_block and %pending_tx
+    # TODO: move this to Block::Receive, take care about %PENDING_BLOCK_TX and %PENDING_TX_BLOCK
     my $self = shift;
     my ($block) = @_;
     foreach my $tx_hash (@{$block->tx_hashes}) {
@@ -238,22 +238,23 @@ sub _block_load_transactions {
         }
         else {
             $block->pending_tx($tx_hash);
-            $pending_tx{$tx_hash}->{$block->hash} = 1;
+            $PENDING_TX_BLOCK{$tx_hash}->{$block->hash} = 1;
+            Debugf("Set pending_tx %s block %s", unpack("H*", substr($tx_hash, 0, 4)), $block->hash_str);
             $self->send_line("sendtx " . unpack("H*", $tx_hash));
         }
     }
     if ($block->pending_tx) {
-        $pending_blocks{$block->hash} = $block;
-        if (keys %pending_blocks > MAX_PENDING_BLOCKS) {
-            my ($oldest_block) = values %pending_blocks;
+        $PENDING_BLOCK_TX{$block->hash} = $block;
+        if (keys %PENDING_BLOCK_TX > MAX_PENDING_BLOCKS) {
+            my ($oldest_block) = values %PENDING_BLOCK_TX;
             Debugf("Drop pending block %s", $oldest_block->hash_str);
             foreach my $tx_hash (keys %{$oldest_block->pending_tx}) {
-                delete $pending_tx{$tx_hash}->{$oldest_block->hash};
-                if (!%{$pending_tx{$tx_hash}}) {
-                    delete $pending_tx{$tx_hash};
+                delete $PENDING_TX_BLOCK{$tx_hash}->{$oldest_block->hash};
+                if (!%{$PENDING_TX_BLOCK{$tx_hash}}) {
+                    delete $PENDING_TX_BLOCK{$tx_hash};
                 }
             }
-            delete $pending_blocks{$oldest_block->hash};
+            delete $PENDING_BLOCK_TX{$oldest_block->hash};
         }
 
         return 0;
@@ -295,13 +296,13 @@ sub process_tx {
     $tx->receive() == 0
         or return -1;
     Debugf("Received tx %s fee %i size %u", $tx->hash_str, $tx->fee, $tx->size);
-    if (my $blocks = delete $pending_tx{$tx->hash}) {
+    if (my $blocks = delete $PENDING_TX_BLOCK{$tx->hash}) {
         foreach my $block_hash (keys %$blocks) {
-            my $block = $pending_blocks{$block_hash};
+            my $block = $PENDING_BLOCK_TX{$block_hash};
             Debugf("Block %s is pending received tx %s", $block->hash_str, $tx->hash_str);
             $block->add_tx($tx);
             if (!$block->pending_tx) {
-                delete $pending_blocks{$block->hash};
+                delete $PENDING_BLOCK_TX{$block->hash};
                 $block->compact_tx();
                 if ($block->receive() != 0) {
                     return -1;

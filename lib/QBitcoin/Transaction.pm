@@ -210,6 +210,7 @@ sub deserialize {
             foreach my $tx_in (keys %{$PENDING_TX_INPUT{$oldest_hash}}) {
                 delete $PENDING_INPUT_TX{$tx_in}->{$oldest_hash};
             }
+            Debugf("Drop transaction %s from pending pool", $class->hash_str($oldest_hash));
             delete $PENDING_TX_INPUT{$oldest_hash};
         }
         return ""; # Ignore transactions with unknown inputs
