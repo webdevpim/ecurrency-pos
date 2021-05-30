@@ -423,6 +423,9 @@ sub unconfirm {
         # Return to list of my utxo inputs from stake transaction, but do not use returned to mempool
         $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my;
     }
+    foreach my $txo (@{$self->out}) {
+        $txo->del_my_utxo() if $txo->is_my;
+    }
     if ($self->id) {
         # Transaction will be deleted due to "foreign key (block_height) references block (height) on delete cascade" on replace block
         # $self->delete;
