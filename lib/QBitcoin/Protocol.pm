@@ -218,6 +218,19 @@ sub process_block {
     return 0 if QBitcoin::Block->block_pool($block->height, $block->hash);
     return 0 if $pending_blocks{$block->hash};
     $block->received_from = $self;
+
+    $self->_block_load_transactions($block);
+    if (!$block->pending_tx) {
+        $block->compact_tx();
+        return $block->receive();
+    }
+    return 0;
+}
+
+sub _block_load_transactions {
+    # TODO: move this to Block::Receive, take care about %pending_block and %pending_tx
+    my $self = shift;
+    my ($block) = @_;
     foreach my $tx_hash (@{$block->tx_hashes}) {
         my $transaction = QBitcoin::Transaction->get_by_hash($tx_hash);
         if ($transaction) {
@@ -245,10 +258,7 @@ sub process_block {
 
         return 0;
     }
-    else {
-        $block->compact_tx();
-        return $block->receive();
-    }
+    return $block;
 }
 
 sub cmd_tx {
@@ -293,7 +303,9 @@ sub process_tx {
             if (!$block->pending_tx) {
                 delete $pending_blocks{$block->hash};
                 $block->compact_tx();
-                $block->receive();
+                if ($block->receive() != 0) {
+                    return -1;
+                }
             }
         }
     }
