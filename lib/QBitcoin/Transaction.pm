@@ -14,6 +14,9 @@ use QBitcoin::ORM qw(find replace delete :types);
 use QBitcoin::TXO;
 use QBitcoin::Peers;
 
+use Role::Tiny::With;
+with 'QBitcoin::Transaction::Signature';
+
 use constant FIELDS => {
     id           => NUMERIC, # db primary key for reference links
     hash         => BINARY,
