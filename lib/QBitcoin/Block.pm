@@ -86,6 +86,9 @@ sub compact_tx {
     $self->{transactions} //= [ map { $self->{tx_by_hash}->{$_} } @{$self->{tx_hashes}} ];
     delete $self->{tx_hashes};
     delete $self->{tx_by_hash};
+    foreach my $tx (@{$self->{transactions}}) {
+        $tx->add_to_block($self);
+    }
 }
 
 sub tx_hashes {

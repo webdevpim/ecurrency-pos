@@ -49,8 +49,19 @@ sub blockchain_height {
 sub best_block {
     my $class = shift;
     my ($block_height) = @_;
-    return $best_block[$block_height] //
-        ($block_height <= ($height // -1) - INCORE_LEVELS ? $class->find(height => $block_height) : undef);
+    if (!$best_block[$block_height] && $block_height <= ($height // -1) - INCORE_LEVELS) {
+        if (my $best_block = $class->find(height => $block_height)) {
+            $best_block->to_cache;
+            $best_block[$block_height] = $best_block;
+        }
+    }
+    return $best_block[$block_height];
+}
+
+sub to_cache {
+    my $self = shift;
+    $block_pool[$self->height]->{$self->hash} = $self;
+    $prev_block[$self->height]->{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
 }
 
 sub block_pool {
@@ -85,9 +96,7 @@ sub receive {
         }
     }
 
-    $block_pool[$self->height]->{$self->hash} = $self;
-    $prev_block[$self->height]->{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
-
+    $self->to_cache;
     if ($self->prev_block) {
         $self->prev_block->next_block //= $self;
     }
@@ -105,20 +114,21 @@ sub receive {
     # Find first common block between current best branch and the candidate
     my $class = ref $self;
     my $new_best;
-    for ($new_best = $self; $new_best->prev_block; $new_best = $new_best->prev_block) {
+    for ($new_best = $self; $new_best->height; $new_best = $new_best->prev_block) {
         my $best_block = $class->best_block($new_best->height-1);
+        # We have no $best_block here on initial loading top of blockchain from the database
         last if !$best_block || $best_block->hash eq $new_best->prev_hash;
         $new_best->prev_block->next_block = $new_best;
     }
-    if ($new_best->height < $height) {
+    if ($new_best->height < ($height // -1)) {
         Infof("Check alternate branch started with block %s height %u with weight %u (current best weight %u)",
             $new_best->hash_str, $new_best->height, $self->weight, $self->best_weight);
     }
 
     # reset all txo in the current best branch (started from the fork block) as unspent;
     # then set output in all txo in new branch and check it against possible double-spend
-    for (my $b = $class->best_block($height); $b && $b->height >= $new_best->height; $b = $b->prev_block) {
-        $b->prev_block->next_block = $b if $b->prev_block;
+    for (my $b = $class->best_block($height // 0); $b && $b->height >= $new_best->height; $b = $b->prev_block) {
+        $b->prev_block->next_block = $b;
         Debugf("Remove block %s height %s from best branch", $b->hash_str, $b->height);
         foreach my $tx (reverse @{$b->transactions}) {
             $tx->unconfirm();
@@ -197,7 +207,9 @@ sub receive {
                 }
             }
 
-            for (my $b1 = $class->best_block($new_best->height); $b1; $b1 = $b1->next_block) {
+            my $old_best = $class->best_block($new_best->height);
+            $old_best->prev_block->next_block = $old_best if $old_best;
+            for (my $b1 = $old_best; $b1; $b1 = $b1->next_block) {
                 Debugf("Return block %s height %s to best branch", $b1->hash_str, $b1->height);
                 foreach my $tx (@{$b1->transactions}) {
                     $tx->block_height = $b1->height;
@@ -223,7 +235,7 @@ sub receive {
 
     # set best branch
     $new_best->prev_block->next_block = $new_best if $new_best->prev_block;
-    if ($new_best->height < $height - INCORE_LEVELS) {
+    if ($new_best->height < ($height // -1) - INCORE_LEVELS) {
         # Remove stored blocks in old best branch to keep database blockchain consistent during saving new branch
         # and do not create huge sql transactions
         my $incore_height = min($new_best->height, $self->height - INCORE_LEVELS);
@@ -280,8 +292,11 @@ sub cleanup_old_blocks {
         }
         # Remove linked blocks and branches with weight less than our best for all levels below $free_height
         # Keep only unlinked branches with weight more than our best and have blocks within last INCORE_LEVELS
-        for (my $free_height = $first_free_height; $free_height >= 0; $free_height--) {
-            last unless $block_pool[$free_height];
+        my $free_height = $first_free_height;
+        while ($free_height >= 0 && $block_pool[$free_height]) {
+            $free_height--;
+        }
+        for ($free_height++; $free_height <= $first_free_height; $free_height++) {
             foreach my $b (values %{$block_pool[$free_height]}) {
                 if ($b->received_from && $b->received_from->syncing) {
                     next;
@@ -293,11 +308,15 @@ sub cleanup_old_blocks {
                 delete $block_pool[$free_height]->{$b->hash};
                 delete $prev_block[$free_height]->{$b->prev_hash}->{$b->hash} if $b->prev_hash;
                 $b->next_block(undef);
-                foreach my $b2 (values %{$prev_block[$free_height+1]->{$b->hash}}) {
-                    $b2->prev_block(undef);
+                foreach my $b1 (values %{$prev_block[$free_height+1]->{$b->hash}}) {
+                    $b1->prev_block(undef);
                 }
                 foreach my $tx (@{$b->transactions}) {
+                    $tx->del_from_block($b);
                     $tx->free();
+                }
+                if ($best_block[$free_height] && $best_block[$free_height]->hash eq $b->hash) {
+                    $best_block[$free_height] = undef;
                 }
             }
             foreach my $prev_hash (keys %{$prev_block[$free_height]}) {
@@ -341,8 +360,14 @@ sub prev_block {
     return $self->{prev_block} if exists $self->{prev_block}; # undef means we have no such block
     return undef unless $self->height; # genesis block has no ancestors
     my $class = ref($self);
-    return $self->{prev_block} //= $block_pool[$self->height-1]->{$self->prev_hash} //
-        $class->find(hash => $self->prev_hash);
+    if (!($self->{prev_block} //= $block_pool[$self->height-1]->{$self->prev_hash})) {
+        if (my $prev_block = $class->find(hash => $self->prev_hash)) {
+            $prev_block->to_cache;
+            $best_block[$prev_block->height] = $prev_block;
+            $self->{prev_block} = $prev_block;
+        }
+    }
+    return $self->{prev_block};
 }
 
 sub drop_branch {

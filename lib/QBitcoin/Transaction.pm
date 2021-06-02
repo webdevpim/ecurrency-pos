@@ -29,30 +29,31 @@ use constant ATTR => qw(
     received_time
     in
     out
+    blocks
 );
 
 mk_accessors(keys %{&FIELDS}, ATTR);
 
 my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
 
-my %TRANSACTION;
-my %PENDING_INPUT_TX;
-my %PENDING_TX_INPUT;
-tie(%PENDING_TX_INPUT, 'Tie::IxHash'); # Ordered by age
+my %TRANSACTION;      # in-memory cache transaction objects by tx_hash
+my %PENDING_INPUT_TX; # 2-level hash $pending_hash => $hash; value 1
+my %PENDING_TX_INPUT; # 2-level hash $hash => $pendinfg_hash; value - pointer to serialized transaction data
+tie(%PENDING_TX_INPUT, 'Tie::IxHash'); # Ordered by age, to remove oldest
 
 END {
     # Free all references to txo for graceful free %TXO hash
     undef %TRANSACTION;
 };
 
-sub get_by_hash {
+sub get_by_hash { # cached or load from database
     my $class = shift;
     my ($tx_hash) = @_;
 
-    return ($class->get($tx_hash) // $class->find(hash => $tx_hash));
+    return $class->get($tx_hash) // $class->find(hash => $tx_hash);
 }
 
-sub get {
+sub get { # only cached
     my $class = shift;
     my ($tx_hash) = @_;
 
@@ -90,6 +91,23 @@ sub process_pending {
     }
 }
 
+sub add_to_block {
+    my $self = shift;
+    my ($block) = @_;
+    $self->{blocks}->{$block->hash} = 1;
+}
+
+sub del_from_block {
+    my $self = shift;
+    my ($block) = @_;
+    delete $self->{blocks}->{$block->hash};
+}
+
+sub in_blocks {
+    my $self = shift;
+    return $self->{blocks} ? (keys %{$self->{blocks}}) : ();
+}
+
 sub mempool_list {
     my $class = shift;
     return grep { !$_->block_height && $_->fee >= 0 } values %TRANSACTION;
@@ -99,6 +117,7 @@ sub mempool_list {
 # TXO (input and output) will free from %TXO hash by DESTROY() method, they have weaken reference for this
 sub free {
     my $self = shift;
+    return if $self->in_blocks;
     foreach my $in (@{$self->in}) {
         $in->{txo}->spent_del($self);
     }
@@ -112,6 +131,10 @@ sub drop {
     if ($self->block_height) {
         Errf("Attempt to drop confirmed transaction %s, block height %u", $self->hash_str, $self->block_height);
         die "Can't drop confirmed transaction " . $self->hash_str . "\n";
+    }
+    if ($self->in_blocks) {
+        Debugf("Transaction %s is in loaded unconfirmed blocks, do not drop", $self->hash_str);
+        return;
     }
     Debugf("Drop transaction %s from mempool", $self->hash_str);
     foreach my $out (@{$self->out}) {
@@ -334,7 +357,7 @@ sub validate {
     if (!@{$self->in}) {
         return $self->validate_coinbase;
     }
-    # Transaction must contains least one output (can't spend all inputs as fee)
+    # Transaction must contains at least one output (can't spend all inputs as fee)
     if (!@{$self->out}) {
         Warningf("No outputs in transaction %s", $self->hash_str);
         return -1;
@@ -382,18 +405,20 @@ sub announce {
 sub pre_load {
     my $class = shift;
     my ($attr) = @_;
-    # Load TXO for inputs and outputs
-    my @outputs = QBitcoin::TXO->load_stored_outputs($attr->{id}, $attr->{hash});
-    my @inputs;
-    foreach my $txo (QBitcoin::TXO->load_stored_inputs($attr->{id}, $attr->{hash})) {
-        push @inputs, {
-            txo          => $txo,
-            close_script => $txo->close_script,
-        };
+    if (!$TRANSACTION{$attr->{hash}}) {
+        # Load TXO for inputs and outputs
+        my @outputs = QBitcoin::TXO->load_stored_outputs($attr->{id}, $attr->{hash});
+        my @inputs;
+        foreach my $txo (QBitcoin::TXO->load_stored_inputs($attr->{id}, $attr->{hash})) {
+            push @inputs, {
+                txo          => $txo,
+                close_script => $txo->close_script,
+            };
+        }
+        $attr->{in}  = \@inputs;
+        $attr->{out} = \@outputs;
+        $attr->{received_time} = time_by_height($attr->{block_height}); # for possible unconfirm the transaction
     }
-    $attr->{in}  = \@inputs;
-    $attr->{out} = \@outputs;
-    $attr->{received_time} = time_by_height($attr->{block_height}); # for possible unconfirm the transaction
     return $attr;
 }
 
@@ -409,16 +434,23 @@ sub new {
 
 sub on_load {
     my $self = shift;
-    if ($self->hash ne calculate_hash($self->serialize)) {
-        Errf("Serialized transaction: %s", $self->serialize);
-        die "Incorrect hash for loaded transaction " . $self->hash_str . " != " . unpack("H*", substr(calculate_hash($self->serialize), 0, 4)) . "\n";
+
+    if ($TRANSACTION{$self->hash}) {
+        $self = $TRANSACTION{$self->hash};
+    }
+    else {
+        if ($self->hash ne calculate_hash($self->serialize)) {
+            Errf("Serialized transaction: %s", $self->serialize);
+            die "Incorrect hash for loaded transaction " . $self->hash_str . " != " . unpack("H*", substr(calculate_hash($self->serialize), 0, 4)) . "\n";
+        }
+        $TRANSACTION{$self->hash} = $self;
+
+        foreach my $in (@{$self->in}) {
+            $in->{txo}->spent_add($self);
+        }
     }
 
-    foreach my $in (@{$self->in}) {
-        $in->{txo}->spent_add($self);
-    }
-
-    return $TRANSACTION{$self->hash} //= $self;
+    return $self;
 }
 
 sub unconfirm {
@@ -437,7 +469,7 @@ sub unconfirm {
         $txo->del_my_utxo() if $txo->is_my;
     }
     if ($self->id) {
-        # Transaction will be deleted due to "foreign key (block_height) references block (height) on delete cascade" on replace block
+        # Transaction will be deleted by "foreign key (block_height) references block (height) on delete cascade" on replace block
         # $self->delete;
         $self->id = undef;
     }
