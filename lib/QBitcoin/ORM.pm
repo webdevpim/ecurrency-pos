@@ -270,7 +270,7 @@ sub delete {
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', @pk_values));
     my $res = dbh->do($sql, undef, @pk_values);
-    if (!$res != 1) {
+    if ($res != 1) {
         die "Can't delete $table\n";
     }
 }

@@ -5,6 +5,7 @@ use strict;
 use JSON::XS;
 use Tie::IxHash;
 use List::Util qw(sum0);
+use Scalar::Util qw(refaddr);
 use Digest::SHA qw(sha256);
 use QBitcoin::Const;
 use QBitcoin::Log;
@@ -114,30 +115,30 @@ sub drop {
     }
     Debugf("Drop transaction %s from mempool", $self->hash_str);
     foreach my $out (@{$self->out}) {
+        $out->del_my_utxo if $out->is_my;
         foreach my $dep_tx ($out->spent_list) {
             Infof("Drop transaction %s dependent on %s", $dep_tx->hash_str, $self->hash_str);
             $dep_tx->drop;
         }
     }
     foreach my $in (@{$self->in}) {
-        $in->{txo}->spent_del($self);
+        my $txo = $in->{txo};
+        $txo->spent_del($self);
+        $txo->add_my_utxo if $txo->is_my && !$txo->spent_list;
     }
     delete $TRANSACTION{$self->hash};
 }
 
 sub store {
     my $self = shift;
-    my ($height) = @_;
-    local $self->{block_height} = $height;
+    $self->is_cached or die "store not cached transaction " . $self->hash_str;
     # we are in sql transaction
     $self->replace();
-    my $class = ref $self;
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
         $txo->store_spend($self),
     }
-    foreach my $num (0 .. @{$self->out}-1) {
-        my $txo = $self->out->[$num];
+    foreach my $txo (@{$self->out}) {
         $txo->store($self);
     }
     # TODO: store tx data (smartcontract)
@@ -412,19 +413,25 @@ sub on_load {
         Errf("Serialized transaction: %s", $self->serialize);
         die "Incorrect hash for loaded transaction " . $self->hash_str . " != " . unpack("H*", substr(calculate_hash($self->serialize), 0, 4)) . "\n";
     }
-    $TRANSACTION{$self->hash} = $self;
-    return $self;
+
+    foreach my $in (@{$self->in}) {
+        $in->{txo}->spent_add($self);
+    }
+
+    return $TRANSACTION{$self->hash} //= $self;
 }
 
 sub unconfirm {
     my $self = shift;
+    Debugf("unconfirm transaction %s (confirmed in block height %u)", $self->hash_str, $self->block_height);
+    $self->is_cached or die "unconfirm not cached transaction " . $self->hash_str;
     $self->block_height = undef;
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
         $txo->tx_out = undef;
         $txo->close_script = undef;
         # Return to list of my utxo inputs from stake transaction, but do not use returned to mempool
-        $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my;
+        $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my && !$txo->spent_list;
     }
     foreach my $txo (@{$self->out}) {
         $txo->del_my_utxo() if $txo->is_my;
@@ -434,6 +441,12 @@ sub unconfirm {
         # $self->delete;
         $self->id = undef;
     }
+}
+
+sub is_cached {
+    my $self = shift;
+
+    return $TRANSACTION{$self->hash} && refaddr($TRANSACTION{$self->hash}) == refaddr($self);
 }
 
 sub stake_weight {

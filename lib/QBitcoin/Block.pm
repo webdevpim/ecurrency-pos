@@ -21,7 +21,6 @@ use constant FIELDS => {
 };
 
 use constant ATTR => qw(
-    linked
     next_block
     received_from
     transactions
@@ -84,7 +83,7 @@ sub pending_tx {
 
 sub compact_tx {
     my $self = shift;
-    $self->{transactions} = [ map { $self->{tx_by_hash}->{$_} } @{$self->{tx_hashes}} ];
+    $self->{transactions} //= [ map { $self->{tx_by_hash}->{$_} } @{$self->{tx_hashes}} ];
     delete $self->{tx_hashes};
     delete $self->{tx_by_hash};
 }

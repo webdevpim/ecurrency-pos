@@ -3,8 +3,10 @@ use warnings;
 use strict;
 
 use Role::Tiny; # This is role for QBitcoin::Block;
+use List::Util qw(min);
 use QBitcoin::Const;
 use QBitcoin::Log;
+use QBitcoin::Config;
 use QBitcoin::TXO;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Peers;
@@ -66,11 +68,6 @@ sub receive {
         # Incorrect block
         # NB! Incorrect hash is not this case, hash must be checked earlier
         # Drop descendants, it's not possible to receive correct block with the same hash
-        if (my $descendants = $prev_block[$self->height+1]->{$self->hash}) {
-            foreach my $descendant (values %$descendants) {
-                $descendant->drop_branch();
-            }
-        }
         if ($self->received_from) {
             $self->received_from->decrease_reputation();
             $self->received_from->send_line("abort invalid_block");
@@ -78,57 +75,13 @@ sub receive {
         return -1;
     }
 
-    # Do we have a descendant for this block?
-    my $new_weight = $self->weight;
-    my $descendant;
-    if ($prev_block[$self->height+1] && (my $descendants = $prev_block[$self->height+1]->{$self->hash})) {
-        foreach my $descendant (values %$descendants) {
-            $descendant->prev_block($self);
-            if ($new_weight < $descendant->branch_weight) {
-                $new_weight = $descendant->branch_weight;
-                $self->next_block = $descendant;
-            }
-        }
-    }
-
     if (COMPACT_MEMORY) {
-        if (defined($height) && $best_block[$height] && $new_weight < $best_block[$height]->branch_weight) {
-            Debugf("Received branch weight %u not more than our best branch weight %u, ignore",
-                $new_weight, $best_block[$height]->branch_weight);
-            return 0; # Not needed to drop descendants b/c there were dropped when weight of the current branch become more than their weight
-        }
-        if ($self->prev_hash && (my $alter_descendants = $prev_block[$self->height]->{$self->prev_hash})) {
-            my $best_block_this = $best_block[$self->height];
-            foreach my $alter_descendant (values %$alter_descendants) {
-                next if $best_block_this && $alter_descendant->hash eq $best_block_this->hash; # Do not drop the best branch here
-                if ($alter_descendant->branch_weight > $new_weight) {
-                    Debugf("Alternative branch has weight %u more then received one %s, ignore",
-                        $alter_descendant->branch_weight, $new_weight);
-                    return 0;
-                }
-                Debugf("Drop alternative branch with weight %u less than new %s",
-                    $alter_descendant->branch_weight, $new_weight);
-                $alter_descendant->drop_branch();
+        if (defined($height) && $best_block[$height] && $self->weight < $best_block[$height]->weight) {
+            if (($self->received_from->has_weight // -1) <= $best_block[$height]->weight) {
+                Debugf("Received block weight %u not more than our best branch weight %u, ignore",
+                    $self->weight, $best_block[$height]->weight);
+                return 0;
             }
-        }
-    }
-
-    if ($height && $self->height < $height && $self->received_from) {
-        # It's possible to link descendands in this block, but...
-        # this is optional memory optimization and may be switched off for speedup if there are many blocks in-core
-        # but linking descendands is fast and mandatory,
-        # so it's better to keep this code separate to avoid possible degradation in future
-
-        # Remove blocks received from this peer and not linked with this one
-        # The best branch was changed on the peer
-        foreach my $b (values %{$block_pool[$self->height+1]}) {
-            next if $best_block[$b->height] && $best_block[$b->height]->hash eq $b->hash;
-            next if !$b->received_from;
-            next if $b->received_from->ip ne $self->received_from->ip;
-            next if $b->prev_hash eq $self->hash;
-            Debugf("Remove orphan descendant %s height %u received from this peer %s",
-                $b->hash_str, $b->height, $self->received_from->ip);
-            $b->drop_branch();
         }
     }
 
@@ -136,219 +89,226 @@ sub receive {
     $prev_block[$self->height]->{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
 
     if ($self->prev_block) {
-        $self->prev_block->next_block = $self;
+        $self->prev_block->next_block //= $self;
     }
-    elsif ($self->height) {
-        Debugf("No prev block with height %s hash %s, request it", $self->height-1, $self->hash_str($self->prev_hash));
-        $self->received_from->send_line("sendblock " . ($self->height-1));
+
+    # zero weight for new block is ok, accept it
+    if ($height && ($self->weight < $best_block[$height]->weight ||
+        ($self->weight == $best_block[$height]->weight && $self->branch_height <= $height))) {
+        my $has_weight = $self->received_from ? ($self->received_from->has_weight // -1) : -1;
+        Debugf("Received block height %s from %s has too low weight for us",
+            $self->height, $self->received_from ? $self->received_from->ip : "me");
         return 0;
     }
-    if (!$self->height || $self->prev_block->linked) {
-        if ($self->set_linked() != 0) { # with descendants
-            # Invalid branch, dropped inside set_linked() call
-            $self->received_from->send_line("abort invalid_block");
-            return -1;
-        }
-        # zero weight for new block is ok, accept it
-        if ($height && ($self->branch_weight < $best_block[$height]->weight ||
-            ($self->branch_weight == $best_block[$height]->weight && $self->branch_height <= $height))) {
-            Debugf("Received block height %s from %s has too low weight for us, ignore",
-                $self->height, $self->received_from ? $self->received_from->ip : "me");
-            return 0;
-        }
 
-        # We have candidate for the new best branch, validate it
-        # Find first common block between current best branch and the candidate
-        my $class = ref $self;
-        my $new_best;
-        for ($new_best = $self; $new_best->prev_block; $new_best = $new_best->prev_block) {
-            my $best_block = $class->best_block($new_best->height-1);
-            last if !$best_block || $best_block->hash eq $new_best->prev_hash;
-            $new_best->prev_block->next_block = $new_best;
-        }
+    # We have candidate for the new best branch, validate it
+    # Find first common block between current best branch and the candidate
+    my $class = ref $self;
+    my $new_best;
+    for ($new_best = $self; $new_best->prev_block; $new_best = $new_best->prev_block) {
+        my $best_block = $class->best_block($new_best->height-1);
+        last if !$best_block || $best_block->hash eq $new_best->prev_hash;
+        $new_best->prev_block->next_block = $new_best;
+    }
+    if ($new_best->height < $height) {
+        Infof("Check alternate branch started with block %s height %u with weight %u (current best weight %u)",
+            $new_best->hash_str, $new_best->height, $self->weight, $self->best_weight);
+    }
 
-        # reset all txo in the current best branch (started from the fork block) as unspent;
-        # then set output in all txo in new branch and check it against possible double-spend
-        for (my $b = $class->best_block($new_best->height); $b; $b = $b->next_block) {
-            foreach my $tx (@{$b->transactions}) {
-                $tx->unconfirm();
+    # reset all txo in the current best branch (started from the fork block) as unspent;
+    # then set output in all txo in new branch and check it against possible double-spend
+    for (my $b = $class->best_block($height); $b && $b->height >= $new_best->height; $b = $b->prev_block) {
+        $b->prev_block->next_block = $b if $b->prev_block;
+        Debugf("Remove block %s height %s from best branch", $b->hash_str, $b->height);
+        foreach my $tx (reverse @{$b->transactions}) {
+            $tx->unconfirm();
+        }
+    }
+    for (my $b = $new_best; $b; $b = $b->next_block) {
+        Debugf("Add block %s height %s to best branch", $b->hash_str, $b->height);
+        my $fail_tx;
+
+        foreach my $tx (@{$b->transactions}) {
+            if ($tx->block_height && $tx->block_height != $b->height) {
+                Warningf("Transaction %s included in blocks %u and %u", $tx->hash_str, $tx->block_height, $b->height);
+                $fail_tx = $tx->hash;
+                last;
             }
-        }
-        for (my $b = $new_best; $b; $b = $b->next_block) {
-            my $fail_tx;
-            foreach my $tx (@{$b->transactions}) {
-                if ($tx->block_height && $tx->block_height != $b->height) {
-                    Warningf("Transaction %s included in blocks %u and %u", $tx->hash_str, $tx->block_height, $b->height);
+            foreach my $in (@{$tx->in}) {
+                my $txo = $in->{txo};
+                # It's possible that $txo->tx_out already set for rebuild blockchain loaded from local database
+                if ($txo->tx_out && $txo->tx_out ne $tx->hash) {
+                    # double-spend; drop this branch, return to old best branch and decrease reputation for peer $b->received_from
+                    Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %s, block from %s",
+                        $txo->tx_in_str, $txo->num, $txo->tx_out_str, $tx->hash_str,
+                        $b->received_from ? $b->received_from->ip : "me");
                     $fail_tx = $tx->hash;
                     last;
                 }
-                foreach my $in (@{$tx->in}) {
-                    my $txo = $in->{txo};
-                    # It's possible that $txo->tx_out already set for rebuild blockchain loaded from local database
-                    if ($txo->tx_out && $txo->tx_out ne $tx->hash) {
-                        # double-spend; drop this branch, return to old best branch and decrease reputation for peer $b->received_from
-                        Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %s, block from %s",
-                            $txo->tx_in_str, $txo->num, $txo->tx_out_str, $tx->hash_str,
+                elsif (my $tx_in = QBitcoin::Transaction->get($txo->tx_in)) {
+                    # Transaction with this output must be already confirmed (in the same best branch)
+                    # Stored (not cached) transactions are always confirmed, not needed to load them
+                    if (!$tx_in->block_height) {
+                        Warningf("Unconfirmed input %s:%u for transaction %s, block from %s",
+                            $txo->tx_in_str, $txo->num, $tx->hash_str,
                             $b->received_from ? $b->received_from->ip : "me");
                         $fail_tx = $tx->hash;
                         last;
                     }
-                    elsif (my $tx_in = QBitcoin::Transaction->get($txo->tx_in)) {
-                        # Transaction with this output must be already confirmed (in the same best branch)
-                        # Stored (not cached) transactions are always confirmed, not needed to load them
-                        if (!$tx_in->block_height) {
-                            Warningf("Unconfirmed input %s:%u for transaction %s, block from %s",
-                                $txo->tx_in_str, $txo->num, $tx->hash_str,
-                                $b->received_from ? $b->received_from->ip : "me");
-                            $fail_tx = $tx->hash;
-                            last;
-                        }
-                    }
-                }
-                last if $fail_tx;
-                $tx->block_height = $b->height;
-                foreach my $in (@{$tx->in}) {
-                    my $txo = $in->{txo};
-                    $txo->tx_out = $tx->hash;
-                    $txo->close_script = $in->{close_script};
-                    $txo->del_my_utxo if $txo->is_my; # for stake transaction
-                }
-                foreach my $txo (@{$tx->out}) {
-                    $txo->add_my_utxo if $txo->is_my;
                 }
             }
-
-            if (!$fail_tx) {
-                my $self_weight = $b->self_weight;
-                if (!defined($self_weight)) {
-                    $fail_tx = "block"; # does not match any transaction hash
-                }
-                elsif ($self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ) != $self->weight) {
-                    Warningf("Incorrect weight for block %s: %u != %u", $self->hash_str,
-                        $self->weight, $self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ));
-                    $fail_tx = "block";
-                }
+            last if $fail_tx;
+            $tx->block_height = $b->height;
+            foreach my $in (@{$tx->in}) {
+                my $txo = $in->{txo};
+                $txo->tx_out = $tx->hash;
+                $txo->close_script = $in->{close_script};
+                $txo->del_my_utxo if $txo->is_my; # for stake transaction
             }
+            foreach my $txo (@{$tx->out}) {
+                $txo->add_my_utxo if $txo->is_my && !$txo->spent_list;
+            }
+        }
 
-            if ($fail_tx) {
-                # If we have tx included in two different blocks then process rollback until second tx occurence
-                # It's not possible to include a tx twice in the same block, it's checked on block validation
-                for (my $b1 = $new_best; $b1->height < $b->height; $b1 = $b1->next_block) {
-                    foreach my $tx (@{$b1->transactions}) {
-                        $tx->unconfirm();
-                    }
-                }
-                foreach my $tx (@{$b->transactions}) {
-                    last if $fail_tx eq $tx->hash;
+        if (!$fail_tx) {
+            my $self_weight = $b->self_weight;
+            if (!defined($self_weight)) {
+                $fail_tx = "block"; # does not match any transaction hash
+            }
+            elsif ($self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ) != $b->weight) {
+                Warningf("Incorrect weight for block %s: %u != %u", $b->hash_str,
+                    $b->weight, $self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ));
+                $fail_tx = "block";
+            }
+        }
+
+        if ($fail_tx) {
+            # If we have tx included in two different blocks then process rollback until second tx occurence
+            # It's not possible to include a tx twice in the same block, it's checked on block validation
+            Debugf("Revert block %s height %s from best branch", $b->hash_str, $b->height);
+            foreach my $tx (@{$b->transactions}) { # TODO: Do we need reverse order for unconfirm here?
+                last if $fail_tx eq $tx->hash;
+                $tx->unconfirm();
+            }
+            for (my $b1 = $b->prev_block; $b1 && $b1->height >= $new_best->height; $b1 = $b1->prev_block) {
+                Debugf("Revert block %s height %s from best branch", $b1->hash_str, $b1->height);
+                foreach my $tx (reverse @{$b1->transactions}) {
                     $tx->unconfirm();
                 }
-
-                for (my $b1 = $class->best_block($new_best->height); $b1; $b1 = $b1->next_block) {
-                    foreach my $tx (@{$b1->transactions}) {
-                        $tx->block_height = $b1->height;
-                        foreach my $in (@{$tx->in}) {
-                            my $txo = $in->{txo};
-                            $txo->tx_out = $tx->hash;
-                            $txo->close_script = $in->{close_script};
-                            $txo->del_my_utxo if $txo->is_my;
-                        }
-                        foreach my $txo (@{$tx->out}) {
-                            $txo->add_my_utxo if $txo->is_my;
-                        }
-                    }
-                }
-                $b->drop_branch();
-                # $self may be correct block, so we have no reasons for decrease reputation of the current peer
-                # but we can decrease reputation of the peer which sent us block with double-spend transaction or incorrect weight
-                $b->received_from->decrease_reputation if $b->received_from;
-                if ($b->height == $self->height) {
-                    $self->received_from->send_line("abort incorrect_block") if $self->received_from;
-                    return -1;
-                }
-                # Ok, it's theoretically possible that branch from $new_best to $b->prev_block is better than our best branch.
-                # But we have not all blocks there, so we can switch to this branch (or keep in our best) later,
-                # not needed to change the best branch immediately.
-                if ($self->received_from) {
-                    $self->received_from->send_line("sendblock " . $b->height);
-                }
-                return 0;
             }
-        }
 
-        # set best branch
-        for (my $b = $self; $b && (!$best_block[$b->height] || $best_block[$b->height]->hash ne $b->hash); $b = $b->prev_block) {
-            $best_block[$b->height] = $b;
-            if ($b->prev_block && (!$b->prev_block->next_block || $b->prev_block->next_block->hash ne $b->hash)) {
-                $b->prev_block->next_block = $b;
-            }
-            last if !$best_block[$b->height-1];
-        }
-        for (my $b = $self->next_block; $b; $b = $b->next_block) {
-            $best_block[$b->height] = $b;
-        }
-        if (defined($height) && $self->height <= $height) {
-            QBitcoin::Generate::Control->generate_new() if $new_best->height < $height;
-            Debugf("%s block height %u hash %s, best branch altered, weight %u, %u transactions",
-                $self->received_from ? "received" : "loaded", $self->height,
-                $self->hash_str, $self->branch_weight, scalar(@{$self->transactions}));
-        }
-        else {
-            Debugf("%s block height %u hash %s in best branch, weight %u, %u transactions",
-                $self->received_from ? "received" : "loaded", $self->height,
-                $self->hash_str, $self->branch_weight, scalar(@{$self->transactions}));
-        }
-        my $old_height = $height // -1;
-        $height = $self->branch_height();
-        if ($height > $old_height) {
-            # It's the first block in this level
-            # Store and free old level (if it's linked and in best branch)
-            $self->check_synced();
-            if ((my $first_free_height = $height - INCORE_LEVELS) >= 0) {
-                if ($best_block[$first_free_height]) {
-                    $best_block[$first_free_height]->store();
-                    $best_block[$first_free_height] = undef;
-                }
-                # Remove linked blocks and branches with weight less than our best for all levels below $free_height
-                # Keep only unlinked branches with weight more than our best and have blocks within last INCORE_LEVELS
-                for (my $free_height = $first_free_height; $free_height >= 0; $free_height--) {
-                    last unless $block_pool[$free_height];
-                    foreach my $b (values %{$block_pool[$free_height]}) {
-                        if ($b->branch_weight > $best_block[$height]->weight &&
-                            $b->branch_height > $first_free_height) {
-                            next;
-                        }
-                        delete $block_pool[$free_height]->{$b->hash};
-                        delete $prev_block[$free_height]->{$b->prev_hash}->{$b->hash} if $b->prev_hash;
-                        $b->next_block(undef);
-                        foreach my $b2 (values %{$prev_block[$free_height+1]->{$b->hash}}) {
-                            $b2->prev_block(undef);
-                        }
-                        foreach my $tx (@{$b->transactions}) {
-                            $tx->free();
-                        }
+            for (my $b1 = $class->best_block($new_best->height); $b1; $b1 = $b1->next_block) {
+                Debugf("Return block %s height %s to best branch", $b1->hash_str, $b1->height);
+                foreach my $tx (@{$b1->transactions}) {
+                    $tx->block_height = $b1->height;
+                    foreach my $in (@{$tx->in}) {
+                        my $txo = $in->{txo};
+                        $txo->tx_out = $tx->hash;
+                        $txo->close_script = $in->{close_script};
+                        $txo->del_my_utxo if $txo->is_my;
                     }
-                    foreach my $prev_hash (keys %{$prev_block[$free_height]}) {
-                        delete $prev_block[$free_height]->{$prev_hash} unless %{$prev_block[$free_height]->{$prev_hash}};
-                    }
-                    if (!%{$block_pool[$free_height]}) {
-                        $prev_block[$free_height] = undef;
-                        $block_pool[$free_height] = undef;
+                    foreach my $txo (@{$tx->out}) {
+                        $txo->add_my_utxo if $txo->is_my && !$txo->spent_list;
                     }
                 }
             }
-        }
-
-        if (blockchain_synced() && ($self->received_from || time() >= time_by_height($self->height))) {
-            # Do not announce old blocks loaded from the local database or generated
-            $self->announce_to_peers();
-        }
-
-        my $branch_height = $self->branch_height();
-        if ($self->received_from && time() >= time_by_height($branch_height+1)) {
-            $self->received_from->send_line("sendblock " . ($branch_height+1));
+            $b->drop_branch();
+            if ($self->received_from) {
+                $self->decrease_reputation;
+                $self->received_from->send_line("abort incorrect_block");
+            }
+            return -1;
         }
     }
+
+    # set best branch
+    $new_best->prev_block->next_block = $new_best if $new_best->prev_block;
+    if ($new_best->height < $height - INCORE_LEVELS) {
+        # Remove stored blocks in old best branch to keep database blockchain consistent during saving new branch
+        # and do not create huge sql transactions
+        my $incore_height = min($new_best->height, $self->height - INCORE_LEVELS);
+        # TODO: implement ORM method delete_by(); QBitcoin::Block->delete_by(height => { '>' => $incore_height })
+        for (my $n = $height - INCORE_LEVELS; $n > $incore_height; $n--) {
+            QBitcoin::Block->new(height => $n)->delete;
+        }
+    }
+    for (my $b = $new_best; $b; $b = $b->next_block) {
+        $best_block[$b->height] = $b;
+        $b->store() if $b->height < $self->height - INCORE_LEVELS;
+    }
+
+    if (defined($height) && $new_best->height <= $height) {
+        QBitcoin::Generate::Control->generate_new() if $new_best->height < $height;
+        Debugf("%s block height %u hash %s, best branch altered, weight %u, %u transactions",
+            $self->received_from ? "received" : "loaded", $self->height,
+            $self->hash_str, $self->weight, scalar(@{$self->transactions}));
+        if ($self->height < $height) {
+            foreach my $n ($self->height+1 .. $height) {
+                $best_block[$n] = undef;
+            }
+            $height = $self->height;
+            blockchain_synced(0) unless $config->{genesis};
+        }
+    }
+    else {
+        Debugf("%s block height %u hash %s in best branch, weight %u, %u transactions",
+            $self->received_from ? "received" : "loaded", $self->height,
+            $self->hash_str, $self->weight, scalar(@{$self->transactions}));
+    }
+
+    if (blockchain_synced() && ($self->received_from || time() >= time_by_height($self->height))) {
+        # Do not announce old blocks loaded from the local database or generated
+        $self->announce_to_peers();
+    }
+
+    if ($self->height > ($height // -1)) {
+        # It's the first block in this level
+        # Store and free old level (if it's linked and in best branch)
+        $height = $self->height;
+        $self->check_synced();
+        cleanup_old_blocks();
+    }
+
     return 0;
+}
+
+sub cleanup_old_blocks {
+    if ((my $first_free_height = $height - INCORE_LEVELS) >= 0) {
+        if ($best_block[$first_free_height]) {
+            $best_block[$first_free_height]->store();
+            $best_block[$first_free_height] = undef;
+        }
+        # Remove linked blocks and branches with weight less than our best for all levels below $free_height
+        # Keep only unlinked branches with weight more than our best and have blocks within last INCORE_LEVELS
+        for (my $free_height = $first_free_height; $free_height >= 0; $free_height--) {
+            last unless $block_pool[$free_height];
+            foreach my $b (values %{$block_pool[$free_height]}) {
+                if ($b->received_from && $b->received_from->syncing) {
+                    next;
+                }
+                if ($b->branch_weight > $best_block[$height]->weight &&
+                    $b->branch_height > $first_free_height) {
+                    next;
+                }
+                delete $block_pool[$free_height]->{$b->hash};
+                delete $prev_block[$free_height]->{$b->prev_hash}->{$b->hash} if $b->prev_hash;
+                $b->next_block(undef);
+                foreach my $b2 (values %{$prev_block[$free_height+1]->{$b->hash}}) {
+                    $b2->prev_block(undef);
+                }
+                foreach my $tx (@{$b->transactions}) {
+                    $tx->free();
+                }
+            }
+            foreach my $prev_hash (keys %{$prev_block[$free_height]}) {
+                delete $prev_block[$free_height]->{$prev_hash} unless %{$prev_block[$free_height]->{$prev_hash}};
+            }
+            if (!%{$block_pool[$free_height]}) {
+                $prev_block[$free_height] = undef;
+                $block_pool[$free_height] = undef;
+            }
+        }
+    }
 }
 
 # Call after successful block receive, best or not
@@ -386,6 +346,7 @@ sub prev_block {
 }
 
 sub drop_branch {
+    no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my $self = shift;
 
     if ($self->prev_block) {
@@ -399,23 +360,6 @@ sub drop_branch {
     foreach my $descendant (values %{$prev_block[$self->height+1]->{$self->hash}}) {
         $descendant->drop_branch(); # recursively
     }
-}
-
-sub set_linked {
-    my $self = shift;
-
-    if ($self->validate_tx != 0) {
-        $self->drop_branch;
-        return -1;
-    }
-    $self->linked = 1;
-    if ($prev_block[$self->height+1] && (my $descendants = $prev_block[$self->height+1]->{$self->hash})) {
-        foreach my $descendant (values %$descendants) {
-            $descendant->set_linked(); # recursively
-            # Do not return -1 here b/c the remote peer is not responsible for descendant blocks
-        }
-    }
-    return 0;
 }
 
 sub announce_to_peers {
