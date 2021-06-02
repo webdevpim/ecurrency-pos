@@ -301,6 +301,7 @@ sub drop_pending_block {
             delete $PENDING_BLOCK_BLOCK{$block->prev_hash};
         }
     }
+    $block->free_tx();
     delete $PENDING_BLOCK{$block->hash};
 }
 

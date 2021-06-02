@@ -66,6 +66,7 @@ sub add_tx {
     my ($tx) = @_;
     $self->{tx_by_hash} //= {};
     $self->{tx_by_hash}->{$tx->hash} = $tx;
+    $tx->add_to_block($self);
     delete $self->{pending_tx}->{$tx->hash} if $self->pending_tx;
 }
 
@@ -86,8 +87,20 @@ sub compact_tx {
     $self->{transactions} //= [ map { $self->{tx_by_hash}->{$_} } @{$self->{tx_hashes}} ];
     delete $self->{tx_hashes};
     delete $self->{tx_by_hash};
-    foreach my $tx (@{$self->{transactions}}) {
-        $tx->add_to_block($self);
+}
+
+sub free_tx {
+    my $self = shift;
+    # works for pending block too
+    if ($self->transactions) {
+        foreach my $tx (@{$self->transactions}) {
+            $tx->del_from_block($self);
+        }
+    }
+    elsif ($self->{tx_by_hash}) {
+        foreach my $tx (values %{$self->{tx_by_hash}}) {
+            $tx->del_from_block($self);
+        }
     }
 }
 
