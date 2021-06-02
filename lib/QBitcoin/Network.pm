@@ -66,8 +66,8 @@ sub main_loop {
         blockchain_synced(1);
     }
     # Load last INCORE_LEVELS blocks from database
-    foreach my $block (reverse QBitcoin::Block->find(-sortby => "height DESC", -limit => INCORE_LEVELS)) {
-        $block->receive();
+    foreach my $block (reverse QBitcoin::Block->find(-sortby => "height DESC", -limit => 1)) {
+        $block->receive(1);
     }
     # Load my UTXO
     if ($config->{generate}) {
