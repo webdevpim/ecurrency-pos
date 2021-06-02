@@ -207,7 +207,7 @@ sub receive {
             }
 
             my $old_best = $class->best_block($new_best->height);
-            $old_best->prev_block->next_block = $old_best if $old_best;
+            $old_best->prev_block->next_block = $old_best if $old_best && $old_best->prev_block;
             for (my $b1 = $old_best; $b1; $b1 = $b1->next_block) {
                 Debugf("Return block %s height %s to best branch", $b1->hash_str, $b1->height);
                 foreach my $tx (@{$b1->transactions}) {
