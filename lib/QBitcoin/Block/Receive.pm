@@ -3,7 +3,6 @@ use warnings;
 use strict;
 
 use Role::Tiny; # This is role for QBitcoin::Block;
-use List::Util qw(min);
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Config;
@@ -49,7 +48,7 @@ sub blockchain_height {
 sub best_block {
     my $class = shift;
     my ($block_height) = @_;
-    if (!$best_block[$block_height] && $block_height <= ($height // -1) - INCORE_LEVELS) {
+    if (!$best_block[$block_height] && $block_height <= $class->max_db_height) {
         if (my $best_block = $class->find(height => $block_height)) {
             $best_block->to_cache;
             $best_block[$block_height] = $best_block;
@@ -235,14 +234,14 @@ sub receive {
 
     # set best branch
     $new_best->prev_block->next_block = $new_best if $new_best->prev_block;
-    if ($new_best->height < ($height // -1) - INCORE_LEVELS) {
+    if ($new_best->height <= QBitcoin::Block->max_db_height) {
         # Remove stored blocks in old best branch to keep database blockchain consistent during saving new branch
         # and do not create huge sql transactions
-        my $incore_height = min($new_best->height, $self->height - INCORE_LEVELS);
         # TODO: implement ORM method delete_by(); QBitcoin::Block->delete_by(height => { '>' => $incore_height })
-        for (my $n = $height - INCORE_LEVELS; $n > $incore_height; $n--) {
+        for (my $n = QBitcoin::Block->max_db_height; $n >= $new_best->height; $n--) {
             QBitcoin::Block->new(height => $n)->delete;
         }
+        QBitcoin::Block->max_db_height($new_best->height-1);
     }
     for (my $b = $new_best; $b; $b = $b->next_block) {
         $best_block[$b->height] = $b;
@@ -286,7 +285,7 @@ sub receive {
 
 sub cleanup_old_blocks {
     if ((my $first_free_height = $height - INCORE_LEVELS) >= 0) {
-        if ($best_block[$first_free_height]) {
+        if ($best_block[$first_free_height] && $first_free_height > QBitcoin::Block->max_db_height) {
             $best_block[$first_free_height]->store();
             $best_block[$first_free_height] = undef;
         }

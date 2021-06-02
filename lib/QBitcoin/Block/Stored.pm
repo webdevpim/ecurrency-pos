@@ -10,6 +10,8 @@ use QBitcoin::ORM::Transaction;
 
 use constant TABLE => 'block';
 
+my $MAX_DB_HEIGHT;
+
 sub store {
     my $self = shift;
     my $db_transaction = QBitcoin::ORM::Transaction->new;
@@ -18,6 +20,7 @@ sub store {
         $transaction->store();
     }
     $db_transaction->commit;
+    $MAX_DB_HEIGHT = $self->height if !defined($MAX_DB_HEIGHT) || $MAX_DB_HEIGHT < $self->height;
 }
 
 sub on_load {
@@ -25,7 +28,16 @@ sub on_load {
     # Load transactions
     my @transactions = QBitcoin::Transaction->find(block_height => $self->height);
     $self->transactions = \@transactions;
+    $MAX_DB_HEIGHT = $self->height if !defined($MAX_DB_HEIGHT) || $MAX_DB_HEIGHT < $self->height;
     return $self;
+}
+
+sub max_db_height {
+    my $class = shift;
+    if ($@) {
+        $MAX_DB_HEIGHT = $_[0];
+    }
+    return $MAX_DB_HEIGHT // -1;
 }
 
 1;
