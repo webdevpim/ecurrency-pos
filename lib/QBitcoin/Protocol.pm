@@ -317,7 +317,6 @@ sub add_pending_block {
 }
 
 sub _block_load_transactions {
-    # TODO: move this to Block::Receive, take care about %PENDING_TX_BLOCK and add_pending_block()
     my $self = shift;
     my ($block) = @_;
     foreach my $tx_hash (@{$block->tx_hashes}) {
