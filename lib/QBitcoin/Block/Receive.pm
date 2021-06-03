@@ -355,12 +355,16 @@ sub drop_branch {
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my ($block) = @_;
 
-    free_block($block);
-    # TODO: change recursion to loop for case when there is only one descendant
-    # We can have long branch but only as chain, without multiple descendants
-    my @descendants = values %{$prev_block[$block->height+1]->{$block->hash}};
-    foreach my $descendant (values %{$prev_block[$block->height+1]->{$block->hash}}) {
-        $descendant->drop_branch(); # recursively
+    while (1) {
+        free_block($block);
+        my @descendants = values %{$prev_block[$block->height+1]->{$block->hash}};
+        # loop instead of deep recursion for case only one descendant (long chain)
+        my $next_block = pop @descendants
+            or last;
+        foreach my $descendant (@descendants) {
+            $descendant->drop_branch(); # recursively
+        }
+        $block = $next_block;
     }
 }
 
