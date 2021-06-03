@@ -29,13 +29,12 @@ sub on_load {
     my @transactions = QBitcoin::Transaction->find(block_height => $self->height);
     $self->transactions = \@transactions;
     $_->add_to_block($self) foreach @transactions;
-    $MAX_DB_HEIGHT = $self->height if !defined($MAX_DB_HEIGHT) || $MAX_DB_HEIGHT < $self->height;
     return $self;
 }
 
 sub max_db_height {
     my $class = shift;
-    if ($@) {
+    if (@_) {
         $MAX_DB_HEIGHT = $_[0];
     }
     return $MAX_DB_HEIGHT // -1;

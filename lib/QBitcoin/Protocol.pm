@@ -472,6 +472,12 @@ sub cmd_sendblock {
         $self->send_line("block " . length($data) . " " . $block->height);
         $self->send($data);
     }
+    elsif ($block = QBitcoin::Block->find(height => $height)) {
+        my $data = $block->serialize;
+        $self->send_line("block " . length($data) . " " . $block->height);
+        $self->send($data);
+        $block->free_block();
+    }
     else {
         Warningf("I have no block with height %u requested by peer %s", $height, $self->ip);
     }

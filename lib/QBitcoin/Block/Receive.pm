@@ -23,12 +23,13 @@ use QBitcoin::Generate::Control;
 # We ignore blocks with branch_weight less than our best branch
 # Last INCORE_LEVELS levels keep in memory, and only then save to the database
 # If we receive block with good branch_weight (better than out best) but with unknown ancestor then
-# request the ancestor and do not switch best branch until we have full linked branch and verify its weight
+# request the ancestor and do not switch the best branch until we have full linked branch and verify its weight
 
 my @block_pool;
 my @best_block;
 my @prev_block;
-my $height;
+my $HEIGHT;
+my $MIN_INCORE_HEIGHT;
 
 END {
     # free structures
@@ -38,22 +39,16 @@ END {
 };
 
 sub best_weight {
-    return defined($height) ? $best_block[$height]->weight : -1;
+    return defined($HEIGHT) ? $best_block[$HEIGHT]->weight : -1;
 }
 
 sub blockchain_height {
-    return $height;
+    return $HEIGHT;
 }
 
 sub best_block {
     my $class = shift;
     my ($block_height) = @_;
-    if (!$best_block[$block_height] && $block_height <= $class->max_db_height) {
-        if (my $best_block = $class->find(height => $block_height)) {
-            $best_block->to_cache;
-            $best_block[$block_height] = $best_block;
-        }
-    }
     return $best_block[$block_height];
 }
 
@@ -61,6 +56,7 @@ sub to_cache {
     my $self = shift;
     $block_pool[$self->height]->{$self->hash} = $self;
     $prev_block[$self->height]->{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
+    $MIN_INCORE_HEIGHT = $self->height if !defined($MIN_INCORE_HEIGHT) || $MIN_INCORE_HEIGHT > $self->height;
 }
 
 sub block_pool {
@@ -71,6 +67,7 @@ sub block_pool {
 
 sub receive {
     my $self = shift;
+    my ($loaded) = @_;
 
     return 0 if $block_pool[$self->height]->{$self->hash};
     if (my $err = $self->validate()) {
@@ -86,10 +83,10 @@ sub receive {
     }
 
     if (COMPACT_MEMORY) {
-        if (defined($height) && $best_block[$height] && $self->weight < $best_block[$height]->weight) {
-            if (($self->received_from->has_weight // -1) <= $best_block[$height]->weight) {
+        if (defined($HEIGHT) && $best_block[$HEIGHT] && $self->weight < $best_block[$HEIGHT]->weight) {
+            if (($self->received_from->has_weight // -1) <= $best_block[$HEIGHT]->weight) {
                 Debugf("Received block weight %u not more than our best branch weight %u, ignore",
-                    $self->weight, $best_block[$height]->weight);
+                    $self->weight, $best_block[$HEIGHT]->weight);
                 return 0;
             }
         }
@@ -101,8 +98,8 @@ sub receive {
     }
 
     # zero weight for new block is ok, accept it
-    if ($height && ($self->weight < $best_block[$height]->weight ||
-        ($self->weight == $best_block[$height]->weight && $self->branch_height <= $height))) {
+    if ($HEIGHT && ($self->weight < $best_block[$HEIGHT]->weight ||
+        ($self->weight == $best_block[$HEIGHT]->weight && $self->branch_height <= $HEIGHT))) {
         my $has_weight = $self->received_from ? ($self->received_from->has_weight // -1) : -1;
         Debugf("Received block height %s from %s has too low weight for us",
             $self->height, $self->received_from ? $self->received_from->ip : "me");
@@ -114,27 +111,27 @@ sub receive {
     my $class = ref $self;
     my $new_best;
     for ($new_best = $self; $new_best->height; $new_best = $new_best->prev_block) {
+        # "root" best_block for this new branch must be already loaded
         my $best_block = $class->best_block($new_best->height-1);
-        # We have no $best_block here on initial loading top of blockchain from the database
-        last if !$best_block || $best_block->hash eq $new_best->prev_hash;
+        last if $best_block && $best_block->hash eq $new_best->prev_hash;
         $new_best->prev_block->next_block = $new_best;
     }
-    if ($new_best->height < ($height // -1)) {
+    if ($new_best->height < ($HEIGHT // -1)) {
         Infof("Check alternate branch started with block %s height %u with weight %u (current best weight %u)",
             $new_best->hash_str, $new_best->height, $self->weight, $self->best_weight);
     }
 
     # reset all txo in the current best branch (started from the fork block) as unspent;
     # then set output in all txo in new branch and check it against possible double-spend
-    for (my $b = $class->best_block($height // 0); $b && $b->height >= $new_best->height; $b = $b->prev_block) {
+    for (my $b = $class->best_block($HEIGHT // $new_best->height); $b && $b->height >= $new_best->height; $b = $b->prev_block) {
         $b->prev_block->next_block = $b;
-        Debugf("Remove block %s height %s from best branch", $b->hash_str, $b->height);
+        Debugf("Remove block %s height %s from the best branch", $b->hash_str, $b->height);
         foreach my $tx (reverse @{$b->transactions}) {
             $tx->unconfirm();
         }
     }
     for (my $b = $new_best; $b; $b = $b->next_block) {
-        Debugf("Add block %s height %s to best branch", $b->hash_str, $b->height);
+        Debugf("Add block %s height %s to the best branch", $b->hash_str, $b->height);
         my $fail_tx;
 
         foreach my $tx (@{$b->transactions}) {
@@ -200,7 +197,7 @@ sub receive {
                 $tx->unconfirm();
             }
             for (my $b1 = $b->prev_block; $b1 && $b1->height >= $new_best->height; $b1 = $b1->prev_block) {
-                Debugf("Revert block %s height %s from best branch", $b1->hash_str, $b1->height);
+                Debugf("Revert block %s height %s from the best branch", $b1->hash_str, $b1->height);
                 foreach my $tx (reverse @{$b1->transactions}) {
                     $tx->unconfirm();
                 }
@@ -209,7 +206,7 @@ sub receive {
             my $old_best = $class->best_block($new_best->height);
             $old_best->prev_block->next_block = $old_best if $old_best && $old_best->prev_block;
             for (my $b1 = $old_best; $b1; $b1 = $b1->next_block) {
-                Debugf("Return block %s height %s to best branch", $b1->hash_str, $b1->height);
+                Debugf("Return block %s height %s to the best branch", $b1->hash_str, $b1->height);
                 foreach my $tx (@{$b1->transactions}) {
                     $tx->block_height = $b1->height;
                     foreach my $in (@{$tx->in}) {
@@ -234,7 +231,7 @@ sub receive {
 
     # set best branch
     $new_best->prev_block->next_block = $new_best if $new_best->prev_block;
-    if ($new_best->height <= QBitcoin::Block->max_db_height) {
+    if ($new_best->height <= QBitcoin::Block->max_db_height && !$loaded) {
         # Remove stored blocks in old best branch to keep database blockchain consistent during saving new branch
         # and do not create huge sql transactions
         # TODO: implement ORM method delete_by(); QBitcoin::Block->delete_by(height => { '>' => $incore_height })
@@ -245,24 +242,23 @@ sub receive {
     }
     for (my $b = $new_best; $b; $b = $b->next_block) {
         $best_block[$b->height] = $b;
-        $b->store() if $b->height < $self->height - INCORE_LEVELS;
     }
 
-    if (defined($height) && $new_best->height <= $height) {
-        QBitcoin::Generate::Control->generate_new() if $new_best->height < $height;
+    if (defined($HEIGHT) && $new_best->height <= $HEIGHT) {
+        QBitcoin::Generate::Control->generate_new() if $new_best->height < $HEIGHT;
         Debugf("%s block height %u hash %s, best branch altered, weight %u, %u transactions",
             $self->received_from ? "received" : "loaded", $self->height,
             $self->hash_str, $self->weight, scalar(@{$self->transactions}));
-        if ($self->height < $height) {
-            foreach my $n ($self->height+1 .. $height) {
+        if ($self->height < $HEIGHT) {
+            foreach my $n ($self->height+1 .. $HEIGHT) {
                 $best_block[$n] = undef;
             }
-            $height = $self->height;
+            $HEIGHT = $self->height;
             blockchain_synced(0) unless $config->{genesis};
         }
     }
     else {
-        Debugf("%s block height %u hash %s in best branch, weight %u, %u transactions",
+        Debugf("%s block height %u hash %s in the best branch, weight %u, %u transactions",
             $self->received_from ? "received" : "loaded", $self->height,
             $self->hash_str, $self->weight, scalar(@{$self->transactions}));
     }
@@ -272,73 +268,99 @@ sub receive {
         $self->announce_to_peers();
     }
 
-    if ($self->height > ($height // -1)) {
+    if ($self->height > ($HEIGHT // -1)) {
         # It's the first block in this level
-        # Store and free old level (if it's linked and in best branch)
-        $height = $self->height;
+        # Store and free old level (if it's in the best branch)
+        $HEIGHT = $self->height;
         $self->check_synced();
-        cleanup_old_blocks();
+        for (my $level = QBitcoin::Block->max_db_height + 1; $level <= $HEIGHT - INCORE_LEVELS; $level++) {
+            $best_block[$level]->store();
+        }
+        if ($HEIGHT >= INCORE_LEVELS) {
+            cleanup_old_blocks();
+        }
     }
 
     return 0;
 }
 
-sub cleanup_old_blocks {
-    if ((my $first_free_height = $height - INCORE_LEVELS) >= 0) {
-        if ($best_block[$first_free_height] && $first_free_height > QBitcoin::Block->max_db_height) {
-            $best_block[$first_free_height]->store();
-            $best_block[$first_free_height] = undef;
-        }
-        # Remove linked blocks and branches with weight less than our best for all levels below $free_height
-        # Keep only unlinked branches with weight more than our best and have blocks within last INCORE_LEVELS
-        my $free_height = $first_free_height;
-        while ($free_height >= 0 && $block_pool[$free_height]) {
-            $free_height--;
-        }
-        for ($free_height++; $free_height <= $first_free_height; $free_height++) {
-            foreach my $b (values %{$block_pool[$free_height]}) {
-                if ($b->received_from && $b->received_from->syncing) {
-                    next;
-                }
-                if ($b->branch_weight > $best_block[$height]->weight &&
-                    $b->branch_height > $first_free_height) {
-                    next;
-                }
-                delete $block_pool[$free_height]->{$b->hash};
-                delete $prev_block[$free_height]->{$b->prev_hash}->{$b->hash} if $b->prev_hash;
-                $b->next_block(undef);
-                foreach my $b1 (values %{$prev_block[$free_height+1]->{$b->hash}}) {
-                    $b1->prev_block(undef);
-                }
-                foreach my $tx (@{$b->transactions}) {
-                    $tx->del_from_block($b);
-                    $tx->free();
-                }
-                if ($best_block[$free_height] && $best_block[$free_height]->hash eq $b->hash) {
-                    $best_block[$free_height] = undef;
-                }
+sub want_cleanup_branch {
+    no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
+    my ($block) = @_;
+    while (1) {
+        return 0 if $block->received_from && $block->received_from->syncing;
+        return 0 if $block->height > $HEIGHT - INCORE_LEVELS;
+        my @descendants = values %{$prev_block[$block->height+1]->{$block->hash}};
+        # avoid too deep recursion
+        my $next_block = pop @descendants
+            or last;
+        foreach my $descendant (@descendants) {
+            if (want_cleanup_branch($descendant)) {
+                drop_branch($descendant);
             }
+            else {
+                return 0;
+            }
+        }
+        $block = $next_block;
+    }
+    return 1;
+}
+
+sub cleanup_old_blocks {
+    my $first_free_height = $HEIGHT - INCORE_LEVELS;
+    # Remove linked blocks and branches with weight less than our best for all levels below $free_height
+    # Keep only unlinked branches with weight more than our best and have blocks within last INCORE_LEVELS
+    for (my $free_height = $MIN_INCORE_HEIGHT; $free_height <= $first_free_height; $free_height++) {
+        foreach my $b (values %{$block_pool[$free_height]}) {
+            next if $best_block[$free_height] &&  $b->hash eq $best_block[$free_height]->hash; # cleanup best branch after all other
+            # cleanup only full branches; if prev_block has single descendant then this branch was already checked
+            next if keys(%{$prev_block[$free_height]->{$b->prev_hash}}) == 1;
+            drop_branch($b) if want_cleanup_branch($b);
+        }
+        keys(%{$block_pool[$free_height]}) <= 1 && keys(%{$block_pool[$free_height+1]}) <= 1
+            or last;
+        if ($best_block[$free_height] && $best_block[$free_height+1]) {
+            # we have only best block on this level with single descendant, drop it and cleanup the level
+            free_block($best_block[$free_height]);
             foreach my $prev_hash (keys %{$prev_block[$free_height]}) {
                 delete $prev_block[$free_height]->{$prev_hash} unless %{$prev_block[$free_height]->{$prev_hash}};
             }
-            if (!%{$block_pool[$free_height]}) {
-                $prev_block[$free_height] = undef;
-                $block_pool[$free_height] = undef;
-            }
+            $best_block[$free_height] = undef;
         }
+        elsif (%{$block_pool[$free_height]}) {
+            last;
+        }
+        $prev_block[$free_height] = undef;
+        $block_pool[$free_height] = undef;
+        Debugf("Level %u cleared", $free_height);
+        $MIN_INCORE_HEIGHT++;
     }
 }
 
-# Call after successful block receive, best or not
-sub check_synced {
-    my $self = shift;
-    # Is it OK to synchronize and request mempool from incoming peer?
-    if ($self->received_from && $height >= height_by_time(time()) && !blockchain_synced()) {
-        Infof("Blockchain is synced");
-        blockchain_synced(1);
-        if (!mempool_synced()) {
-            $self->received_from->send_line("sendmempool");
-        }
+sub free_block {
+    my ($block) = @_;
+
+    Debugf("Free block %s height %s from memory cache", $block->hash_str, $block->height);
+    $block->prev_block(undef);
+    $block->next_block(undef);
+    delete $block_pool[$block->height]->{$block->hash};
+    delete $prev_block[$block->height]->{$block->prev_hash}->{$block->hash};
+    foreach my $tx (@{$block->transactions}) {
+        $tx->del_from_block($block);
+    }
+}
+
+sub drop_branch {
+    no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
+    my ($block) = @_;
+
+    free_block($block);
+    # TODO: change recursion to loop for case when there is only one descendant
+    # We can have long branch but only as chain, without multiple descendants
+    my @descendants = values %{$prev_block[$block->height+1]->{$block->hash}};
+    foreach my $descendant (values %{$prev_block[$block->height+1]->{$block->hash}}) {
+        $descendant->drop_branch(); # recursively
     }
 }
 
@@ -369,20 +391,16 @@ sub prev_block {
     return $self->{prev_block};
 }
 
-sub drop_branch {
-    no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
+# Call after successful block receive, best or not
+sub check_synced {
     my $self = shift;
-
-    if ($self->prev_block) {
-        if ($self->prev_block->next_block && $self->prev_block->next_block->hash eq $self->hash) {
-            $self->prev_block->next_block = undef;
+    # Is it OK to synchronize and request mempool from incoming peer?
+    if ($self->received_from && $HEIGHT >= height_by_time(time()) && !blockchain_synced()) {
+        Infof("Blockchain is synced");
+        blockchain_synced(1);
+        if (!mempool_synced()) {
+            $self->received_from->send_line("sendmempool");
         }
-    }
-    $self->prev_block(undef);
-    delete $block_pool[$self->height]->{$self->hash};
-    delete $prev_block[$self->height]->{$self->prev_hash}->{$self->hash};
-    foreach my $descendant (values %{$prev_block[$self->height+1]->{$self->hash}}) {
-        $descendant->drop_branch(); # recursively
     }
 }
 

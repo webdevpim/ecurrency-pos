@@ -67,6 +67,7 @@ sub main_loop {
     }
     # Load last INCORE_LEVELS blocks from database
     foreach my $block (reverse QBitcoin::Block->find(-sortby => "height DESC", -limit => 1)) {
+        QBitcoin::Block->max_db_height($block->height) if $block->height > QBitcoin::Block->max_db_height;
         $block->receive(1);
     }
     # Load my UTXO

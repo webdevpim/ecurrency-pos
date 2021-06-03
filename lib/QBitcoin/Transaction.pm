@@ -101,6 +101,10 @@ sub del_from_block {
     my $self = shift;
     my ($block) = @_;
     delete $self->{blocks}->{$block->hash};
+    if ($self->block_height && !%{$self->{blocks}}) {
+        # Confirmed, not mempool
+        $self->free();
+    }
 }
 
 sub in_blocks {
@@ -118,6 +122,9 @@ sub mempool_list {
 sub free {
     my $self = shift;
     return if $self->in_blocks;
+    if ($self->block_height && !$self->id) {
+        die "Attempt to free not stored transaction " . $self->hash_str . " confirmed in block " . $self->block_height . "\n";
+    }
     foreach my $in (@{$self->in}) {
         $in->{txo}->spent_del($self);
     }
