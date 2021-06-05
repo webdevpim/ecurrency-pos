@@ -385,7 +385,7 @@ sub prev_block {
     return $self->{prev_block} if exists $self->{prev_block}; # undef means we have no such block
     return undef unless $self->height; # genesis block has no ancestors
     my $class = ref($self);
-    if (!($self->{prev_block} //= $block_pool[$self->height-1]->{$self->prev_hash})) {
+    if (!($self->{prev_block} = $block_pool[$self->height-1]->{$self->prev_hash})) {
         if (my $prev_block = $class->find(hash => $self->prev_hash)) {
             $prev_block->to_cache;
             $best_block[$prev_block->height] = $prev_block;
