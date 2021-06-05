@@ -58,7 +58,7 @@ sub _produce_my_utxo {
     $last_time = $last_time < $age ? $age : $last_time+1;
     my $out = QBitcoin::TXO->new_txo(
         value       => $last_time, # vary for get unique hash for each coinbase transaction
-        open_script => QBitcoin::OpenScript->script_for_address($my_address, 1),
+        open_script => scalar(QBitcoin::OpenScript->script_for_address($my_address->address)),
     );
     my $tx = QBitcoin::Transaction->new(
         in            => [],

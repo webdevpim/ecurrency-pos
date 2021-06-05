@@ -2,9 +2,7 @@ package QBitcoin::Script;
 use warnings;
 use strict;
 
-use Digest::SHA qw(sha256);
-use Crypt::Digest::RIPEMD160 qw(ripemd160);
-use QBitcoin::Crypto qw(check_sig);
+use QBitcoin::Crypto qw(check_sig hash160);
 use QBitcoin::Script::OpCodes;
 
 use Exporter qw(import);
@@ -209,7 +207,7 @@ sub cmd_hash160 {
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
     @$stack >= 1 or return 0;
-    $stack->[0] = ripemd160(sha256($stack->[0]));
+    $stack->[0] = hash160($stack->[0]);
     return undef;
 }
 

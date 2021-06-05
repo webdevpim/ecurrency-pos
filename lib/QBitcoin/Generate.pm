@@ -17,7 +17,7 @@ my %MY_UTXO;
 sub load_utxo {
     my $class = shift;
     foreach my $my_address (my_address()) {
-        my @script_data = QBitcoin::OpenScript->script_for_address($my_address);
+        my @script_data = QBitcoin::OpenScript->script_for_address($my_address->address);
         if (my @script = QBitcoin::OpenScript->find(data => \@script_data)) {
             foreach my $utxo (grep { !$_->is_cached } QBitcoin::TXO->find(open_script => [ map { $_->id } @script ], tx_out => undef)) {
                 $utxo->save();
@@ -31,8 +31,9 @@ sub load_utxo {
 sub my_close_script {
     my $class = shift;
     my ($open_script) = @_;
+    my ($my_address) = my_address();
     # TODO
-    return scalar my_address();
+    return scalar $my_address->address;
 }
 
 sub sign_my_transaction {
@@ -61,7 +62,7 @@ sub make_stake_tx {
     my ($my_address) = my_address(); # first one
     my $out = QBitcoin::TXO->new_txo(
         value       => $my_amount + $fee,
-        open_script => QBitcoin::OpenScript->script_for_address($my_address),
+        open_script => scalar(QBitcoin::OpenScript->script_for_address($my_address->address)),
     );
     my $tx = QBitcoin::Transaction->new(
         in            => [ map { txo => $_, close_script => my_close_script($_->open_script) }, @my_txo ],
