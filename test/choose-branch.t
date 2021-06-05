@@ -8,16 +8,21 @@ use lib "$Bin/../lib";
 
 use Test::More;
 use Test::MockModule;
+use QBitcoin::Const;
+use QBitcoin::Config;
 use QBitcoin::Protocol;
 use QBitcoin::Block;
 
-$ENV{LOG_NULL} //= 1;
+#$config->{verbose} = 1;
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_line', sub { 1 });
 
 my $block_module = Test::MockModule->new('QBitcoin::Block');
 $block_module->mock('self_weight', \&mock_self_weight);
+$block_module->mock('find', sub {});
+my $block_hash;
+$block_module->mock('calculate_hash', sub { $block_hash });
 
 sub mock_self_weight {
     my $self = shift;
@@ -32,6 +37,7 @@ pipe my $rh, my $wh;
 my $base_pid = fork();
 close($base_pid ? $wh : $rh);
 
+# height, hash, prev_hash, weight [, self_weight]
 send_blocks([
     [ 0, "a1", undef, 100 ],
     [ 1, "a2", "a1",  200 ],
@@ -90,6 +96,7 @@ sub send_blocks {
     }
     elsif (defined($pid)) {
         # child
+        my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED);
         foreach my $block_data (@$blocks) {
             my $block = QBitcoin::Block->new(
                 height        => $block_data->[0],
@@ -98,9 +105,11 @@ sub send_blocks {
                 weight        => $block_data->[3],
                 self_weight   => $block_data->[4],
                 transactions  => [],
-                received_from => $peer,
             );
-            $block->receive();
+            $peer->has_weight = $block->weight;
+            my $block_data = $block->serialize;
+            $block_hash = $block->hash;
+            $peer->process_block($block_data);
         }
         my $height = QBitcoin::Block->blockchain_height;
         my $weight = QBitcoin::Block->best_weight;
