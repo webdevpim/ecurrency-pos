@@ -4,7 +4,7 @@ use strict;
 
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(check_sig hash160 checksum32 pubkey_by_privkey signature pk_serialize pk_import);
+our @EXPORT_OK = qw(check_sig hash160 checksum32 pubkey_by_privkey signature pk_serialize pk_import signature);
 
 use Digest::SHA qw(sha256);
 use Crypt::Digest::RIPEMD160 qw(ripemd160);

@@ -10,7 +10,7 @@ use QBitcoin::Config;
 use QBitcoin::Crypto qw(hash160 checksum32);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(wallet_import_format wif_to_pk address_by_public_key validate_address pubhash_by_address);
+our @EXPORT_OK = qw(wallet_import_format wif_to_pk address_by_pubkey validate_address pubhash_by_address);
 
 use constant MAGIC              => "1234";
 use constant MAGIC_TESTNET      => "1235";
@@ -20,18 +20,18 @@ use constant ADDRESS_RE         => qr/.*/; # TODO
 use constant ADDRESS_TESTNET_RE => qr/.*/; # TODO
 
 # https://en.bitcoin.it/wiki/Wallet_import_format
-sub address_version {
+sub address_version() {
     return $config->{testnet} ? "\xEF" : "\x80";
 }
 
-sub wallet_import_format {
+sub wallet_import_format($) {
     my ($private_key) = @_;
 
     my $data = address_version . $private_key;
     return encode_base58('0x' . unpack('H*', $data . checksum32($data)), 'bitcoin');
 }
 
-sub wif_to_pk {
+sub wif_to_pk($) {
     my ($private_wif) = shift;
     my $gmpz_obj = decode_base58($private_wif, 'bitcoin');
     my $bin = Math::GMPz::Rmpz_export(1, 1, 0, 0, $gmpz_obj);
@@ -45,18 +45,18 @@ sub wif_to_pk {
 
 # qbitcoin part, incompatible with bitcoin
 
-sub magic {
+sub magic() {
     return $config->{testnet} ? MAGIC_TESTNET : MAGIC;
 }
 
-sub address_by_public_key {
+sub address_by_pubkey($) {
     my ($public_key) = shift;
 
     my $data = magic . hash160($public_key);
     return encode_base58("0x" . unpack("H*", $data . checksum32($data)), "bitcoin");
 }
 
-sub validate_address {
+sub validate_address($) {
     my ($address) = @_;
 
     return 0 unless $address;
@@ -73,7 +73,7 @@ sub validate_address {
     return substr($bin, 0, MAGIC_LEN) eq magic;
 }
 
-sub pubhash_by_address {
+sub pubhash_by_address($) {
     my ($address) = shift;
 
     my $gmpz_obj = decode_base58($address, 'bitcoin');

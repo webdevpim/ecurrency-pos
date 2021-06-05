@@ -7,6 +7,7 @@ use QBitcoin::Config;
 use QBitcoin::Accessors qw(mk_accessors new);
 use QBitcoin::ORM qw(find :types);
 use QBitcoin::Crypto qw(hash160 pubkey_by_privkey pk_import);
+use QBitcoin::Address qw(address_by_pubkey);
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(my_address);
@@ -46,7 +47,22 @@ sub pubkey_hash {
 
 sub address {
     my $self = shift;
-    return $self->{address} //= address_by_public_key($self->pubkey);
+    return $self->{address} //= address_by_pubkey($self->pubkey);
+}
+
+sub get_by_script {
+    my $class = shift;
+    my ($script) = @_;
+    state $my_scripts;
+    if (!$my_scripts) {
+        $my_scripts = {};
+        foreach my $address (my_address()) {
+            foreach my $script (QBitcoin::OpenScript->script_for_address($address->address)) {
+                $my_scripts->{$script} = $address;
+            }
+        }
+    }
+    return $my_scripts->{$script};
 }
 
 1;

@@ -3,10 +3,10 @@ use warnings;
 use strict;
 
 use QBitcoin::Crypto qw(check_sig hash160);
-use QBitcoin::Script::OpCodes;
+use QBitcoin::Script::OpCodes qw(OPCODES :OPCODES);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(script_eval);
+our @EXPORT_OK = qw(script_eval pushdata);
 
 # bitcoin script
 # https://en.bitcoin.it/wiki/Script
@@ -20,9 +20,14 @@ our @EXPORT_OK = qw(script_eval);
 # https://developer.bitcoin.org/devguide/transactions.html
 # https://academy.bit2me.com/en/what-is-bitcoin-script/# (?)
 
+use constant {
+    FALSE => "\x00",
+    TRUE  => "\x01",
+};
+
 my @OP_CMD;
 
-sub opcode_to_cmd {
+sub opcode_to_cmd($) {
     my ($opcode) = @_;
     $opcode =~ s/^OP_//;
     return "cmd_" . lc($opcode);
@@ -42,16 +47,14 @@ foreach my $opcode (0x01 .. 0x4b) {
     $OP_CMD[$opcode] = sub { cmd_pushdatan($opcode, @_) };
 }
 
-sub unimplemented {
+sub unimplemented($$) {
     my ($opcode, $state) = @_;
     Infof("Unimplemented opcode 0x%02x", ord($opcode));
     return 0;
 }
 
-sub popint {
-    my ($stack) = @_;
-    @$stack or return undef;
-    my $data = pop @$stack;
+sub unpack_int($) {
+    my ($data) = @_;
     my $l = length($data);
     if ($l == 1) {
         my $n = unpack("C", $data);
@@ -74,23 +77,23 @@ sub popint {
     }
 }
 
-sub pushint {
-    my ($stack, $n) = @_;
+sub pack_int($) {
+    my ($n) = @_;
     if ($n >= 0) {
         if ($n < 0x80) {
-            push @$stack, pack("C", $n);
+            return pack("C", $n);
         }
         elsif ($n < 0x8000) {
-            push @$stack, pack("v", $n);
+            return pack("v", $n);
         }
         elsif ($n < 0x800000) {
-            push @$stack, pack("vC", $n >> 8, $n & 0xff);
+            return pack("vC", $n >> 8, $n & 0xff);
         }
         elsif ($n < 0x80000000) {
-            push @$stack, pack("V", $n);
+            return pack("V", $n);
         }
         elsif ($n < 0x80000000 << 8) {
-            push @$stack, pack("VC", $n >> 8, $n & 0xff);
+            return pack("VC", $n >> 8, $n & 0xff);
         }
         else {
             die "Error in script eval (too large int for push to stack)\n";
@@ -98,32 +101,51 @@ sub pushint {
     }
     else {
         if ($n > -0x80) {
-            push @$stack, pack("C", 0x80 | -$n);
+            return pack("C", 0x80 | -$n);
         }
         elsif ($n > -0x8000) {
-            push @$stack, pack("v", 0x8000 | -$n);
+            return pack("v", 0x8000 | -$n);
         }
         elsif ($n > -0x800000) {
-            push @$stack, pack("vC", 0x8000 | (-$n >> 8), -$n & 0xff);
+            return pack("vC", 0x8000 | (-$n >> 8), -$n & 0xff);
         }
         elsif ($n > -0x80000000) {
-            push @$stack, pack("V", 0x80000000 | -$n);
+            return pack("V", 0x80000000 | -$n);
         }
         elsif ($n > -(0x80000000 << 8)) {
-            push @$stack, pack("VC", 0x80000000 | (-$n >> 8), -$n & 0xff);
+            return pack("VC", 0x80000000 | (-$n >> 8), -$n & 0xff);
         }
         else {
-            die "Error in script eval (too large int for push to stack)\n";
+            die "Error in script eval (too large int)\n";
         }
     }
 }
 
-sub is_true {
+sub pushdata($) {
+    my ($data) = @_;
+    my $cmd;
+    my $length = length($data);
+    if ($length <= 0x4b) {
+        $cmd = pack("C", $length);
+    }
+    elsif ($length <= 0xff) {
+        $cmd = OP_PUSHDATA1 . pack("C", $length);
+    }
+    elsif ($length <= 0xffff) {
+        $cmd = OP_PUSHDATA2 . pack("v", $length);
+    }
+    else {
+        die "Too long data: $length bytes\n";
+    }
+    return $cmd . $data;
+}
+
+sub is_true($) {
     my ($data) = @_;
     return $data !~ /^\x80?\x00*\Z/;
 }
 
-sub cmd_pushdatan {
+sub cmd_pushdatan($$) {
     my ($bytes, $state) = @_;
     my ($script, $stack, $ifstack) = @$state;
     length($state->[0]) >= $bytes
@@ -134,7 +156,7 @@ sub cmd_pushdatan {
     return undef;
 }
 
-sub cmd_dup {
+sub cmd_dup($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
@@ -142,39 +164,39 @@ sub cmd_dup {
     return undef;
 }
 
-sub cmd_add {
+sub cmd_add($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
-    my $int1 = popint($stack) // return 0;
-    my $int2 = popint($stack) // return 0;
-    pushint($stack, $int1+$int2);
+    my $int1 = unpack_int(pop @$stack) // return 0;
+    my $int2 = unpack_int(pop @$stack) // return 0;
+    push @$stack, pack_int($int1+$int2);
     return undef;
 }
 
-sub cmd_sub {
+sub cmd_sub($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
-    my $int1 = popint($stack) // return 0;
-    my $int2 = popint($stack) // return 0;
-    pushint($stack, $int1-$int2);
+    my $int1 = unpack_int(pop @$stack) // return 0;
+    my $int2 = unpack_int(pop @$stack) // return 0;
+    push @$stack, pack_int($int1-$int2);
     return undef;
 }
 
-sub cmd_return {
+sub cmd_return($) {
     # return if $state->[2]->[0]; # ifstack -- "return" cannot be inside "if" condition
     return 0;
 }
 
-sub cmd_verify {
+sub cmd_verify($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
     return @$stack && is_true(pop @$stack) ? undef : 0;
 }
 
-sub cmd_equial {
+sub cmd_equial($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
@@ -184,15 +206,15 @@ sub cmd_equial {
     return undef;
 }
 
-sub cmd_false {
+sub cmd_false($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
-    push @$stack, "\x00";
+    push @$stack, FALSE;
     return undef;
 }
 
-sub cmd_equialverify {
+sub cmd_equialverify($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
@@ -202,7 +224,7 @@ sub cmd_equialverify {
     return $data1 eq $data2 ? undef : 0;
 }
 
-sub cmd_hash160 {
+sub cmd_hash160($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
@@ -211,22 +233,22 @@ sub cmd_hash160 {
     return undef;
 }
 
-sub cmd_checksig {
+sub cmd_checksig($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
     @$stack >= 2 or return 0;
     my $signature = pop @$stack;
     my $pubkey = pop @$stack;
-    push @$stack, check_sig($state->[3], $signature, $pubkey) ? "\x01" : "\x00";
+    push @$stack, check_sig($state->[3], $signature, $pubkey) ? TRUE : FALSE;
 }
 
-sub script_eval {
+sub script_eval($$) {
     my ($script, $tx_data) = @_;
     my $state = [$script, [], [], $tx_data]; # script, stack, if-stack, tx-data
     while (length($state->[0])) {
         my $cmd_code = substr($state->[0], 0, 1, "");
-        if (my $cmd_func = $OP_CMD[$cmd_code]) {
+        if (my $cmd_func = $OP_CMD[ord($cmd_code)]) {
             my $res = $cmd_func->($state);
             return $res if defined $res;
         }
@@ -235,7 +257,7 @@ sub script_eval {
         }
     }
     my $stack = $state->[1];
-    return (@$stack == 1 && $stack->[0] eq "\x01");
+    return (@$stack == 1 && $stack->[0] eq TRUE);
 }
 
 1;

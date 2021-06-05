@@ -248,8 +248,8 @@ sub spent_list {
 
 sub check_script {
     my $self = shift;
-    my ($close_script) = @_;
-    return QBitcoin::OpenScript->check_input($self->open_script, $close_script);
+    my ($close_script, $sign_data) = @_;
+    return QBitcoin::OpenScript->check_input($self->open_script, $close_script, $sign_data);
 }
 
 sub tx_in_str {

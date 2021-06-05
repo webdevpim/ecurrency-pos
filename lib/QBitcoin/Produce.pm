@@ -66,7 +66,7 @@ sub _produce_my_utxo {
         fee           => 0,
         received_time => $time,
     );
-    QBitcoin::Generate::sign_my_transaction($tx);
+    $tx->sign_transaction();
     QBitcoin::TXO->save_all($tx->hash, $tx->out);
     $tx->size = length $tx->serialize;
     if ($tx->validate() != 0) {
@@ -91,10 +91,10 @@ sub _produce_tx {
     $_->save foreach grep { !$_->is_cached } @txo;
     my $amount = sum map { $_->value } @txo;
     my $fee = int($amount * $fee_part);
-    my $address = $txo[0]->open_script; # fake; out to the address from first input txo
+    my $address = QBitcoin::MyAddress->get_by_script($txo[0]->open_script);
     my $out = QBitcoin::TXO->new_txo(
         value       => $amount - $fee,
-        open_script => QBitcoin::OpenScript->script_for_address($address, 1),
+        open_script => QBitcoin::OpenScript->script_for_address($address->address),
     );
     my $tx = QBitcoin::Transaction->new(
         in            => [ map { txo => $_, close_script => $_->open_script }, @txo ],
@@ -102,7 +102,7 @@ sub _produce_tx {
         fee           => $fee,
         received_time => time(),
     );
-    QBitcoin::Generate::sign_my_transaction($tx); # fake; it's not my transaction
+    $tx->sign_transaction; # fake; it's not my transaction
     QBitcoin::TXO->save_all($tx->hash, $tx->out);
     $tx->size = length $tx->serialize;
     $_->del_my_utxo() foreach grep { $_->is_my } @txo;

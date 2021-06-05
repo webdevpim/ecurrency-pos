@@ -65,12 +65,12 @@ sub make_stake_tx {
         open_script => scalar(QBitcoin::OpenScript->script_for_address($my_address->address)),
     );
     my $tx = QBitcoin::Transaction->new(
-        in            => [ map { txo => $_, close_script => my_close_script($_->open_script) }, @my_txo ],
+        in            => [ map +{ txo => $_ }, @my_txo ],
         out           => [ $out ],
         fee           => -$fee,
         received_time => time(),
     );
-    sign_my_transaction($tx);
+    $tx->sign_transaction();
     $tx->size = length $tx->serialize;
     return $tx;
 }

@@ -34,8 +34,7 @@ sub my_utxo {
 
 sub is_my {
     my $self = shift;
-    state $my_scripts = { map { $_ => 1 } map { QBitcoin::OpenScript->script_for_address($_->address) } my_address() };
-    return $my_scripts->{$self->open_script};
+    return !!QBitcoin::MyAddress->get_by_script($self->open_script);
 }
 
 1;

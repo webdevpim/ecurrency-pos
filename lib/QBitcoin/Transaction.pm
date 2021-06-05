@@ -186,7 +186,6 @@ sub hash_str {
 sub serialize {
     my $self = shift;
     # TODO: pack as binary data
-    # TODO: add transaction signature
     return $JSON->encode({
         in  => [ map { serialize_input($_)  } @{$self->in}  ],
         out => [ map { serialize_output($_) } @{$self->out} ],
@@ -382,6 +381,7 @@ sub validate {
     my @stored_in;
     my $input_value = 0;
     my %inputs;
+    my $sign_data = $self->sign_data;
     foreach my $in (@{$self->in}) {
         if ($inputs{$in->{txo}->key}++) {
             Warningf("Input %s:%u included in transaction %s twice",
@@ -389,7 +389,7 @@ sub validate {
             return -1;
         }
         $input_value += $in->{txo}->value;
-        if ($in->{txo}->check_script($in->{close_script}) != 0) {
+        if ($in->{txo}->check_script($in->{close_script}, $sign_data) != 0) {
             Warningf("Unmatched close script for input %s:%u in transaction %s",
                 $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
             return -1;
@@ -399,7 +399,6 @@ sub validate {
         Warning("Zero input in transaction %s", $self->hash_str);
         return -1;
     }
-    # TODO: Check that transaction is signed correctly
     return 0;
 }
 
