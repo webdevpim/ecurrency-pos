@@ -14,7 +14,7 @@ our @EXPORT_OK = qw(my_address);
 use constant TABLE => 'my_address';
 
 use constant FIELDS => {
-    address     => STRING,
+    # address     => STRING,
     private_key => STRING,
     pubkey_crc  => STRING,
 };
@@ -42,6 +42,11 @@ sub pubkey {
 sub pubkey_hash {
     my $self = shift;
     return $self->{pubkey_hash} //= hash160($self->pubkey);
+}
+
+sub address {
+    my $self = shift;
+    return $self->{address} //= address_by_public_key($self->pubkey);
 }
 
 1;
