@@ -214,6 +214,14 @@ sub cmd_false($) {
     return undef;
 }
 
+sub cmd_1($) {
+    my ($state) = @_;
+    return if $state->[2]->[0]; # ifstack
+    my $stack = $state->[1];
+    push @$stack, TRUE;
+    return undef;
+}
+
 sub cmd_equialverify($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack

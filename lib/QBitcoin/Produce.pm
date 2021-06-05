@@ -12,6 +12,7 @@ use QBitcoin::Log;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
 use QBitcoin::OpenScript;
+use QBitcoin::Script::OpCodes qw(:OPCODES);
 use QBitcoin::MyAddress qw(my_address);
 
 use constant {
@@ -85,24 +86,34 @@ sub _produce_tx {
     my @txo = QBitcoin::TXO->find(tx_out => undef, -limit => 100);
     # Exclude loaded txo to avoid double-spend
     # b/c its may be included as input into another mempool transaction
-    @txo = shuffle grep { !$_->is_cached } @txo
-        or return;
+    @txo = grep { !$_->is_cached } @txo;
+    # Get only "open" txo
+    @txo = grep { $_->open_script eq OP_VERIFY } @txo;
+
+    @txo = shuffle @txo;
     @txo = splice(@txo, 0, 2);
     $_->save foreach grep { !$_->is_cached } @txo;
     my $amount = sum map { $_->value } @txo;
+    if (!@txo) {
+        # No txo - ok, produce coinbase
+        state $last_time = 0;
+        my $time = time();
+        my $age = int($time - GENESIS_TIME);
+        $last_time = $last_time < $age ? $age : $last_time+1;
+        $amount = $last_time;
+    }
     my $fee = int($amount * $fee_part);
-    my $address = QBitcoin::MyAddress->get_by_script($txo[0]->open_script);
+    my $open_script = OP_VERIFY;
     my $out = QBitcoin::TXO->new_txo(
         value       => $amount - $fee,
-        open_script => QBitcoin::OpenScript->script_for_address($address->address),
+        open_script => $open_script,
     );
     my $tx = QBitcoin::Transaction->new(
-        in            => [ map { txo => $_, close_script => $_->open_script }, @txo ],
+        in            => [ map { txo => $_, close_script => OP_1 . OP_1 }, @txo ],
         out           => [ $out ],
         fee           => $fee,
         received_time => time(),
     );
-    $tx->sign_transaction; # fake; it's not my transaction
     QBitcoin::TXO->save_all($tx->hash, $tx->out);
     $tx->size = length $tx->serialize;
     $_->del_my_utxo() foreach grep { $_->is_my } @txo;
