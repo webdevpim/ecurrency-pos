@@ -2,6 +2,7 @@ package QBitcoin::Script;
 use warnings;
 use strict;
 
+use QBitcoin::Log;
 use QBitcoin::Crypto qw(check_sig hash160);
 use QBitcoin::Script::OpCodes qw(OPCODES :OPCODES);
 

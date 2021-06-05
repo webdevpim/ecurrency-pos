@@ -7,7 +7,7 @@ use QBitcoin::Config;
 use QBitcoin::Accessors qw(mk_accessors new);
 use QBitcoin::ORM qw(find :types);
 use QBitcoin::Crypto qw(hash160 pubkey_by_privkey pk_import);
-use QBitcoin::Address qw(address_by_pubkey);
+use QBitcoin::Address qw(address_by_pubkey wif_to_pk);
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(my_address);

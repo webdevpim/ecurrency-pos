@@ -34,8 +34,10 @@ sub pk_serialize {
 }
 
 sub pk_import {
-    my ($pk) = @_;
-    return Crypt::PK::ECC->import_key_raw($pk, CURVE);
+    my ($private_key) = @_;
+    my $pk = Crypt::PK::ECC->new;
+    $pk->import_key_raw($private_key, CURVE);
+    return $pk;
 }
 
 sub pubkey_by_privkey {
