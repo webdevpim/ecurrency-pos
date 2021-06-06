@@ -117,12 +117,16 @@ sub _produce_tx {
         @txo ? () : ( coins_upgraded => $amount ),
     );
     $tx->hash = QBitcoin::Transaction::calculate_hash($tx->serialize);
+    if (QBitcoin::Transaction->get_by_hash($tx->hash)) {
+        Infof("Just produced transaction %s already exists", $tx->hash_str);
+        return;
+    }
     QBitcoin::TXO->save_all($tx->hash, $tx->out);
     $tx->size = length $tx->serialize;
     $_->del_my_utxo() foreach grep { $_->is_my } @txo;
     if ($tx->validate() != 0) {
         Errf("Produced incorrect transaction");
-        return;
+        die "Produced incorrect transaction\n";
     }
     $tx->receive();
     Noticef("Produced transaction %s with fee %i", $tx->hash_str, $tx->fee);
