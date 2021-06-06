@@ -75,6 +75,7 @@ sub receive {
         # Incorrect block
         # NB! Incorrect hash is not this case, hash must be checked earlier
         # Drop descendants, it's not possible to receive correct block with the same hash
+        $self->free_block();
         if ($self->received_from) {
             $self->received_from->decrease_reputation();
             $self->received_from->send_line("abort invalid_block");
@@ -87,6 +88,7 @@ sub receive {
             if (($self->received_from->has_weight // -1) <= $best_block[$HEIGHT]->weight) {
                 Debugf("Received block weight %u not more than our best branch weight %u, ignore",
                     $self->weight, $best_block[$HEIGHT]->weight);
+                $self->free_block();
                 return 0;
             }
         }
@@ -345,7 +347,7 @@ sub free_block {
     $block->prev_block(undef);
     $block->next_block(undef);
     delete $block_pool[$block->height]->{$block->hash};
-    delete $prev_block[$block->height]->{$block->prev_hash}->{$block->hash};
+    delete $prev_block[$block->height]->{$block->prev_hash}->{$block->hash} if $block->prev_hash;
     foreach my $tx (@{$block->transactions}) {
         $tx->del_from_block($block);
     }
