@@ -88,7 +88,7 @@ sub _produce_tx {
     @txo = shuffle grep { !$_->is_cached } @txo
         or return;
     @txo = splice(@txo, 0, 2);
-    $_->save foreach @txo;
+    $_->save foreach grep { !$_->is_cached } @txo;
     my $amount = sum map { $_->value } @txo;
     my $fee = int($amount * $fee_part);
     my $address = $txo[0]->open_script; # fake; out to the address from first input txo
