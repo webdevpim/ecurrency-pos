@@ -85,7 +85,7 @@ sub receive {
 
     if (COMPACT_MEMORY) {
         if (defined($HEIGHT) && $best_block[$HEIGHT] && $self->weight < $best_block[$HEIGHT]->weight) {
-            if (($self->received_from->has_weight // -1) <= $best_block[$HEIGHT]->weight) {
+            if (!$self->received_from || ($self->received_from->has_weight // -1) <= $best_block[$HEIGHT]->weight) {
                 Debugf("Received block weight %u not more than our best branch weight %u, ignore",
                     $self->weight, $best_block[$HEIGHT]->weight);
                 $self->free_block();
