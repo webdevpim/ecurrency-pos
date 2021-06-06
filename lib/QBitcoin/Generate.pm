@@ -28,19 +28,6 @@ sub load_utxo {
     Infof("My UTXO loaded, total %u", scalar QBitcoin::TXO->my_utxo());
 }
 
-sub my_close_script {
-    my $class = shift;
-    my ($open_script) = @_;
-    my ($my_address) = my_address();
-    # TODO
-    return scalar $my_address->address;
-}
-
-sub sign_my_transaction {
-    my $tx = shift;
-    # TODO
-}
-
 sub generated_height {
     my $class = shift;
     return QBitcoin::Generate::Control->generated_height;
