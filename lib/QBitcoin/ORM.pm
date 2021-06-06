@@ -74,8 +74,14 @@ sub find {
         $condition .= " AND" if $condition;
         if (ref $value eq 'ARRAY') {
             # "IN()" is sql syntax error, "IN(NULL)" matches nothing
-            $condition .= " $key IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
-            push @values, @$value;
+            if ($type == BINARY && DEBUG_ORM) {
+                $condition .= " $key IN (" . (@$value ? join(',', ('UNHEX(?)')x@$value) : "NULL") . ")";
+                push @values, map unpack("H*", $_), @$value;
+            }
+            else {
+                $condition .= " $key IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
+                push @values, @$value;
+            }
         }
         elsif (ref $value eq 'HASH') {
             my $first = 1;
@@ -86,8 +92,14 @@ sub find {
                     $condition .= "$key $op $$v ";
                 }
                 elsif (ref $v eq 'ARRAY') { # key => { not => [ 'value1', 'value2 ] }
-                    $condition .= " $key $op IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
-                    push @values, @$value;
+                    if ($type == BINARY && DEBUG_ORM) {
+                        $condition .= " $key $op IN (" . (@$value ? join(',', ('UNHEX(?)')x@$value) : "NULL") . ")";
+                        push @values, map unpack("H*", $_), @$value;
+                    }
+                    else {
+                        $condition .= " $key $op IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
+                        push @values, @$value;
+                    }
                 }
                 elsif (ref $v) {
                     die "Incorrect search value type " . ref($v) . " key $key\n";
@@ -110,7 +122,7 @@ sub find {
                 $condition .= " $key = FROM_UNIXTIME(?)";
                 push @values, $value;
             }
-            if ($type == BINARY) {
+            if ($type == BINARY && DEBUG_ORM) {
                 $condition .= " $key = UNHEX(?)";
                 push @values, unpack("H*", $value);
             }
@@ -195,7 +207,7 @@ sub replace {
             $sql .= "FROM_UNIXTIME(?)";
             push(@values, $self->$key);
         }
-        elsif ($type == BINARY) {
+        elsif ($type == BINARY && DEBUG_ORM) {
             $sql .= "UNHEX(?)";
             push(@values, unpack("H*", $self->$key));
         }
@@ -233,8 +245,18 @@ sub update {
             $sql .= "$key = $$value";
         }
         else {
-            $sql .= $self->FIELDS->{$key} == TIMESTAMP ? "$key = FROM_UNIXTIME(?)" : "$key = ?";
-            push @values, $args->{$key};
+            if ($self->FIELDS->{$key} == TIMESTAMP) {
+                $sql .= "$key = FROM_UNIXTIME(?)";
+                push @values, $args->{$key};
+            }
+            elsif ($self->FIELDS->{$key} == BINARY && DEBUG_ORM) {
+                $sql .= "$key = UNHEX(?)";
+                push @values, unpack("H*", $args->{$key});
+            }
+            else {
+                $sql .= "$key = ?";
+                push @values, $args->{$key};
+            }
         }
     }
     my @pk_values;
