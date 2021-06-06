@@ -143,7 +143,7 @@ sub pushdata($) {
 
 sub is_true($) {
     my ($data) = @_;
-    return $data !~ /^\x80?\x00*\Z/;
+    return $data !~ /^\x80?\x00*\z/;
 }
 
 sub cmd_pushdatan($$) {
