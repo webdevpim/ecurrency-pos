@@ -189,6 +189,7 @@ sub serialize {
     return $JSON->encode({
         in  => [ map { serialize_input($_)  } @{$self->in}  ],
         out => [ map { serialize_output($_) } @{$self->out} ],
+        $self->coins_upgraded ? ( up  => { value => $self->coins_upgraded+0 } ) : (),
     }) . "\n";
 }
 
@@ -226,6 +227,14 @@ sub deserialize {
         Warningf("Incorrect transaction data: %s", $@);
         return undef;
     }
+    my $up;
+    if (exists $decoded->{up}) {
+        unless (ref($decoded->{up}) eq 'HASH' && $decoded->{up}->{value} && !ref($decoded->{up}->{value}) && $decoded->{up}->{value} =~ /^[1-9][0-9]*\z/) {
+            Warning("Incorrect transaction data");
+            return undef;
+        }
+        $up = $decoded->{up};
+    }
     my $hash = calculate_hash($tx_data);
     return "" if $PENDING_TX_INPUT{$hash};
     return "" if $class->get_by_hash($hash);
@@ -258,6 +267,7 @@ sub deserialize {
         hash          => $hash,
         size          => length($tx_data),
         received_time => time(),
+        $up ? ( coins_upgraded => $up->{value}+0 ) : (),
     );
     if (calculate_hash($self->serialize) ne $hash) {
         Warning("Incorrect serialized transaction has different hash");
@@ -357,7 +367,7 @@ sub validate_coinbase {
     # TODO: Get and validate information about btc upgrade from $self->data
     # Each upgrade should correspond fixed and deterministic tx hash for qbitcoin
     my $coins = $self->out->[0]->value;
-    $self->coins_upgraded = $coins; # for calculate fee
+    $self->coins_upgraded //= $coins; # for calculate fee
     return 0;
 }
 
@@ -427,6 +437,10 @@ sub pre_load {
         $attr->{in}  = \@inputs;
         $attr->{out} = \@outputs;
         $attr->{received_time} = time_by_height($attr->{block_height}); # for possible unconfirm the transaction
+        # TODO: load coinbase (coins upgrade) info from separate table
+        if (!@inputs) {
+            $attr->{coins_upgraded} = sum0(map { $_->value } @outputs) + $attr->{fee};
+        }
     }
     return $attr;
 }
