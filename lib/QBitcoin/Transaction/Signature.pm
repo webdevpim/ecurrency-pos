@@ -47,7 +47,8 @@ sub sign_transaction {
 sub make_close_script {
     my $self = shift;
     my ($address) = @_;
-    return pushdata(signature($self->sign_data, $address->privkey)) . pushdata($address->pubkey);
+    my $script = pushdata(signature($self->sign_data, $address->privkey)) . pushdata($address->pubkey);
+    return $script;
 }
 
 1;

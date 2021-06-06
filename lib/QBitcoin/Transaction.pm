@@ -197,7 +197,7 @@ sub serialize_input {
     return {
         tx_out       => unpack("H*", $in->{txo}->tx_in),
         num          => $in->{txo}->num+0,
-        close_script => unpack("H*", $in->{close_script}),
+        close_script => unpack("H*", $in->{close_script} // die "Undefined close_script during serialize_input"),
     };
 }
 
