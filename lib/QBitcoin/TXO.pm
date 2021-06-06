@@ -154,7 +154,7 @@ sub store_spend {
     my ($tx) = @_;
     my $sql = "UPDATE " . TABLE . " AS t JOIN " . TRANSACTION_TABLE . " AS tx_in ON (t.tx_in = tx_in.id)";
     $sql .= " SET tx_out = ?, close_script = ? WHERE tx_in.hash = ? AND num = ?";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,'%s',X'%s',%u]", $sql, $tx->id, $self->close_script, unpack("H*", $self->tx_in), $self->num);
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,X'%s',X'%s',%u]", $sql, $tx->id, unpack("H*", $self->close_script), unpack("H*", $self->tx_in), $self->num);
     my $res = dbh->do($sql, undef, $tx->id, $self->close_script, $self->tx_in, $self->num);
     $res == 1
         or die "Can't store txo " . $self->tx_in_str . ":" . $self->num . " as spend: " . (dbh->errstr // "no error") . "\n";
