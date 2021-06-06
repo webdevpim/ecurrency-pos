@@ -14,7 +14,8 @@ use constant CURVE => 'secp256k1';
 
 sub check_sig {
     my ($data, $signature, $pubkey) = @_;
-    my $pub = Crypt::PK::ECC->import_key_raw($pubkey, CURVE);
+    my $pub = Crypt::PK::ECC->new;
+    $pub->import_key_raw($pubkey, CURVE);
     return $pub->verify_message($signature, $data);
 }
 

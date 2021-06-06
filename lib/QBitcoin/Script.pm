@@ -41,7 +41,7 @@ foreach my $opcode (keys %{&OPCODES}) {
 }
 foreach my $opcode (keys %{&OPCODES}) {
     if (!__PACKAGE__->can(opcode_to_cmd($opcode))) {
-        $OP_CMD[OPCODES->{$opcode}] //= sub { unimplemented($opcode, $@) };
+        $OP_CMD[OPCODES->{$opcode}] //= sub { unimplemented(OPCODES->{$opcode}, @_) };
     }
 }
 foreach my $opcode (0x01 .. 0x4b) {
@@ -50,7 +50,7 @@ foreach my $opcode (0x01 .. 0x4b) {
 
 sub unimplemented($$) {
     my ($opcode, $state) = @_;
-    Infof("Unimplemented opcode 0x%02x", ord($opcode));
+    Infof("Unimplemented opcode 0x%02x", $opcode);
     return 0;
 }
 
@@ -161,7 +161,7 @@ sub cmd_dup($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
-    push @$stack, $stack->[0];
+    push @$stack, $stack->[-1];
     return undef;
 }
 
@@ -197,13 +197,13 @@ sub cmd_verify($) {
     return @$stack && is_true(pop @$stack) ? undef : 0;
 }
 
-sub cmd_equial($) {
+sub cmd_equal($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
     @$stack >= 2 or return 0;
-    $stack->[1] = $stack->[1] eq $stack->[0];
-    pop @$stack;
+    my $data = pop @$stack;
+    $stack->[-1] = $stack->[-1] eq $data;
     return undef;
 }
 
@@ -223,7 +223,7 @@ sub cmd_1($) {
     return undef;
 }
 
-sub cmd_equialverify($) {
+sub cmd_equalverify($) {
     my ($state) = @_;
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
@@ -238,7 +238,7 @@ sub cmd_hash160($) {
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
     @$stack >= 1 or return 0;
-    $stack->[0] = hash160($stack->[0]);
+    $stack->[-1] = hash160($stack->[-1]);
     return undef;
 }
 
@@ -247,8 +247,8 @@ sub cmd_checksig($) {
     return if $state->[2]->[0]; # ifstack
     my $stack = $state->[1];
     @$stack >= 2 or return 0;
-    my $signature = pop @$stack;
     my $pubkey = pop @$stack;
+    my $signature = pop @$stack;
     push @$stack, check_sig($state->[3], $signature, $pubkey) ? TRUE : FALSE;
 }
 

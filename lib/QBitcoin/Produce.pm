@@ -109,11 +109,12 @@ sub _produce_tx {
         open_script => $open_script,
     );
     my $tx = QBitcoin::Transaction->new(
-        in            => [ map { txo => $_, close_script => OP_1 . OP_1 }, @txo ],
+        in            => [ map +{ txo => $_, close_script => OP_1 . OP_1 }, @txo ],
         out           => [ $out ],
         fee           => $fee,
         received_time => time(),
     );
+    $tx->hash = QBitcoin::Transaction::calculate_hash($tx->serialize);
     QBitcoin::TXO->save_all($tx->hash, $tx->out);
     $tx->size = length $tx->serialize;
     $_->del_my_utxo() foreach grep { $_->is_my } @txo;

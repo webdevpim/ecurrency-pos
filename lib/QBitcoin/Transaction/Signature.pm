@@ -27,7 +27,7 @@ sub sign_data {
         outputs => [ map { value => $_->value+0, script => unpack("H*", $_->open_script) }, @{$self->out} ],
     };
     Debugf("sign data: %s", $JSON->encode($data));
-    return $JSON->encode($data);
+    return $self->{sign_data} = $JSON->encode($data);
 }
 
 sub sign_transaction {
@@ -41,6 +41,7 @@ sub sign_transaction {
                 $in->{txo}->tx_in_str, $in->{txo}->num, unpack("H*", $in->{txo}->open_script));
         }
     }
+    $self->hash //= QBitcoin::Transaction::calculate_hash($self->serialize);
 }
 
 sub make_close_script {

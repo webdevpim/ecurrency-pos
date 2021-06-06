@@ -437,7 +437,6 @@ sub new {
     # tx inputs are not sorted in the database, so sort them here for get deterministic transaction hash
     $attr->{in} = [ sort { _cmp_inputs($a, $b) } @{$attr->{in}} ];
     my $self = bless $attr, $class;
-    $self->hash //= calculate_hash($self->serialize);
     return $self;
 }
 
