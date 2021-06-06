@@ -1,6 +1,7 @@
 package QBitcoin::TXO::My;
 use warnings;
 use strict;
+use feature 'state';
 
 use Role::Tiny;
 
@@ -33,12 +34,7 @@ sub my_utxo {
 
 sub is_my {
     my $self = shift;
-    foreach my $my_address (my_address()) {
-        foreach my $script (QBitcoin::OpenScript->script_for_address($my_address)) {
-            return 1 if $self->open_script eq $script;
-        }
-    }
-    return 0;
+    return !!QBitcoin::MyAddress->get_by_script($self->open_script);
 }
 
 1;

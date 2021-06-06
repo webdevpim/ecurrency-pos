@@ -4,6 +4,9 @@ use strict;
 
 use QBitcoin::Accessors qw(new mk_accessors);
 use QBitcoin::ORM qw(find create :types);
+use QBitcoin::Address qw(pubhash_by_address);
+use QBitcoin::Script qw(script_eval pushdata);
+use QBitcoin::Script::OpCodes qw(:OPCODES);
 
 use constant TABLE => 'open_script';
 use constant FIELDS => {
@@ -23,15 +26,14 @@ sub store {
 sub script_for_address {
     my $class = shift;
     my ($address) = @_;
-    # TODO: implement this method
-    return $address;
+    return OP_DUP . OP_HASH160 . pushdata(pubhash_by_address($address)) . OP_EQUALVERIFY . OP_CHECKSIG;
 }
 
 sub check_input {
     my ($class) = shift;
-    my ($open_script, $close_script) = @_;
-    # TODO: implement this method
-    return $open_script eq $close_script ? 0 : -1;
+    my ($open_script, $close_script, $sign_data) = @_;
+    my $res = script_eval($close_script . $open_script, $sign_data);
+    return $res ? 0 : -1; # if script_eval return true then it's ok (0)
 }
 
 1;

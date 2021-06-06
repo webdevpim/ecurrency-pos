@@ -14,6 +14,9 @@ use QBitcoin::ORM qw(find replace delete :types);
 use QBitcoin::TXO;
 use QBitcoin::Peers;
 
+use Role::Tiny::With;
+with 'QBitcoin::Transaction::Signature';
+
 use constant FIELDS => {
     id           => NUMERIC, # db primary key for reference links
     hash         => BINARY,
@@ -183,7 +186,6 @@ sub hash_str {
 sub serialize {
     my $self = shift;
     # TODO: pack as binary data
-    # TODO: add transaction signature
     return $JSON->encode({
         in  => [ map { serialize_input($_)  } @{$self->in}  ],
         out => [ map { serialize_output($_) } @{$self->out} ],
@@ -195,7 +197,7 @@ sub serialize_input {
     return {
         tx_out       => unpack("H*", $in->{txo}->tx_in),
         num          => $in->{txo}->num+0,
-        close_script => unpack("H*", $in->{close_script}),
+        close_script => unpack("H*", $in->{close_script} // die "Undefined close_script during serialize_input"),
     };
 }
 
@@ -379,6 +381,7 @@ sub validate {
     my @stored_in;
     my $input_value = 0;
     my %inputs;
+    my $sign_data = $self->sign_data;
     foreach my $in (@{$self->in}) {
         if ($inputs{$in->{txo}->key}++) {
             Warningf("Input %s:%u included in transaction %s twice",
@@ -386,7 +389,7 @@ sub validate {
             return -1;
         }
         $input_value += $in->{txo}->value;
-        if ($in->{txo}->check_script($in->{close_script}) != 0) {
+        if ($in->{txo}->check_script($in->{close_script}, $sign_data) != 0) {
             Warningf("Unmatched close script for input %s:%u in transaction %s",
                 $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
             return -1;
@@ -396,7 +399,6 @@ sub validate {
         Warning("Zero input in transaction %s", $self->hash_str);
         return -1;
     }
-    # TODO: Check that transaction is signed correctly
     return 0;
 }
 
@@ -435,7 +437,6 @@ sub new {
     # tx inputs are not sorted in the database, so sort them here for get deterministic transaction hash
     $attr->{in} = [ sort { _cmp_inputs($a, $b) } @{$attr->{in}} ];
     my $self = bless $attr, $class;
-    $self->hash //= calculate_hash($self->serialize);
     return $self;
 }
 
