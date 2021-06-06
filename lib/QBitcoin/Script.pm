@@ -56,6 +56,7 @@ sub unimplemented($$) {
 
 sub unpack_int($) {
     my ($data) = @_;
+    defined($data) or return undef;
     my $l = length($data);
     if ($l == 1) {
         my $n = unpack("C", $data);
@@ -149,7 +150,7 @@ sub is_true($) {
 sub cmd_pushdatan($$) {
     my ($bytes, $state) = @_;
     my ($script, $stack, $ifstack) = @$state;
-    length($state->[0]) >= $bytes
+    length($script) >= $bytes
         or return 0;
     my $data = substr($state->[0], 0, $bytes, "");
     return if $ifstack->[0];
