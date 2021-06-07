@@ -254,33 +254,33 @@ sub cmd_checksig($) {
     return undef;
 }
 
+sub execute {
+    my ($state) = @_;
+    while (length($state->[0])) {
+        my $cmd_code = substr($state->[0], 0, 1, "");
+        if (my $cmd_func = $OP_CMD[ord($cmd_code)]) {
+            my $res = $cmd_func->($state);
+            return $res if defined $res;
+        }
+        else {
+            return 0; # Invalid opcode
+        }
+    }
+    return undef;
+}
+
 sub script_eval($$$) {
     my ($close_script, $open_script, $tx_data) = @_;
 
     my $state = [$close_script, [], [], $tx_data]; # script, stack, if-stack, tx-data
-    while (length($state->[0])) {
-        my $cmd_code = substr($state->[0], 0, 1, "");
-        if (my $cmd_func = $OP_CMD[ord($cmd_code)]) {
-            my $res = $cmd_func->($state);
-            return $res if defined $res;
-        }
-        else {
-            return (0, "Invalid opcode");
-        }
-    }
+    my $res;
+    $res = execute($state);
+    return $res if defined($res);
 
     # should we check/clear the if-stack here?
     $state->[0] = $open_script;
-    while (length($state->[0])) {
-        my $cmd_code = substr($state->[0], 0, 1, "");
-        if (my $cmd_func = $OP_CMD[ord($cmd_code)]) {
-            my $res = $cmd_func->($state);
-            return $res if defined $res;
-        }
-        else {
-            return (0, "Invalid opcode");
-        }
-    }
+    $res = execute($state);
+    return $res if defined($res);
 
     my $stack = $state->[1];
     return (@$stack == 1 && $stack->[0] eq TRUE && !@{$state->[2]});
