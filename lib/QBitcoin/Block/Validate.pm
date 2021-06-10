@@ -21,6 +21,9 @@ sub validate {
 #            or return "Incorrect genesis block hash " . unpack("H*", $block->hash) . ", must be " . GENESIS_HASH_HEX;
         return ""; # Not needed to validate genesis block with correct hash
     }
+    my $merkle_root = $block->calculate_merkle_root;
+    $block->merkle_root eq $merkle_root
+        or return "Incorrect merkle root " . unpack("H*", $block->merkle_root) . " expected " . unpack("H*", $merkle_root);
     my $fee = 0;
     my %tx_in_block;
     my $empty_tx = 0;

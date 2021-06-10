@@ -89,8 +89,9 @@ sub generate {
         transactions => \@transactions,
     });
     $generated->weight = $generated->self_weight + ( $prev_block ? $prev_block->weight : 0 );
+    $generated->merkle_root = $generated->calculate_merkle_root();
     my $data = $generated->serialize;
-    $generated->hash = $generated->calculate_hash($data);
+    $generated->hash = $generated->calculate_hash();
     QBitcoin::Generate::Control->generated_height($height);
     Debugf("Generated block %s height %u weight %u, %u transactions",
         $generated->hash_str, $height, $generated->weight, scalar(@transactions));

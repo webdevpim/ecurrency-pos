@@ -18,6 +18,7 @@ sub serialize {
             height       => $self->height,
             weight       => $self->weight,
             prev_hash    => $self->prev_hash ? unpack("H*", $self->prev_hash) : undef,
+            merkle_root  => unpack("H*", $self->merkle_root),
             transactions => [ map { unpack("H*", $_) } @{$self->tx_hashes} ],
             $self->received_from ? ( rcvd => $self->received_from->ip ) : (),
         }) . "\n";
@@ -35,18 +36,19 @@ sub deserialize {
         height      => $decoded->{height},
         weight      => $decoded->{weight},
         prev_hash   => $decoded->{prev_hash} ? pack("H*", $decoded->{prev_hash}) : undef,
+        merkle_root => pack("H*", $decoded->{merkle_root}),
         rcvd        => $decoded->{rcvd},
         tx_hashes   => [ map { pack("H*", $_) } @{$decoded->{transactions}} ],
     });
-    $block->hash = $block->calculate_hash;
+    $block->hash = $block->calculate_hash();
     return $block;
 }
 
 sub calculate_hash {
     my $self = shift;
-    # TODO: use packed binary $data
-    my $data = join('|', $self->height, $self->weight, $self->prev_hash // "\x00"x8, @{$self->tx_hashes});
-    return sha256($data);
+    my $data = $self->prev_hash . $self->merkle_root .
+        pack("VQ<", $self->height, $self->weight);
+    return sha256(sha256($data));
 }
 
 1;

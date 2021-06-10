@@ -4,6 +4,7 @@ CREATE TABLE block (
   hash binary(32) NOT NULL,
   weight bigint unsigned NOT NULL,
   prev_hash binary(32) DEFAULT NULL,
+  merkle_root binary(32) NOT NULL,
   UNIQUE (hash)
 );
 

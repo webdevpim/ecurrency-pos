@@ -99,12 +99,13 @@ sub send_blocks {
         my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED);
         foreach my $block_data (@$blocks) {
             my $block = QBitcoin::Block->new(
-                height        => $block_data->[0],
-                hash          => $block_data->[1],
-                prev_hash     => $block_data->[2],
-                weight        => $block_data->[3],
-                self_weight   => $block_data->[4],
-                transactions  => [],
+                height       => $block_data->[0],
+                hash         => $block_data->[1],
+                prev_hash    => $block_data->[2],
+                weight       => $block_data->[3],
+                self_weight  => $block_data->[4],
+                merkle_root  => "\x00" x 8,
+                transactions => [],
             );
             $peer->has_weight = $block->weight;
             my $block_data = $block->serialize;
