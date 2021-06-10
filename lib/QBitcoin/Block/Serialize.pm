@@ -5,7 +5,7 @@ use strict;
 use Role::Tiny;
 
 # TODO: Change these stubs to effective serialize methods (to packed binary data)
-use Digest::SHA qw(sha256);
+use QBitcoin::Crypto qw(hash256);
 use JSON::XS;
 
 my $JSON = JSON::XS->new;
@@ -48,7 +48,7 @@ sub calculate_hash {
     my $self = shift;
     my $data = $self->prev_hash . $self->merkle_root .
         pack("VQ<", $self->height, $self->weight);
-    return sha256(sha256($data));
+    return hash256($data);
 }
 
 1;

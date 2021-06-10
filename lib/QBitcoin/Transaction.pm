@@ -6,11 +6,11 @@ use JSON::XS;
 use Tie::IxHash;
 use List::Util qw(sum0);
 use Scalar::Util qw(refaddr);
-use Digest::SHA qw(sha256);
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ORM qw(find replace delete :types);
+use QBitcoin::Crypto qw(hash256);
 use QBitcoin::TXO;
 use QBitcoin::Peers;
 
@@ -355,7 +355,7 @@ sub _cmp_inputs {
 
 sub calculate_hash {
     my ($tx_data) = @_;
-    return sha256($tx_data);
+    return hash256($tx_data);
 }
 
 sub validate_coinbase {

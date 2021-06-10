@@ -4,6 +4,7 @@ use strict;
 
 use QBitcoin::ORM qw(:types);
 use QBitcoin::Accessors qw(mk_accessors new);
+use QBitcoin::Crypto qw(hash256);
 
 use Role::Tiny::With;
 with 'QBitcoin::Block::Receive';
@@ -118,7 +119,7 @@ sub hash_str {
 }
 
 sub _merkle_hash {
-    return sha256(sha256($_[0]));
+    return hash256($_[0]);
 }
 
 sub _merkle_root {

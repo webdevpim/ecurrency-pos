@@ -4,7 +4,7 @@ use strict;
 
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(check_sig hash160 checksum32 pubkey_by_privkey signature pk_serialize pk_import signature);
+our @EXPORT_OK = qw(check_sig hash160 hash256 checksum32 pubkey_by_privkey signature pk_serialize pk_import signature);
 
 use Digest::SHA qw(sha256);
 use Crypt::Digest::RIPEMD160 qw(ripemd160);
@@ -16,7 +16,7 @@ sub check_sig {
     my ($data, $signature, $pubkey) = @_;
     my $pub = Crypt::PK::ECC->new;
     $pub->import_key_raw($pubkey, CURVE);
-    return $pub->verify_message($signature, $data);
+    return $pub->verify_hash($signature, hash256($data));
 }
 
 sub hash160 {
@@ -24,9 +24,14 @@ sub hash160 {
     return ripemd160(sha256($pubkey));
 }
 
+sub hash256 {
+    my ($data) = @_;
+    return sha256(sha256($data));
+}
+
 sub checksum32 {
     my ($str) = @_;
-    return substr(sha256(sha256($str)), 0, 4);
+    return substr(hash256($str), 0, 4);
 }
 
 sub pk_serialize {
@@ -48,7 +53,7 @@ sub pubkey_by_privkey {
 
 sub signature {
     my ($data, $pk) = @_;
-    return $pk->sign_message($data);
+    return $pk->sign_hash(hash256($data));
 }
 
 1;
