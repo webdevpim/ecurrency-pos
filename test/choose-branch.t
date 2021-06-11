@@ -104,7 +104,7 @@ sub send_blocks {
                 prev_hash    => $block_data->[2],
                 weight       => $block_data->[3],
                 self_weight  => $block_data->[4],
-                merkle_root  => "\x00" x 8,
+                merkle_root  => "\x00" x 32,
                 transactions => [],
             );
             $peer->has_weight = $block->weight;

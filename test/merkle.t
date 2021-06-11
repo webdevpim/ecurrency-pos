@@ -14,7 +14,7 @@ use QBitcoin::Block;
 my $merkle_module = Test::MockModule->new('QBitcoin::Block::MerkleTree');
 $merkle_module->mock('_merkle_hash', sub { '[' . shift . ']' });
 
-check_merkle([], "\x00" x 8);
+check_merkle([], "\x00" x 32);
 check_merkle(["a"], "a"); 
 check_merkle([qw(a b)], "[ab]");
 check_merkle([qw(a b c)], "[[ab][cc]]");

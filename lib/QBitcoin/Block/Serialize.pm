@@ -46,7 +46,7 @@ sub deserialize {
 
 sub calculate_hash {
     my $self = shift;
-    my $data = ($self->prev_hash // "\x00" x 8) . $self->merkle_root .
+    my $data = ($self->prev_hash // "\x00" x 32) . $self->merkle_root .
         pack("VQ<", $self->height, $self->weight);
     return hash256($data);
 }

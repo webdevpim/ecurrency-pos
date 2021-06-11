@@ -24,7 +24,7 @@ sub _merkle_root {
 sub calculate_merkle_root {
     my $self = shift;
     @{$self->transactions}
-        or return "\x00" x 8;
+        or return "\x00" x 32;
     my $level = 0;
     my $level_size = 1; # 2**$level
     my $cur_hash = $self->transactions->[0]->hash;
