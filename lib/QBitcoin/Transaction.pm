@@ -338,7 +338,7 @@ sub load_inputs {
                     Infof("input %s:%u not found in transaction %s",
                         $class->hash_str($in->{tx_out}), $in->{num}, $class->hash_str($hash));
                     if (!$unknown_inputs{$in->{tx_out}} && !$PENDING_TX_INPUT{$in->{tx_out}}) {
-                        $peer->send_line("sendtx " . unpack("H*", $in->{tx_out})) if $peer;
+                        $peer->request_tx($in->{tx_out}) if $peer;
                     }
                     $unknown_inputs{$in->{tx_out}} = 1;
                 }
@@ -417,7 +417,7 @@ sub announce {
     my ($received_from) = @_;
     foreach my $peer (QBitcoin::Peers->connected) {
         next if $received_from && $peer->ip eq $received_from->ip;
-        $peer->send_line("mempool " . unpack("H*", $self->hash) . " " . $self->size . " " . $self->fee);
+        $peer->announce_tx($self);
     }
 }
 

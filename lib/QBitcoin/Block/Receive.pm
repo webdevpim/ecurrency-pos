@@ -78,7 +78,7 @@ sub receive {
         $self->free_block();
         if ($self->received_from) {
             $self->received_from->decrease_reputation();
-            $self->received_from->send_line("abort invalid_block");
+            $self->received_from->abort("invalid_block");
         }
         return -1;
     }
@@ -224,8 +224,8 @@ sub receive {
             }
             $b->drop_branch();
             if ($self->received_from) {
-                $self->decrease_reputation;
-                $self->received_from->send_line("abort incorrect_block");
+                $self->received_from->decrease_reputation();
+                $self->received_from->abort("incorrect_block");
             }
             return -1;
         }
@@ -405,7 +405,7 @@ sub check_synced {
         Infof("Blockchain is synced");
         blockchain_synced(1);
         if (!mempool_synced()) {
-            $self->received_from->send_line("sendmempool");
+            $self->received_from->request_mempool();
         }
     }
 }
@@ -415,7 +415,7 @@ sub announce_to_peers {
 
     foreach my $peer (QBitcoin::Peers->connected) {
         next if $self->received_from && $peer->ip eq $self->received_from->ip;
-        $peer->send_line("ihave " . $self->height . " " . $self->weight);
+        $peer->announce_block($self);
     }
 }
 

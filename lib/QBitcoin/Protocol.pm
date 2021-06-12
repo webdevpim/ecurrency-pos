@@ -188,9 +188,38 @@ sub startup {
     my $height = QBitcoin::Block->blockchain_height;
     if (defined($height)) {
         my $best_block = QBitcoin::Block->best_block($height);
-        $self->send_line("ihave " . $best_block->height . " " . $best_block->weight);
+        $self->announce_block($best_block);
     }
     return 0;
+}
+
+sub request_tx {
+    my $self = shift;
+    my ($hash) = @_;
+    $self->send_line("sendtx " . unpack("H*", $hash));
+}
+
+sub announce_tx {
+    my $self = shift;
+    my ($tx) = @_;
+    $self->send_line("mempool " . unpack("H*", $tx->hash) . " " . $tx->size . " " . $tx->fee);
+}
+
+sub request_mempool {
+    my $self = shift;
+    $self->send_line("sendmempool");
+}
+
+sub abort {
+    my $self = shift;
+    my ($reason) = @_;
+    $self->send_line("abort " . ($reason // "general_error"));
+}
+
+sub announce_block {
+    my $self = shift;
+    my ($block) = @_;
+    $self->send_line("ihave " . $block->height . " " . $block->weight);
 }
 
 sub cmd_block {
