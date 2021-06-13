@@ -525,7 +525,7 @@ sub stake_weight {
             }
         }
     }
-    return $weight;
+    return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
 }
 
 1;
