@@ -50,6 +50,7 @@ sub connect_to {
     setsockopt($socket, SOL_SOCKET, O_NONBLOCK, 1)
         or die "setsockopt error: $!\n";
     $peer->ip = inet_ntoa($iaddr);
+    $peer->port = $port;
     $peer->socket = $socket;
     $peer->socket_fileno = fileno($socket);
     $peer->state = STATE_CONNECTING;

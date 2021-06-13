@@ -5,9 +5,9 @@ use strict;
 # TCP exchange with a peer
 # Single connection
 # Commands:
-# >> qbtc <genesis-hash> <options>
-# << qbtc <genesis-hash> <options>
-# >> ihave <height> <weight>
+# >> version <options>
+# << verack <options>
+# >> ihave <height> <weight> <hash>
 # << sendblock <height>
 # >> block <size>
 # >> ...
@@ -15,21 +15,21 @@ use strict;
 
 # First "ihave" with the best existing height/weight send directly after connection from both sides
 
-# >> mempool <txid> <size> <fee>
+# >> ihavetx <txid> <size> <fee>
 # << sendtx <txid>
 # >> tx <size>
 # >> ...
 
-# << sendmempool
-# >> mempool <txid> <size> <fee>
+# << mempool
+# >> ihavetx <txid> <size> <fee>
 # >> ...
-# >> endofmempool
+# >> eomempool
 
-# Send "sendmempool" to the first connected node after start, then (after get it) switch to "synced" mode
+# Send "mempool" to the first connected node after start, then (after get it) switch to "synced" mode
 
 # >> ping <payload>
 # << pong <payload>
-# Use "ping syncmempool" -> "pong syncmempool" for set mempool_synced state, this means all mempool transactions requested and sent
+# Use "ping emempool" -> "pong emempool" for set mempool_synced state, this means all mempool transactions requested and sent
 
 # If our last known block height less than height_by_time, then batch request all blocks with height from last known to max available
 
@@ -37,21 +37,20 @@ use Tie::IxHash;
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
+use QBitcoin::Crypto qw(checksum32);
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Block;
 use QBitcoin::Peers;
 use QBitcoin::Mempool;
 use QBitcoin::Transaction;
 
-use constant INT_POSITIVE_RE => qw/^[1-9][0-9]*\z/;
-use constant INT_UNSIGNED_RE => qw/^(?:0|[1-9][0-9]*)\z/;
-
 use constant ATTR => qw(
     greeted
     ip
     host
-    wait_data
-    process_func
+    port
+    my_address
+    my_port
     recvbuf
     sendbuf
     socket
@@ -62,6 +61,10 @@ use constant ATTR => qw(
     has_weight
     syncing
 );
+
+use constant {
+    REJECT_INVALID => 1,
+};
 
 mk_accessors(ATTR);
 
@@ -105,42 +108,45 @@ sub disconnect {
 sub receive {
     my $self = shift;
     while (length($self->sendbuf) < WRITE_BUFFER_SIZE) {
-        if ($self->wait_data) {
-            return 0 if length($self->recvbuf) < $self->wait_data;
-            my $process_func = $self->process_func
-                or die "Unknown process_func";
-            $self->$process_func(substr($self->recvbuf, 0, $self->wait_data, "")) == 0
-                or return -1;
-            $self->wait_data = 0;
-            $self->process_func(undef);
-            next;
+        length($self->recvbuf) >= 24 # sizeof(struct message_header)
+            or return 0;
+        my ($magic, $command, $length, $checksum) = unpack("a4a12Va4", substr($self->recvbuf, 0, 24));
+        $command =~ s/\x00+\z//;
+        if ($magic ne MAGIC) {
+            Errf("Incorrect magic: 0x%08X, expected 0x%08X", $magic, $self->MAGIC);
+            # $self->abort($command, "protocol_error");
+            return -1;
         }
-        my $p = index($self->recvbuf, "\n");
-        if ($p < 0) {
-            if (length($self->recvbuf) > MAX_COMMAND_LENGTH) {
-                Errf("Too long line from peer %s", $self->ip);
-                $self->send_line("abort protocoll_error");
-                return -1;
-            }
-            return 0;
+        if ($length + 24 > READ_BUFFER_SIZE) {
+            Errf("Too long data packet for command %s, %u bytes", $command, $length);
+            $self->abort($command, "too_long_packet");
+            return -1;
         }
-        my $str = substr($self->recvbuf, 0, $p+1, "");
-        $str =~ s/\r?\n\z//;
-        my ($cmd, @args) = split(/\s+/, $str);
-        my $func = "cmd_" . $cmd;
+        # TODO: save state, to not process the same message header each time
+        length($self->recvbuf) >= $length + 24
+            or return 0;
+        my $message = substr($self->recvbuf, 0, 24+$length, "");
+        my $data = substr($message, 24);
+        my $checksum32 = checksum32($data);
+        if ($checksum ne $checksum32) {
+            Errf("Incorrect message checksum, 0x%s != 0x%s", unpack("H*", $checksum), unpack("H*", $checksum32));
+            $self->abort($command, "bad_crc32");
+            return -1;
+        }
+        my $func = "cmd_" . $command;
         if ($self->can($func)) {
-            Debugf("Received [%s] from peer %s", $str, $self->ip);
-            if ($cmd ne "qbtc" && !$self->greeted) {
-                Errf("command [%s] before greeting from peer %s", $cmd, $self->ip);
-                $self->send_line("abort protocoll_error");
+            Debugf("Received [%s] from peer %s", $command, $self->ip);
+            if ($command ne "version" && !$self->greeted) {
+                Errf("command [%s] before greeting from peer %s", $command, $self->ip);
+                $self->abort($command, "protocol_error");
                 return -1;
             }
-            $self->$func(@args) == 0
+            $self->$func($data) == 0
                 or return -1;
         }
         else {
-            Errf("Unknown command [%s] from peer %s", $cmd, $self->ip);
-            $self->send_line("abort unknown_command");
+            Errf("Unknown command [%s] from peer %s", $command, $self->ip);
+            $self->abort($command, "unknown_command");
             return -1;
         }
     }
@@ -172,19 +178,31 @@ sub send {
     return 0;
 }
 
-sub send_line {
+sub send_message {
     my $self = shift;
-    my ($str) = @_;
-
-    Debugf("Send [%s] to peer %s", $str, $self->ip);
-    return $self->send($str . "\n");
+    my ($cmd, $data) = @_;
+    Debugf("Send [%s] to peer %s", $cmd, $self->ip);
+    return $self->send(pack("a4a12Va4", MAGIC, $cmd, length($data), checksum32($data)) . $data);
 }
 
 sub startup {
     my $self = shift;
-    $self->send_line("qbtc " . GENESIS_HASH_HEX) == 0
-        or return -1;
-    $self->send_line("sendmempool") if blockchain_synced() && !mempool_synced();
+    my $version = pack("VQ<Q<a26", $self->PROTOCOL_VERSION, $self->PROTOCOL_FEATURES, time(), $self->pack_my_address);
+    $self->send_message("version", $version);
+    return 0;
+}
+
+sub pack_my_address {
+    my $self = shift;
+    return pack("Q<a16n", $self->PROTOCOL_FEATURES, $self->my_address, $self->my_port);
+}
+
+sub cmd_version {
+    my $self = shift;
+
+    $self->send_message("verack", "");
+    $self->greeted = 1;
+    $self->request_mempool if blockchain_synced() && !mempool_synced();
     my $height = QBitcoin::Block->blockchain_height;
     if (defined($height)) {
         my $best_block = QBitcoin::Block->best_block($height);
@@ -193,60 +211,83 @@ sub startup {
     return 0;
 }
 
+sub cmd_verack {
+    my $self = shift;
+    return 0;
+}
+
 sub request_tx {
     my $self = shift;
     my ($hash) = @_;
-    $self->send_line("sendtx " . unpack("H*", $hash));
+    $self->send_message("sendtx", $hash);
 }
 
 sub announce_tx {
     my $self = shift;
     my ($tx) = @_;
-    $self->send_line("mempool " . unpack("H*", $tx->hash) . " " . $tx->size . " " . $tx->fee);
+    $self->send_message("ihavetx", $tx->hash);
 }
 
 sub request_mempool {
     my $self = shift;
-    $self->send_line("sendmempool");
+    $self->send_message("mempool", "");
 }
 
 sub abort {
     my $self = shift;
-    my ($reason) = @_;
-    $self->send_line("abort " . ($reason // "general_error"));
+    my ($cmd, $reason) = @_;
+    $self->send_message("reject", pack("Ca*", $cmd) . pack("C", REJECT_INVALID) . pack("Ca*", $reason // "general_error"));
 }
 
 sub announce_block {
     my $self = shift;
     my ($block) = @_;
-    $self->send_line("ihave " . $block->height . " " . $block->weight);
+    $self->send_message("ihave", pack("VQ<a32", $block->height, $block->weight, $block->hash));
+}
+
+sub cmd_sendtx {
+    my $self = shift;
+    my ($data) = @_;
+    if (length($data) != 32) {
+        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, "sendtx", length($data));
+        $self->abort("sendtx", "incorrect_params");
+        return -1;
+    }
+    my $hash = unpack("a32", $data); # yes, it's copy of $data
+    my $tx = QBitcoin::Transaction->get_by_hash($hash);
+    if ($tx) {
+        $self->send_message("tx", $tx->serialize);
+    }
+    else {
+        Warningf("I have no transaction with hash %u requested by peer %s", $hash, $self->ip);
+    }
+    return 0;
+}
+
+sub cmd_ihavetx {
+    my $self = shift;
+    my ($data) = @_;
+    if (length($data) != 32) {
+        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, "ihavetx", length($data));
+        $self->abort("ihavetx", "incorrect_params");
+        return -1;
+    }
+
+    my $hash = unpack("a32", $data);
+    blockchain_synced()
+        or return 0;
+    QBitcoin::Transaction->get_by_hash($hash)
+        or return 0;
+    $self->request_tx($hash);
+    return 0;
 }
 
 sub cmd_block {
     my $self = shift;
-    my @args = @_;
-    if (@args != 2 || ref($args[0]) || !defined($args[0]) || $args[0] !~ INT_POSITIVE_RE) {
-        Errf("Incorrect params from peer %s: [%s]", $self->ip, "block " . join(' ', @args));
-        $self->send_line("abort incorrect_params");
-        return -1;
-    }
-    my $size = $args[0];
-    if ($size > MAX_BLOCK_SIZE) {
-        Errf("Too large block %u bytes from peer %s", $size, $self->ip);
-        $self->send_line("abort too_large_block");
-        return -1;
-    }
-    $self->wait_data = $size;
-    $self->process_func = 'process_block';
-    return 0;
-}
-
-sub process_block {
-    my $self = shift;
     my ($block_data) = @_;
     my $block = QBitcoin::Block->deserialize($block_data);
     if (!$block) {
-        $self->send_line("abort bad_block_data");
+        $self->abort("block", "bad_block_data");
         return -1;
     }
     return 0 if QBitcoin::Block->block_pool($block->height, $block->hash);
@@ -255,7 +296,7 @@ sub process_block {
     $block->received_from = $self;
 
     if ($block->height && !$block->prev_block) {
-        $self->send_line("sendblock " . ($block->height-1));
+        $self->send_message("sendblock", pack("V", $block->height-1));
         $PENDING_BLOCK_BLOCK{$block->prev_hash}->{$block->hash} = 1;
         add_pending_block($block);
         $self->syncing(1);
@@ -357,7 +398,7 @@ sub _block_load_transactions {
             $block->pending_tx($tx_hash);
             $PENDING_TX_BLOCK{$tx_hash}->{$block->hash} = 1;
             Debugf("Set pending_tx %s block %s", unpack("H*", substr($tx_hash, 0, 4)), $block->hash_str);
-            $self->send_line("sendtx " . unpack("H*", $tx_hash));
+            $self->request_tx($tx_hash);
         }
     }
     if ($block->pending_tx) {
@@ -369,29 +410,10 @@ sub _block_load_transactions {
 
 sub cmd_tx {
     my $self = shift;
-    my @args = @_;
-    if (@args != 2 || ref($args[0]) || !defined($args[0]) || $args[0] !~ INT_POSITIVE_RE) {
-        Errf("Incorrect params from peer %s: [%s]", $self->ip, "tx " . join(' ', @args));
-        $self->send_line("abort incorrect_params");
-        return -1;
-    }
-    my $size = $args[0];
-    if ($size > MAX_TX_SIZE) {
-        Errf("Too large tx %u bytes from peer %s", $size, $self->ip);
-        $self->send_line("abort too_large_tx");
-        return -1;
-    }
-    $self->wait_data = $size;
-    $self->process_func = 'process_tx';
-    return 0;
-}
-
-sub process_tx {
-    my $self = shift;
     my ($tx_data) = @_;
     my $tx = QBitcoin::Transaction->deserialize($tx_data, $self);
     if (!defined $tx) {
-        $self->send_line("abort bad_tx_data");
+        $self->abort("tx", "bad_tx_data");
         return -1;
     }
     elsif (!$tx) {
@@ -441,7 +463,7 @@ sub request_new_block {
         $height-- if $height > height_by_time(time());
         if ($self->has_weight > $best_weight ||
             $self->has_weight == $best_weight && $height > $best_height) {
-            $self->send_line("sendblock $height");
+            $self->send_message("sendblock", pack("V", $height));
             if ($self->has_weight > $best_weight) { # otherwise remote may have no such block, no syncing
                 $self->syncing(1);
             }
@@ -449,29 +471,15 @@ sub request_new_block {
     }
 }
 
-sub cmd_qbtc {
-    my $self = shift;
-    my ($genesis_hash, @options) = @_;
-    if (!$genesis_hash || ref($genesis_hash) || $genesis_hash ne GENESIS_HASH_HEX) {
-        Errf("Bad genesis hash from peer %s: %s, expected %s",
-            $self->ip, $genesis_hash // '', GENESIS_HASH_HEX);
-        $self->send_line("abort incorrect_genesis");
-        return -1;
-    }
-    # Ignore options;
-    $self->greeted = 1;
-    return 0;
-}
-
 sub cmd_ihave {
     my $self = shift;
-    my ($height, $weight) = @_;
-    if (@_ != 2 || !defined($height) || ref($height) || $height !~ INT_UNSIGNED_RE || 
-        !defined($weight) || ref($weight) || $weight !~ INT_UNSIGNED_RE) {
-        Errf("Incorrect params from peer %s: [%s]", $self->ip, "ihave " . join(' ', @_));
-        $self->send_line("abort incorrect_params");
+    my ($data) = @_;
+    if (length($data) != 44) {
+        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, "ihave", length($data));
+        $self->abort("ihave", "incorrect_params");
         return -1;
     }
+    my ($height, $weight, $hash) = unpack("VQ<a32", $data);
     if (time() < time_by_height($height)) {
         Warningf("Ignore too early block height %u from peer %s", $height, $self->ip);
         return 0;
@@ -487,23 +495,19 @@ sub cmd_ihave {
 
 sub cmd_sendblock {
     my $self = shift;
-    my @args = @_;
-    if (@args != 1 || ref($args[0]) || !defined($args[0]) || $args[0] !~ INT_UNSIGNED_RE) {
-        Errf("Incorrect params from peer %s: [%s]", $self->ip, "sendblock " . join(' ', @args));
-        $self->send_line("abort incorrect_params");
+    my $data = shift;
+    if (length($data) != 4) {
+        Errf("Incorrect params from peer %s cmd %s: length %u", $self->ip, "sendblock", length($data));
+        $self->abort("sendblock", "incorrect_params");
         return -1;
     }
-    my $height = $args[0];
+    my $height = unpack("V", $data);
     my $block = QBitcoin::Block->best_block($height);
     if ($block) {
-        my $data = $block->serialize;
-        $self->send_line("block " . length($data) . " " . $block->height);
-        $self->send($data);
+        $self->send_message("block", $block->serialize);
     }
     elsif ($block = QBitcoin::Block->find(height => $height)) {
-        my $data = $block->serialize;
-        $self->send_line("block " . length($data) . " " . $block->height);
-        $self->send($data);
+        $self->send_message("block", $block->serialize);
         $block->free_block();
     }
     else {
@@ -514,108 +518,55 @@ sub cmd_sendblock {
 
 sub cmd_mempool {
     my $self = shift;
-    my ($hash, $size, $fee) = @_;
-    if (@_ != 3 || !defined($hash) || ref($hash) ||
-        !defined($size) || ref($size) || $size !~ INT_UNSIGNED_RE || $size == 0 ||
-        !defined($fee)  || ref($fee)  || $fee  !~ INT_UNSIGNED_RE) {
-        Errf("Incorrect params from peer %s: [%s]", $self->ip, "mempool " . join(' ', @_));
-        $self->send_line("abort incorrect_params");
-        return -1;
-    }
-    if (!blockchain_synced()) {
-        return 0;
-    }
-    if (QBitcoin::Transaction->get_by_hash(pack("H*", $hash))) {
-        return 0;
-    }
-    # Comparing floating points, it's ok, we can randomly accept or reject transaction with fee around lower limit
-    # min_fee() returns -1 if mempool size less than limit
-    QBitcoin::Mempool->want_tx($size, $fee)
-        or return 0;
-    $self->send_line("sendtx $hash");
-    return 0;
-}
-
-sub cmd_sendtx {
-    my $self = shift;
-    my @args = @_;
-    if (@args != 1 || ref($args[0]) || !defined($args[0])) {
-        Errf("Incorrect params from peer %s: [%s]", $self->ip, "sendtx " . join(' ', @args));
-        $self->send_line("abort incorrect_params");
-        return -1;
-    }
-    my ($hash) = shift;
-    my $tx = QBitcoin::Transaction->get_by_hash(pack("H*", $hash));
-    if ($tx) {
-        my $data = $tx->serialize;
-        $self->send_line("tx " . length($data) . " " . $tx->hash_str);
-        $self->send($data);
-    }
-    else {
-        Warningf("I have no transaction with hash %u requested by peer %s", $hash, $self->ip);
-    }
-    return 0;
-}
-
-sub cmd_sendmempool {
-    my $self = shift;
-    if (@_) {
-        Errf("Incorrect params from peer %s: [%s]", $self->ip, "sendmempool " . join(' ', @_));
-        $self->send_line("abort incorrect_params");
+    my ($data) = @_;
+    if (length($data) != 0) {
+        Errf("Incorrect params from peer %s cmd %s data size %u", $self->ip, "mempool", length($data));
+        $self->abort("mempool", "incorrect_params");
         return -1;
     }
     foreach my $tx (QBitcoin::Transaction->mempool_list) {
-        $self->send_line("mempool " . unpack("H*", $tx->hash) . " " . $tx->size . " " . $tx->fee);
+        $self->announce_tx($tx);
     }
-    $self->send_line("endofmempool") if mempool_synced();
+    $self->send_message("eomempool", "");
     return 0;
 }
 
-sub cmd_endofmempool {
+sub cmd_eomempool {
     my $self = shift;
-    if (@_) {
-        Errf("Incorrect params from peer %s: [%s]", $self->ip, "endofmempool " . join(' ', @_));
-        $self->send_line("abort incorrect_params");
+    my $data = shift;
+     if (length($data) != 0) {
+        Errf("Incorrect params from peer %s cmd %s data size %u", $self->ip, "eomempool", length($data));
+        $self->abort("eomempool", "incorrect_params");
         return -1;
     }
-    $self->send_line("ping syncmempool");
+    $self->send_message("ping", pack("a8", "emempool"));
     return 0;
 }
 
 sub cmd_ping {
     my $self = shift;
-    my @args = @_;
-    if (@args != 1 || ref($args[0]) || !defined($args[0])) {
-        Errf("Incorrect params from peer %s: [%s]", $self->ip, "ping " . join(' ', @args));
-        $self->send_line("abort incorrect_params");
-        return -1;
-    }
-    $self->send_line("pong $args[0]");
+    my ($data) = @_;
+    $self->send_message("pong", $data);
     return 0;
 }
 
 sub cmd_pong {
     my $self = shift;
-    my @args = @_;
-    if (@args != 1 || ref($args[0]) || !defined($args[0])) {
-        Errf("Incorrect params from peer %s: [%s]", $self->ip, "pong " . join(' ', @args));
-        $self->send_line("abort incorrect_params");
-        return -1;
-    }
-    mempool_synced(1) if $args[0] eq "syncmempool";
+    my ($data) = @_;
+    mempool_synced(1) if $data eq "emempool";
     return 0;
+}
+
+sub cmd_reject {
+    my $self = shift;
+    Warningf("Peer %s aborted connection", $self->ip);
+    return -1;
 }
 
 sub decrease_reputation {
     my $self = shift;
     ...;
     return 0;
-}
-
-sub cmd_abort {
-    my $self = shift;
-    Warningf("Peer %s aborted connection", $self->ip);
-    return -1;
 }
 
 1;

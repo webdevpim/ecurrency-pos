@@ -78,7 +78,7 @@ sub receive {
         $self->free_block();
         if ($self->received_from) {
             $self->received_from->decrease_reputation();
-            $self->received_from->abort("invalid_block");
+            $self->received_from->abort("block", "invalid_block");
         }
         return -1;
     }
@@ -225,7 +225,7 @@ sub receive {
             $b->drop_branch();
             if ($self->received_from) {
                 $self->received_from->decrease_reputation();
-                $self->received_from->abort("incorrect_block");
+                $self->received_from->abort("block", "incorrect_block");
             }
             return -1;
         }
