@@ -33,168 +33,42 @@ use strict;
 
 # If our last known block height less than height_by_time, then batch request all blocks with height from last known to max available
 
+use parent 'QBitcoin::Protocol::Common';
 use Tie::IxHash;
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
-use QBitcoin::Crypto qw(checksum32);
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Block;
 use QBitcoin::Peers;
 use QBitcoin::Mempool;
 use QBitcoin::Transaction;
 
-use constant ATTR => qw(
-    greeted
-    ip
-    host
-    port
-    my_address
-    my_port
-    recvbuf
-    sendbuf
-    socket
-    socket_fileno
-    state
-    direction
-    state_time
-    has_weight
-    syncing
-);
+use constant {
+    MAGIC             => "QBTC",
+    PROTOCOL_VERSION  => 1,
+    PROTOCOL_FEATURES => 0,
+};
 
 use constant {
     REJECT_INVALID => 1,
 };
-
-mk_accessors(ATTR);
 
 my %PENDING_BLOCK;
 tie(%PENDING_BLOCK, 'Tie::IxHash'); # Ordered by age
 my %PENDING_TX_BLOCK;
 my %PENDING_BLOCK_BLOCK;
 
-sub new {
-    my $class = shift;
-    my $args = @_ == 1 ? $_[0] : { @_ };
-    my $self = bless $args, $class;
-    $self->sendbuf = "";
-    $self->recvbuf = "";
-    $self->socket_fileno = fileno($self->socket) if $self->socket;
-    return $self;
-}
-
-sub disconnect {
-    my $self = shift;
-    if ($self->socket) {
-        shutdown($self->socket, 2);
-        close($self->socket);
-        $self->socket = undef;
-        $self->socket_fileno = undef;
-    }
-    if ($self->state eq STATE_CONNECTED) {
-        Infof("Disconnected from peer %s", $self->ip);
-        $self->greeted = undef;
-    }
-    $self->state_time = time();
-    $self->state = STATE_DISCONNECTED;
-    $self->sendbuf = "";
-    $self->recvbuf = "";
-    $self->has_weight = undef;
-    $self->syncing = undef;
-    QBitcoin::Peers->del_peer($self) if $self->direction eq DIR_IN;
-    return 0;
-}
-
-sub receive {
-    my $self = shift;
-    while (length($self->sendbuf) < WRITE_BUFFER_SIZE) {
-        length($self->recvbuf) >= 24 # sizeof(struct message_header)
-            or return 0;
-        my ($magic, $command, $length, $checksum) = unpack("a4a12Va4", substr($self->recvbuf, 0, 24));
-        $command =~ s/\x00+\z//;
-        if ($magic ne MAGIC) {
-            Errf("Incorrect magic: 0x%08X, expected 0x%08X", $magic, $self->MAGIC);
-            # $self->abort($command, "protocol_error");
-            return -1;
-        }
-        if ($length + 24 > READ_BUFFER_SIZE) {
-            Errf("Too long data packet for command %s, %u bytes", $command, $length);
-            $self->abort($command, "too_long_packet");
-            return -1;
-        }
-        # TODO: save state, to not process the same message header each time
-        length($self->recvbuf) >= $length + 24
-            or return 0;
-        my $message = substr($self->recvbuf, 0, 24+$length, "");
-        my $data = substr($message, 24);
-        my $checksum32 = checksum32($data);
-        if ($checksum ne $checksum32) {
-            Errf("Incorrect message checksum, 0x%s != 0x%s", unpack("H*", $checksum), unpack("H*", $checksum32));
-            $self->abort($command, "bad_crc32");
-            return -1;
-        }
-        my $func = "cmd_" . $command;
-        if ($self->can($func)) {
-            Debugf("Received [%s] from peer %s", $command, $self->ip);
-            if ($command ne "version" && !$self->greeted) {
-                Errf("command [%s] before greeting from peer %s", $command, $self->ip);
-                $self->abort($command, "protocol_error");
-                return -1;
-            }
-            $self->$func($data) == 0
-                or return -1;
-        }
-        else {
-            Errf("Unknown command [%s] from peer %s", $command, $self->ip);
-            $self->abort($command, "unknown_command");
-            return -1;
-        }
-    }
-}
-
-sub send {
-    my $self = shift;
-    my ($data) = @_;
-
-    if ($self->state ne STATE_CONNECTED) {
-        Errf("Attempt to send to peer %s with state %s", $self->ip // "unknown", $self->state);
-        return -1;
-    }
-    if ($self->sendbuf eq '' && $self->socket) {
-        my $n = syswrite($self->socket, $data);
-        if (!defined($n)) {
-            Errf("Error write to socket: %s", $!);
-            return -1;
-        }
-        elsif ($n > 0) {
-            return 0 if $n == length($data);
-            substr($data, 0, $n, "");
-        }
-        $self->sendbuf = $data;
-    }
-    else {
-        $self->sendbuf .= $data;
-    }
-    return 0;
-}
-
-sub send_message {
-    my $self = shift;
-    my ($cmd, $data) = @_;
-    Debugf("Send [%s] to peer %s", $cmd, $self->ip);
-    return $self->send(pack("a4a12Va4", MAGIC, $cmd, length($data), checksum32($data)) . $data);
-}
-
 sub startup {
     my $self = shift;
-    my $version = pack("VQ<Q<a26", $self->PROTOCOL_VERSION, $self->PROTOCOL_FEATURES, time(), $self->pack_my_address);
+    my $version = pack("VQ<Q<a26", PROTOCOL_VERSION, PROTOCOL_FEATURES, time(), $self->pack_my_address);
     $self->send_message("version", $version);
     return 0;
 }
 
 sub pack_my_address {
     my $self = shift;
-    return pack("Q<a16n", $self->PROTOCOL_FEATURES, $self->my_address, $self->my_port);
+    return pack("Q<a16n", PROTOCOL_FEATURES, $self->my_address, $self->my_port);
 }
 
 sub cmd_version {
@@ -235,8 +109,8 @@ sub request_mempool {
 
 sub abort {
     my $self = shift;
-    my ($cmd, $reason) = @_;
-    $self->send_message("reject", pack("Ca*", $cmd) . pack("C", REJECT_INVALID) . pack("Ca*", $reason // "general_error"));
+    my ($reason) = @_;
+    $self->send_message("reject", pack("Ca*", $self->command) . pack("C", REJECT_INVALID) . pack("Ca*", $reason // "general_error"));
 }
 
 sub announce_block {
@@ -249,8 +123,8 @@ sub cmd_sendtx {
     my $self = shift;
     my ($data) = @_;
     if (length($data) != 32) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, "sendtx", length($data));
-        $self->abort("sendtx", "incorrect_params");
+        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        $self->abort("incorrect_params");
         return -1;
     }
     my $hash = unpack("a32", $data); # yes, it's copy of $data
@@ -268,8 +142,8 @@ sub cmd_ihavetx {
     my $self = shift;
     my ($data) = @_;
     if (length($data) != 32) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, "ihavetx", length($data));
-        $self->abort("ihavetx", "incorrect_params");
+        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        $self->abort("incorrect_params");
         return -1;
     }
 
@@ -287,7 +161,7 @@ sub cmd_block {
     my ($block_data) = @_;
     my $block = QBitcoin::Block->deserialize($block_data);
     if (!$block) {
-        $self->abort("block", "bad_block_data");
+        $self->abort("bad_block_data");
         return -1;
     }
     return 0 if QBitcoin::Block->block_pool($block->height, $block->hash);
@@ -413,7 +287,7 @@ sub cmd_tx {
     my ($tx_data) = @_;
     my $tx = QBitcoin::Transaction->deserialize($tx_data, $self);
     if (!defined $tx) {
-        $self->abort("tx", "bad_tx_data");
+        $self->abort("bad_tx_data");
         return -1;
     }
     elsif (!$tx) {
@@ -475,8 +349,8 @@ sub cmd_ihave {
     my $self = shift;
     my ($data) = @_;
     if (length($data) != 44) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, "ihave", length($data));
-        $self->abort("ihave", "incorrect_params");
+        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        $self->abort("incorrect_params");
         return -1;
     }
     my ($height, $weight, $hash) = unpack("VQ<a32", $data);
@@ -497,8 +371,8 @@ sub cmd_sendblock {
     my $self = shift;
     my $data = shift;
     if (length($data) != 4) {
-        Errf("Incorrect params from peer %s cmd %s: length %u", $self->ip, "sendblock", length($data));
-        $self->abort("sendblock", "incorrect_params");
+        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        $self->abort("incorrect_params");
         return -1;
     }
     my $height = unpack("V", $data);
@@ -520,8 +394,8 @@ sub cmd_mempool {
     my $self = shift;
     my ($data) = @_;
     if (length($data) != 0) {
-        Errf("Incorrect params from peer %s cmd %s data size %u", $self->ip, "mempool", length($data));
-        $self->abort("mempool", "incorrect_params");
+        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        $self->abort("incorrect_params");
         return -1;
     }
     foreach my $tx (QBitcoin::Transaction->mempool_list) {
@@ -535,8 +409,8 @@ sub cmd_eomempool {
     my $self = shift;
     my $data = shift;
      if (length($data) != 0) {
-        Errf("Incorrect params from peer %s cmd %s data size %u", $self->ip, "eomempool", length($data));
-        $self->abort("eomempool", "incorrect_params");
+        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        $self->abort("incorrect_params");
         return -1;
     }
     $self->send_message("ping", pack("a8", "emempool"));

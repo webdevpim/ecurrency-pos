@@ -6,9 +6,6 @@ use constant GENESIS_BLOCK_HASH => "1234";
 
 use constant QBITCOIN_CONST => {
     VERSION               => "0.1",
-    MAGIC                 => "QBTC",
-    PROTOCOL_VERSION      => 1,
-    PROTOCOL_FEATURES     => 0,
     BLOCK_INTERVAL        => 10, # sec
     GENESIS_TIME          => 1622962800,
     INCORE_LEVELS         => 6,
