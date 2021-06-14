@@ -135,12 +135,17 @@ sub main_loop {
             }
             else {
                 Infof("Incoming connection from %s", $peer_ip);
+                my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($new_socket));
+                my $my_ip = inet_ntoa($my_addr);
                 my $peer = QBitcoin::Protocol->new(
                     socket     => $new_socket,
                     state      => STATE_CONNECTED,
                     state_time => time(),
                     host       => $peer_ip,
                     ip         => $peer_ip,
+                    port       => $remote_port,
+                    my_ip      => $my_ip,
+                    my_port    => $my_port,
                     direction  => DIR_IN,
                 );
                 QBitcoin::Peers->add_peer($peer);
@@ -192,6 +197,9 @@ sub main_loop {
                     }
                     $peer->state = STATE_CONNECTED;
                     $peer->state_time = time();
+                    my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($peer->socket));
+                    $peer->my_ip = inet_ntoa($my_addr);
+                    $peer->my_port = $my_port;
                     Infof("Connected to %s", $peer->ip);
                     $peer->startup();
                     next;
