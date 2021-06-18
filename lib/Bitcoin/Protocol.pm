@@ -69,6 +69,7 @@ sub startup {
     my $version = pack("VQ<Q<a26a26a8Cl<C", PROTOCOL_VERSION, PROTOCOL_FEATURES, time(),
         $self->pack_my_address, $self->pack_address, $nonce, 0, $height, 0);
     $self->send_message("version", $version);
+    $self->syncing(1);
     return 0;
 }
 
@@ -242,6 +243,10 @@ sub request_transactions {
         return 1;
     }
     else {
+        if ($self->syncing) {
+            Infof("BTC syncing done");
+            $self->syncing(0);
+        }
         return 0;
     }
 }
@@ -283,8 +288,7 @@ sub process_block {
         }
         else {
             Warningf("Received orphan block %s, prev hash %s", $block->hash_str, unpack("H*", scalar reverse $block->prev_hash));
-            if ($HAVE_BLOCK0) {
-                # TODO: do not request block if syncing()
+            if ($HAVE_BLOCK0 && !$self->syncing) {
                 $self->request_blocks();
             }
             return undef;
