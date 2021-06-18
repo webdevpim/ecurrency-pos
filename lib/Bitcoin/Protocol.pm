@@ -6,7 +6,9 @@ use feature 'state';
 use parent 'QBitcoin::Protocol::Common';
 use QBitcoin::Const qw(GENESIS_TIME);
 use QBitcoin::Log;
+use QBitcoin::Crypto qw(hash256);
 use Bitcoin::Block;
+use Bitcoin::Transaction;
 
 use constant TESTNET => 1;
 
@@ -43,14 +45,14 @@ sub varint {
 }
 
 # modify param, remove length from data
-sub get_varint {
-    my $first = unpack("C", substr($_[0], 0, 1, ""));
-    my ($data) = @_;
+sub get_varint(\$) {
+    my ($dataref) = @_;
+    my $first = unpack("C", substr($$dataref, 0, 1, ""));
     # We do not check if $data has enough data, but if not we will fail on next step, get items
     return $first < 0xFD ? $first :
-        $first == 0xFD ? unpack("v", substr($_[0], 0, 2, "")) :
-        $first == 0xFE ? unpack("V", substr($_[0], 0, 4, "")) :
-        unpack("Q<", substr($_[0], 0, 8, ""));
+        $first == 0xFD ? unpack("v", substr($$dataref, 0, 2, "")) :
+        $first == 0xFE ? unpack("V", substr($$dataref, 0, 4, "")) :
+        unpack("Q<", substr($$dataref, 0, 8, ""));
 }
 
 sub varstr {
@@ -333,14 +335,76 @@ sub cmd_block {
     return 0;
 }
 
+sub deserialize_transaction {
+    my ($tx_data) = @_;
+
+    my ($version) = unpack("V", substr($tx_data, 0, 4, "")); # 1 or 2
+    my $txin_count = get_varint($tx_data);
+    my $has_witness = 0;
+    if ($txin_count == 0) {
+        $has_witness = unpack("C", substr($tx_data, 0, 1, "")); # should be always 1
+        $txin_count = get_varint($tx_data);
+    }
+    my @tx_in;
+    for (my $n = 0; $n < $txin_count; $n++) {
+        my $prev_output = substr($tx_data, 0, 36, ""); # (prev_tx_hash, output_index)
+        my $script_length = get_varint($tx_data);
+        # first 4 bytes of the script for coinbase tx block verion 2 are "\x03" and block height
+        my $script = substr($tx_data, 0, $script_length, "");
+        my $sequence = substr($tx_data, 0, 4, "");
+        push @tx_in, {
+            tx_out   => substr($prev_output, 0, 32),
+            num      => unpack("V", substr($prev_output, 32, 4)),
+            script   => $script,
+            sequence => $sequence,
+        },
+    }
+    my $txout_count = get_varint($tx_data);
+    my @tx_out;
+    for (my $n = 0; $n < $txout_count; $n++) {
+        my $value = unpack("Q<", substr($tx_data, 0, 8, ""));
+        my $open_script_length = get_varint($tx_data);
+        my $open_script = substr($tx_data, 0, $open_script_length, "");
+        push @tx_out, {
+            value       => $value,
+            open_script => $open_script,
+        };
+    }
+    if ($has_witness) {
+        foreach (my $n = 0; $n < $txin_count; $n++) {
+            my $witness_count = get_varint($tx_data);
+            my @witness;
+            foreach (my $k = 0; $k < $witness_count; $k++) {
+                my $witness_len = get_varint($tx_data);
+                push @witness, substr($tx_data, 0, $witness_len, "");
+            }
+            $tx_in[$n]->{witness} = \@witness;
+        }
+    }
+    my $lock_time = unpack("V", substr($tx_data, 0, 4, ""));
+    my $tx_length = length($_[0]) - length($tx_data);
+    my $hash = reverse hash256(substr($_[0], 0, $tx_length));
+    $_[0] = $tx_data;
+    return Bitcoin::Transaction->new(
+        in   => \@tx_in,
+        out  => \@tx_out,
+        hash => $hash,
+    );
+}
+
 sub process_transactions {
     my $self = shift;
     my ($block, $tx_data) = @_;
 
+    # It's convenient and effecient to move "char *" pointer by string during processing it in C,
+    # but perl has no such possibility, so we just remove processed part from the string.
+    # It's possible to operate with IO::Scalar or IO::String but I doubt it will be more quickly.
+    # Also it's possible to increase string index and operate with substr($tx_data, $index).
     my $tx_num = get_varint($tx_data);
     for (my $i = 0; $i < $tx_num; $i++) {
-        # TODO
-        #$block->process_serialized_tx($tx_data);
+        my $tx = deserialize_transaction($tx_data);
+        Debugf("process transaction: %s", unpack("H*", $tx->hash));
+        # TODO: check for QBTC open_script (lock coins)
     }
     $block->update(scanned => 1);
 }

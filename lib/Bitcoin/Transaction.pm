@@ -2,8 +2,8 @@ package Bitcoin::Transaction;
 use warnings;
 use strict;
 
-use parent 'QBitcoin::Transaction';
+use QBitcoin::Accessors qw(mk_accessors new);
 
-use constant TABLE => 'btc_transaction';
+mk_accessors(qw(hash in out));
 
 1;
