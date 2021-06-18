@@ -7,20 +7,22 @@ use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Config;
 use QBitcoin::Network;
+use Bitcoin::Protocol;
 
 sub main {
-    my ( $help, @peer_hosts );
+    my ( $help, @peer_hosts, @btc_hosts );
     unless (GetOptions(
-        'help|h|?'   => \$help,
-        'peer|p=s'   => \@peer_hosts,
-        'verbose|v'  => \$config->{verbose},
-        'bind|b=s'   => \$config->{bind_addr},
-        'port|P=s'   => \$config->{port},
-        'genesis|G'  => \$config->{genesis},
-        'generate|g' => \$config->{generate},
-        'produce'    => \$config->{produce},
-        'database=s' => \$config->{database},
-        'log=s'      => \$config->{log},
+        'help|h|?'    => \$help,
+        'peer|p=s'    => \@peer_hosts,
+        'btcnode|B=s' => \@btc_hosts,
+        'verbose|v'   => \$config->{verbose},
+        'bind|b=s'    => \$config->{bind_addr},
+        'port|P=s'    => \$config->{port},
+        'genesis|G'   => \$config->{genesis},
+        'generate|g'  => \$config->{generate},
+        'produce'     => \$config->{produce},
+        'database=s'  => \$config->{database},
+        'log=s'       => \$config->{log},
     )) {
         select STDERR;
         usage();
@@ -30,20 +32,21 @@ sub main {
         usage();
         return 0;
     }
-    return QBitcoin::Network->main_loop(@peer_hosts);
+    return QBitcoin::Network->main_loop(\@peer_hosts, \@btc_hosts);
 }
 
 sub usage {
     print "QBitcoin Core Daemon version " . VERSION . "\n";
     print "Usage:  qbitcoind [options]\n";
     print "Options:\n";
-    print "   -h, -? --help            - print this help message and exit,\n";
-    print "   -v, --verbose            - output logs to stdout,\n";
-    print "   -p, --peer <host[:port]> - connect to peer <host> and <port> (default port " . PORT_P2P . "),\n";
-    print "   -b, --bind <addr[:port]> - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT_P2P . "),\n";
-    print "   -g, --generate           - generate blocks (private key must be stored in the database),\n";
-    print "   -G, --genesis            - run as genesis node, do not need to synchronize with other nodes for authoritative answers,\n";
-    print "   --log <file>             - write log to <file>, 'syslog' for syslog (default).\n";
+    print "   -h, -? --help               - print this help message and exit,\n";
+    print "   -v, --verbose               - output logs to stdout,\n";
+    print "   -p, --peer <host[:port]>    - connect to peer <host> and <port> (default port " . PORT_P2P . "),\n";
+    print "   -B, --btcnode <host[:port]> - connect to btc node <host>:<port> (default port " . Bitcoin::Protocol->PORT_P2P . "),\n";
+    print "   -b, --bind <addr[:port]>    - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT_P2P . "),\n";
+    print "   -g, --generate              - generate blocks (private key must be stored in the database),\n";
+    print "   -G, --genesis               - run as genesis node, do not need to synchronize with other nodes for authoritative answers,\n";
+    print "   --log <file>                - write log to <file>, 'syslog' for syslog (default).\n";
 }
 
 exit main();

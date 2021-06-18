@@ -68,7 +68,7 @@ sub startup {
 
 sub pack_my_address {
     my $self = shift;
-    return pack("Q<a16n", PROTOCOL_FEATURES, $self->my_address, $self->my_port);
+    return pack("Q<a16n", PROTOCOL_FEATURES, $self->my_addr, $self->my_port);
 }
 
 sub cmd_version {

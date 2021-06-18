@@ -415,6 +415,7 @@ sub announce_to_peers {
 
     foreach my $peer (QBitcoin::Peers->connected) {
         next if $self->received_from && $peer->ip eq $self->received_from->ip;
+        next unless $peer->can('announce_block');
         $peer->announce_block($self);
     }
 }

@@ -13,7 +13,9 @@ use constant ATTR => qw(
     ip
     host
     port
-    my_address
+    addr
+    my_ip
+    my_addr
     my_port
     recvbuf
     sendbuf
