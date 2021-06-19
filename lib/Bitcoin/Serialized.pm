@@ -38,4 +38,10 @@ sub get_varint {
         unpack("Q<", $self->get(8));
 }
 
+sub get_string {
+    my $self = shift;
+    my $n = $self->get_varint();
+    return $n ? $self->get($n) : "";
+}
+
 1;

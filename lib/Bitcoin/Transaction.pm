@@ -22,9 +22,8 @@ sub deserialize {
     my @tx_in;
     for (my $n = 0; $n < $txin_count; $n++) {
         my $prev_output = $tx_data->get(36); # (prev_tx_hash, output_index)
-        my $script_length = $tx_data->get_varint();
         # first 4 bytes of the script for coinbase tx block verion 2 are "\x03" and block height
-        my $script = $tx_data->get($script_length);
+        my $script = $tx_data->get_string();
         my $sequence = $tx_data->get(4);
         push @tx_in, {
             tx_out   => substr($prev_output, 0, 32),
@@ -37,8 +36,7 @@ sub deserialize {
     my @tx_out;
     for (my $n = 0; $n < $txout_count; $n++) {
         my $value = unpack("Q<", $tx_data->get(8));
-        my $open_script_length = $tx_data->get_varint();
-        my $open_script = $tx_data->get($open_script_length);
+        my $open_script = $tx_data->get_string();
         push @tx_out, {
             value       => $value,
             open_script => $open_script,
@@ -49,8 +47,7 @@ sub deserialize {
             my $witness_count = $tx_data->get_varint();
             my @witness;
             foreach (my $k = 0; $k < $witness_count; $k++) {
-                my $witness_len = $tx_data->get_varint();
-                push @witness, $tx_data->get($witness_len);
+                push @witness, $tx_data->get_string();
             }
             $tx_in[$n]->{witness} = \@witness;
         }
