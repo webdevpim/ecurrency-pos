@@ -40,7 +40,6 @@ use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Block;
-use QBitcoin::Peers;
 use QBitcoin::Mempool;
 use QBitcoin::Transaction;
 

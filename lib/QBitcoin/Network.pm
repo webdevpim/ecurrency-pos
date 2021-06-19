@@ -140,7 +140,7 @@ sub main_loop {
             my $peerinfo = accept(my $new_socket, $listen_socket);
             my ($remote_port, $peer_addr) = unpack_sockaddr_in($peerinfo);
             my $peer_ip = inet_ntoa($peer_addr);
-            if (my $peer = QBitcoin::Peers->peer($peer_ip)) {
+            if (my $peer = QBitcoin::Peers->peer($peer_ip, 'QBitcoin')) {
                 Warningf("Already connected with peer %s, status %s", $peer_ip, $peer->state);
                 close($new_socket);
             }

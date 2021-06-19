@@ -41,6 +41,13 @@ sub new {
     return $self;
 }
 
+sub type {
+    my $self = shift;
+    return $self->isa('QBitcoin::Protocol') ? 'QBitcoin' :
+           $self->isa('Bitcoin::Protocol')  ? 'Bitcoin'  :
+           die "Unknown peer type " . ref($self) . "\n";
+}
+
 sub disconnect {
     my $self = shift;
     if ($self->socket) {
