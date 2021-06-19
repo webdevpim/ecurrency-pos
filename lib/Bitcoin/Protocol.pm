@@ -7,6 +7,7 @@ use parent 'QBitcoin::Protocol::Common';
 use QBitcoin::Const qw(GENESIS_TIME);
 use QBitcoin::Log;
 use QBitcoin::Crypto qw(hash256);
+use Bitcoin::Serialized;
 use Bitcoin::Block;
 use Bitcoin::Transaction;
 
@@ -42,17 +43,6 @@ sub varint {
         $num < 0xFFFF ? pack("Cv", 0xFD, $num) :
         $num < 0xFFFFFFFF ? pack("CV", 0xFE, $num) :
         pack("CQ<", 0xFF, $num);
-}
-
-# modify param, remove length from data
-sub get_varint(\$) {
-    my ($dataref) = @_;
-    my $first = unpack("C", substr($$dataref, 0, 1, ""));
-    # We do not check if $data has enough data, but if not we will fail on next step, get items
-    return $first < 0xFD ? $first :
-        $first == 0xFD ? unpack("v", substr($$dataref, 0, 2, "")) :
-        $first == 0xFE ? unpack("V", substr($$dataref, 0, 4, "")) :
-        unpack("Q<", substr($$dataref, 0, 8, ""));
 }
 
 sub varstr {
@@ -136,21 +126,21 @@ sub cmd_verack {
 
 sub cmd_inv {
     my $self = shift;
-    my ($data) = @_;
-    if (length($data) == 0) {
-        Errf("Incorrect params from peer %s cmd %s data length %u", $self->ip, $self->command, length($data));
+    my ($payload) = @_;
+    if (length($payload) == 0) {
+        Errf("Incorrect params from peer %s cmd %s data length %u", $self->ip, $self->command, length($payload));
         $self->abort("incorrect_params");
         return -1;
     }
-    my $num = get_varint($data);
-    if (length($data) != 36*$num) {
-        Errf("Incorrect params from peer %s cmd %s data length %u, expected %u", $self->ip, $self->command, length($data), 36*$num);
+    my $data = Bitcoin::Serialized->new($payload);
+    my $num = $data->get_varint();
+    if ($data->length != 36*$num) {
+        Errf("Incorrect params from peer %s cmd %s data length %u, expected %u", $self->ip, $self->command, $data->length, 36*$num);
         $self->abort("incorrect_params");
         return -1;
     }
     for (my $i = 0; $i < $num; $i++) {
-        my $inv = substr($data, $i*36, 36);
-        my ($type, $hash) = unpack("Va32", $inv);
+        my ($type, $hash) = unpack("Va32", $data->get(36));
         if ($type == MSG_TX) {
             # We do not need mempool transactions
             next;
@@ -170,15 +160,16 @@ sub cmd_inv {
 
 sub cmd_headers {
     my $self = shift;
-    my ($data) = @_;
-    if (length($data) == 0) {
-        Errf("Incorrect params from peer %s cmd %s data length %u", $self->ip, $self->command, length($data));
+    my ($payload) = @_;
+    if (length($payload) == 0) {
+        Errf("Incorrect params from peer %s cmd %s data length %u", $self->ip, $self->command, length($payload));
         $self->abort("incorrect_params");
         return -1;
     }
-    my $num = get_varint($data);
-    if (length($data) != $num*81) {
-        Errf("Incorrect params from peer %s cmd %s data length %u expected %u", $self->ip, $self->command, length($data), $num*81);
+    my $data = Bitcoin::Serialized->new($payload);
+    my $num = $data->get_varint();
+    if ($data->length != $num*81) {
+        Errf("Incorrect params from peer %s cmd %s data length %u expected %u", $self->ip, $self->command, $data->length, $num*81);
         $self->abort("incorrect_params");
         return -1;
     }
@@ -186,8 +177,7 @@ sub cmd_headers {
     my $new_block;
     my $orphan_block;
     for (my $i = 0; $i < $num; $i++) {
-        my $header = substr($data, $i*81, 81);
-        my $block = Bitcoin::Block->deserialize($header);
+        my $block = Bitcoin::Block->deserialize($data);
         Debugf("Received block header: %s, prev_hash %s",
             unpack("H*", scalar reverse $block->hash), unpack("H*", scalar reverse $block->prev_hash));
         my $exising = Bitcoin::Block->find(hash => $block->hash);
@@ -205,6 +195,7 @@ sub cmd_headers {
                 $orphan_block //= $block;
             }
         }
+        my $tx_num = $data->get_varint(); # always 0
     }
     if ($known_block) {
         # All received block are known for us. Was it deep rollback?
@@ -300,7 +291,9 @@ sub process_block {
 
 sub cmd_block {
     my $self = shift;
-    my ($block_data) = @_;
+    my ($payload) = @_;
+
+    my $block_data = Bitcoin::Serialized->new($payload);
     my $block = Bitcoin::Block->deserialize($block_data);
     if (!$block) {
         $self->abort("bad_block_data");
@@ -326,7 +319,7 @@ sub cmd_block {
     }
 
     if (!$block->scanned) {
-        $self->process_transactions($block, substr($block_data, 80));
+        $self->process_transactions($block, $block_data);
     }
 
     if ($block->height) {
@@ -339,74 +332,13 @@ sub cmd_block {
     return 0;
 }
 
-sub deserialize_transaction {
-    my ($tx_data) = @_;
-
-    my ($version) = unpack("V", substr($tx_data, 0, 4, "")); # 1 or 2
-    my $txin_count = get_varint($tx_data);
-    my $has_witness = 0;
-    if ($txin_count == 0) {
-        $has_witness = unpack("C", substr($tx_data, 0, 1, "")); # should be always 1
-        $txin_count = get_varint($tx_data);
-    }
-    my @tx_in;
-    for (my $n = 0; $n < $txin_count; $n++) {
-        my $prev_output = substr($tx_data, 0, 36, ""); # (prev_tx_hash, output_index)
-        my $script_length = get_varint($tx_data);
-        # first 4 bytes of the script for coinbase tx block verion 2 are "\x03" and block height
-        my $script = substr($tx_data, 0, $script_length, "");
-        my $sequence = substr($tx_data, 0, 4, "");
-        push @tx_in, {
-            tx_out   => substr($prev_output, 0, 32),
-            num      => unpack("V", substr($prev_output, 32, 4)),
-            script   => $script,
-            sequence => $sequence,
-        },
-    }
-    my $txout_count = get_varint($tx_data);
-    my @tx_out;
-    for (my $n = 0; $n < $txout_count; $n++) {
-        my $value = unpack("Q<", substr($tx_data, 0, 8, ""));
-        my $open_script_length = get_varint($tx_data);
-        my $open_script = substr($tx_data, 0, $open_script_length, "");
-        push @tx_out, {
-            value       => $value,
-            open_script => $open_script,
-        };
-    }
-    if ($has_witness) {
-        foreach (my $n = 0; $n < $txin_count; $n++) {
-            my $witness_count = get_varint($tx_data);
-            my @witness;
-            foreach (my $k = 0; $k < $witness_count; $k++) {
-                my $witness_len = get_varint($tx_data);
-                push @witness, substr($tx_data, 0, $witness_len, "");
-            }
-            $tx_in[$n]->{witness} = \@witness;
-        }
-    }
-    my $lock_time = unpack("V", substr($tx_data, 0, 4, ""));
-    my $tx_length = length($_[0]) - length($tx_data);
-    my $hash = reverse hash256(substr($_[0], 0, $tx_length));
-    $_[0] = $tx_data;
-    return Bitcoin::Transaction->new(
-        in   => \@tx_in,
-        out  => \@tx_out,
-        hash => $hash,
-    );
-}
-
 sub process_transactions {
     my $self = shift;
     my ($block, $tx_data) = @_;
 
-    # It's convenient and effecient to move "char *" pointer by string during processing it in C,
-    # but perl has no such possibility, so we just remove processed part from the string.
-    # It's possible to operate with IO::Scalar or IO::String but I doubt it will be more quickly.
-    # Also it's possible to increase string index and operate with substr($tx_data, $index).
-    my $tx_num = get_varint($tx_data);
+    my $tx_num = $tx_data->get_varint();
     for (my $i = 0; $i < $tx_num; $i++) {
-        my $tx = deserialize_transaction($tx_data);
+        my $tx = Bitcoin::Transaction->deserialize($tx_data);
         Debugf("process transaction: %s", unpack("H*", $tx->hash));
         # TODO: check for QBTC open_script (lock coins)
     }

@@ -35,7 +35,11 @@ sub deserialize {
     my $class = shift;
     my ($data) = @_;
 
-    my ($version, $prev_block, $merkle_root, $timestamp, $bits, $nonce) = unpack("Va32a32VVV", $data);
+    if ($data->length < 80) {
+        Warningf("Incorrect serialized block header, length %u < 80", $data->length);
+        return undef;
+    }
+    my ($version, $prev_block, $merkle_root, $timestamp, $bits, $nonce) = unpack("Va32a32VVV", $data->get(80));
     my $block = $class->new(
         version     => $version,
         prev_hash   => $prev_block,
