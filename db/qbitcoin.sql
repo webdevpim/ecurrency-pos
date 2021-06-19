@@ -51,3 +51,17 @@ CREATE TABLE IF NOT EXISTS my_address (
   private_key varchar(255) NOT NULL, -- encrypted
   pubkey_crc  varchar(255) NOT NULL
 );
+
+CREATE TABLE btc_block (
+  height int unsigned NOT NULL PRIMARY KEY,
+  time datetime NOT NULL,
+  bits int unsigned NOT NULL,
+  nonce int unsigned NOT NULL,
+  version int unsigned NOT NULL,
+  scanned int unsigned NOT NULL,
+  hash binary(32) NOT NULL,
+  prev_hash binary(32) DEFAULT NULL,
+  merkle_root binary(32) NOT NULL,
+  UNIQUE (hash),
+  KEY (scanned)
+);

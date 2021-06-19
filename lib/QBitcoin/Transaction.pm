@@ -415,8 +415,9 @@ sub validate {
 sub announce {
     my $self = shift;
     my ($received_from) = @_;
-    foreach my $peer (QBitcoin::Peers->connected) {
+    foreach my $peer (QBitcoin::Peers->connected('QBitcoin')) {
         next if $received_from && $peer->ip eq $received_from->ip;
+        next unless $peer->can("announce_tx");
         $peer->announce_tx($self);
     }
 }

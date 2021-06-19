@@ -413,8 +413,9 @@ sub check_synced {
 sub announce_to_peers {
     my $self = shift;
 
-    foreach my $peer (QBitcoin::Peers->connected) {
+    foreach my $peer (QBitcoin::Peers->connected('QBitcoin')) {
         next if $self->received_from && $peer->ip eq $self->received_from->ip;
+        next unless $peer->can('announce_block');
         $peer->announce_block($self);
     }
 }

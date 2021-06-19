@@ -155,8 +155,19 @@ sub find {
 }
 
 sub create {
-    my $class = shift;
+    my $self_or_class = shift;
     my $args = ref $_[0] ? $_[0] : { @_ };
+
+    my ($self, $class);
+    if (ref($self_or_class)) {
+        die "create() should not have params when called as object method\n" if %$args;
+        $self = $self_or_class;
+        $class = ref($self);
+        $args = { map { $_ => $self->$_ } grep { $class->FIELDS->{$_} } keys %$self };
+    }
+    else {
+        $class = $self_or_class;
+    }
 
     my $table = $class->TABLE
         or die "No TABLE defined in $class\n";
@@ -167,15 +178,26 @@ sub create {
             or die "Incorrect key [$key]";
         $sql .= ", " if @values;
         $sql .= "$key = ";
-        $sql .= $class->FIELDS->{$key} == TIMESTAMP ? "FROM_UNIXTIME(?)" : "?";
-        push @values, $args->{$key};
+        my $type = $class->FIELDS->{$key};
+        if ($type == TIMESTAMP) {
+            $sql .= "FROM_UNIXTIME(?)";
+            push(@values, $args->{$key});
+        }
+        elsif ($type == BINARY && DEBUG_ORM) {
+            $sql .= "UNHEX(?)";
+            push(@values, unpack("H*", $args->{$key}));
+        }
+        else {
+            $sql .= "?";
+            push @values, $args->{$key};
+        }
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values));
     my $res = dbh->do($sql, undef, @values);
     if ($res != 1) {
         die "Can't create object $table\n";
     }
-    my $self = $class->new($args);
+    $self //= $class->new($args);
     if ($class->FIELDS->{id}) {
         my ($id) = dbh->selectrow_array("SELECT LAST_INSERT_ID()");
         $self->{id} = $id;

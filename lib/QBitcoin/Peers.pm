@@ -7,30 +7,31 @@ use QBitcoin::Const;
 my %PEERS;
 
 sub peers {
-    return values %PEERS;
+    return map { values %$_ } values %PEERS;
 }
 
 sub peer {
     my $class = shift;
-    my ($ip) = @_;
-    return $PEERS{$ip};
+    my ($ip, $type) = @_;
+    return $PEERS{$type}->{$ip};
 }
 
 sub connected {
     my $class = shift;
-    return grep { $_->state eq STATE_CONNECTED } $class->peers;
+    my ($type) = @_;
+    return grep { $_->state eq STATE_CONNECTED } values %{$PEERS{$type}}
 }
 
 sub add_peer {
     my $class = shift;
     my ($peer) = @_;
-    $PEERS{$peer->ip} = $peer;
+    $PEERS{$peer->type}->{$peer->ip} = $peer;
 }
 
 sub del_peer {
     my $class = shift;
     my ($peer) = @_;
-    delete $PEERS{$peer->ip};
+    delete $PEERS{$peer->type}->{$peer->ip};
 }
 
 1;

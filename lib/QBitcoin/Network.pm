@@ -36,7 +36,7 @@ sub connect_to {
     my $peer = shift;
     my ($peer_host) = $peer->host;
     my ($addr, $port) = split(/:/, $peer_host);
-    $port //= getservbyname(SERVICE_NAME, 'tcp') // PORT_P2P;
+    $port //= getservbyname(SERVICE_NAME, 'tcp') // $peer->PORT_P2P;
     my $iaddr = inet_aton($addr)
         or die "Unknown host: $addr\n";
     my $paddr = sockaddr_in($port, $iaddr);
@@ -50,6 +50,8 @@ sub connect_to {
     setsockopt($socket, SOL_SOCKET, O_NONBLOCK, 1)
         or die "setsockopt error: $!\n";
     $peer->ip = inet_ntoa($iaddr);
+    $peer->port = $port;
+    $peer->addr = "\x00"x10 . "\xff\xff" . $iaddr;
     $peer->socket = $socket;
     $peer->socket_fileno = fileno($socket);
     $peer->state = STATE_CONNECTING;
@@ -59,7 +61,7 @@ sub connect_to {
 
 sub main_loop {
     my $class = shift;
-    my @peer_hosts = @_;
+    my ($peer_hosts, $btc_nodes) = @_;
 
     if ($config->{genesis}) {
         mempool_synced(1);
@@ -76,8 +78,17 @@ sub main_loop {
     }
 
     my $listen_socket = $class->listen_socket;
-    foreach my $peer_host (@peer_hosts) {
+    foreach my $peer_host (@$peer_hosts) {
         my $peer = QBitcoin::Protocol->new(
+            state_time => time(),
+            host       => $peer_host,
+            direction  => DIR_OUT,
+        );
+        connect_to($peer);
+        QBitcoin::Peers->add_peer($peer);
+    }
+    foreach my $peer_host (@$btc_nodes) {
+        my $peer = Bitcoin::Protocol->new(
             state_time => time(),
             host       => $peer_host,
             direction  => DIR_OUT,
@@ -129,7 +140,7 @@ sub main_loop {
             my $peerinfo = accept(my $new_socket, $listen_socket);
             my ($remote_port, $peer_addr) = unpack_sockaddr_in($peerinfo);
             my $peer_ip = inet_ntoa($peer_addr);
-            if (my $peer = QBitcoin::Peers->peer($peer_ip)) {
+            if (my $peer = QBitcoin::Peers->peer($peer_ip, 'QBitcoin')) {
                 Warningf("Already connected with peer %s, status %s", $peer_ip, $peer->state);
                 close($new_socket);
             }
@@ -144,8 +155,10 @@ sub main_loop {
                     host       => $peer_ip,
                     ip         => $peer_ip,
                     port       => $remote_port,
+                    addr       => "\x00"x10 . "\xff\xff" . $peer_addr,
                     my_ip      => $my_ip,
                     my_port    => $my_port,
+                    my_addr    => "\x00"x10 . "\xff\xff" . $my_addr,
                     direction  => DIR_IN,
                 );
                 QBitcoin::Peers->add_peer($peer);
@@ -200,6 +213,7 @@ sub main_loop {
                     my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($peer->socket));
                     $peer->my_ip = inet_ntoa($my_addr);
                     $peer->my_port = $my_port;
+                    $peer->my_addr = "\x00"x10 . "\xff\xff" . $my_addr,
                     Infof("Connected to %s", $peer->ip);
                     $peer->startup();
                     next;

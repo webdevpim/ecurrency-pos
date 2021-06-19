@@ -16,7 +16,7 @@ use QBitcoin::Block;
 #$config->{verbose} = 1;
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
-$protocol_module->mock('send_line', sub { 1 });
+$protocol_module->mock('send_message', sub { 1 });
 
 my $block_module = Test::MockModule->new('QBitcoin::Block');
 $block_module->mock('self_weight', \&mock_self_weight);
@@ -110,7 +110,7 @@ sub send_blocks {
             $peer->has_weight = $block->weight;
             my $block_data = $block->serialize;
             $block_hash = $block->hash;
-            $peer->process_block($block_data);
+            $peer->cmd_block($block_data);
         }
         my $height = QBitcoin::Block->blockchain_height;
         my $weight = QBitcoin::Block->best_weight;
