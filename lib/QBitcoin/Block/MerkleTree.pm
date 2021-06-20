@@ -26,7 +26,7 @@ sub calculate_merkle_root {
     my $self = shift;
     @{$self->transactions}
         or return "\x00" x 32;
-    my @hashes = sort { $a cmp $b } map { $_->hash } @{$self->transactions};
+    my @hashes = map { $_->hash } @{$self->transactions};
     my $level = 0;
     my $level_size = 1; # 2**$level
     my $cur_hash = $hashes[0];
