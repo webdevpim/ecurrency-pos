@@ -6,18 +6,18 @@ CREATE TABLE `block` (
   prev_hash binary(32) DEFAULT NULL,
   merkle_root binary(32) NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS `hash` ON `block` (hash);
+CREATE UNIQUE INDEX IF NOT EXISTS `block_hash` ON `block` (hash);
 
 CREATE TABLE `transaction` (
-  id int unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  id integer NOT NULL AUTO_INCREMENT PRIMARY KEY, -- "integer" (signed) required for sqlite autoincrement
   hash binary(32) NOT NULL,
   block_height int unsigned NOT NULL,
   size int unsigned NOT NULL,
   fee bigint signed NOT NULL,
   FOREIGN KEY (block_height) REFERENCES `block` (height) ON DELETE CASCADE
 );
-CREATE UNIQUE INDEX IF NOT EXISTS `hash` ON `transaction` (hash);
-CREATE INDEX IF NOT EXISTS `block_height` ON `transaction` (block_height);
+CREATE UNIQUE INDEX IF NOT EXISTS `tx_hash` ON `transaction` (hash);
+CREATE INDEX IF NOT EXISTS `tx_block_height` ON `transaction` (block_height);
 
 CREATE TABLE `tx_data` (
   id int unsigned NOT NULL PRIMARY KEY,
@@ -27,10 +27,10 @@ CREATE TABLE `tx_data` (
 
 -- Actually these are qbt addresses
 CREATE TABLE IF NOT EXISTS `open_script` (
-  id int unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  id integer NOT NULL AUTO_INCREMENT PRIMARY KEY,
   data blob NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS `data` ON `open_script` (data);
+CREATE UNIQUE INDEX IF NOT EXISTS `open_script_data` ON `open_script` (data);
 
 CREATE TABLE IF NOT EXISTS `txo` (
   value     bigint unsigned NOT NULL,
@@ -64,6 +64,6 @@ CREATE TABLE `btc_block` (
   prev_hash binary(32) DEFAULT NULL,
   merkle_root binary(32) NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS `height` ON `btc_block` (height);
-CREATE UNIQUE INDEX IF NOT EXISTS `hash`   ON `btc_block` (hash);
+CREATE UNIQUE INDEX IF NOT EXISTS `btc_height` ON `btc_block` (height);
+CREATE UNIQUE INDEX IF NOT EXISTS `btc_hash`   ON `btc_block` (hash);
 CREATE INDEX IF NOT EXISTS `scanned` ON `btc_block` (scanned);
