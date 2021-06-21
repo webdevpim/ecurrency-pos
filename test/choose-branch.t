@@ -30,8 +30,6 @@ sub mock_self_weight {
         $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
 }
 
-my $peer = QBitcoin::Protocol->new(ip => '127.0.0.1');
-
 # parent process accept and check results; child execute subchilds and wait them
 pipe my $rh, my $wh;
 my $base_pid = fork();
