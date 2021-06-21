@@ -9,7 +9,7 @@ use Scalar::Util qw(refaddr);
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
-use QBitcoin::ORM qw(find replace delete :types);
+use QBitcoin::ORM qw(find create delete :types);
 use QBitcoin::Crypto qw(hash256);
 use QBitcoin::TXO;
 use QBitcoin::Peers;
@@ -166,7 +166,7 @@ sub store {
     my $self = shift;
     $self->is_cached or die "store not cached transaction " . $self->hash_str;
     # we are in sql transaction
-    $self->replace();
+    $self->create();
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
         $txo->store_spend($self),
