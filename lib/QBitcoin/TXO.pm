@@ -151,10 +151,10 @@ sub store {
 sub store_spend {
     my $self = shift;
     my ($tx) = @_;
-    my $sql = "UPDATE `" . TABLE . "` AS t JOIN `" . TRANSACTION_TABLE . "` AS tx_in ON (t.tx_in = tx_in.id)";
-    $sql .= " SET tx_out = ?, close_script = ? WHERE tx_in.hash = ? AND num = ?";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,X'%s',X'%s',%u]", $sql, $tx->id, unpack("H*", $self->close_script), unpack("H*", $self->tx_in), $self->num);
-    my $res = dbh->do($sql, undef, $tx->id, $self->close_script, $self->tx_in, $self->num);
+    my ($tx_in_id) = dbh->selectrow_array("SELECT id FROM `" . TRANSACTION_TABLE . "` WHERE hash = ?", undef, $self->tx_in);
+    my $sql = "UPDATE `" . TABLE . "` SET tx_out = ?, close_script = ? WHERE tx_in = ? AND num = ?";
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,X'%s',X'%s',%u]", $sql, $tx->id, unpack("H*", $self->close_script), $tx_in_id, $self->num);
+    my $res = dbh->do($sql, undef, $tx->id, $self->close_script, $tx_in_id, $self->num);
     $res == 1
         or die "Can't store txo " . $self->tx_in_str . ":" . $self->num . " as spend: " . (dbh->errstr // "no error") . "\n";
 }
