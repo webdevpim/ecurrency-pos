@@ -12,15 +12,16 @@ use constant TABLE => 'btc_block';
 use constant FIELDS => {
     version     => NUMERIC,
     height      => NUMERIC,
-    time        => TIMESTAMP,
+    time        => NUMERIC,
     bits        => NUMERIC,
     nonce       => NUMERIC,
+    chainwork   => NUMERIC,
     scanned     => NUMERIC,
     hash        => BINARY,
     prev_hash   => BINARY,
     merkle_root => BINARY,
 };
-use constant PRIMARY_KEY => 'height';
+use constant PRIMARY_KEY => 'hash';
 
 mk_accessors(keys %{&FIELDS});
 
@@ -50,6 +51,27 @@ sub deserialize {
     );
     $block->hash = $block->calculate_hash;
     return $block;
+}
+
+sub difficulty {
+    my $self = shift;
+    # https://bitcoin.stackexchange.com/questions/5838/how-is-difficulty-calculated
+    return 0xffff / ($self->bits & 0xffffff) * (1 << (8*(29 - ($self->bits >> 24))));
+}
+
+sub validate {
+    my $self = shift;
+    # compare hash with bits
+    my $bits_coef = $self->bits & 0xffffff;
+    my $bits_expo = $self->bits >> 24;
+    my $zero_bytes = 32-$bits_expo;
+    # hash must have first 8*(32-$bits_expo) zero bits
+    substr($self->hash, -$zero_bytes) eq "\x00" x $zero_bytes
+        or return 0;
+    my $first4 = substr($self->hash, -$zero_bytes-4, 4);
+    unpack("V", substr($self->hash, -$zero_bytes-4, 4)) < $bits_coef * 256
+        or return 0;
+    return 1;
 }
 
 sub hash_str {

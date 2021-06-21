@@ -22,6 +22,7 @@ sub main {
         'generate|g'  => \$config->{generate},
         'produce'     => \$config->{produce},
         'database=s'  => \$config->{database},
+        'dbi=s'       => \$config->{dbi},
         'log=s'       => \$config->{log},
     )) {
         select STDERR;

@@ -24,10 +24,21 @@ sub commit {
     undef $SQL_TRANSACTION;
 }
 
+sub rollback {
+    my $self = shift;
+    die "rollback without sql transaction\n" unless $SQL_TRANSACTION;
+    dbh->rollback;
+    DEBUG_ORM && Debug("Rollback sql transaction");
+    undef $SQL_TRANSACTION;
+}
+
 sub DESTROY {
     my $self = shift;
-    Err("Destroy sql transaction without commit") if $SQL_TRANSACTION;
-    undef $SQL_TRANSACTION;
+    if ($SQL_TRANSACTION) {
+        Err("Destroy sql transaction without commit");
+        dbh->rollback;
+        undef $SQL_TRANSACTION;
+    }
 }
 
 1;

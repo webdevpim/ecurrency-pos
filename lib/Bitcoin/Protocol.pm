@@ -4,14 +4,17 @@ use strict;
 use feature 'state';
 
 use parent 'QBitcoin::Protocol::Common';
+use List::Util qw(max);
 use QBitcoin::Const qw(GENESIS_TIME);
 use QBitcoin::Log;
 use QBitcoin::Crypto qw(hash256);
+use QBitcoin::ORM::Transaction;
 use Bitcoin::Serialized;
 use Bitcoin::Block;
 use Bitcoin::Transaction;
 
 use constant TESTNET => 1;
+use constant MAINNET => !TESTNET;
 
 use constant {
     PROTOCOL_VERSION  => 70011,
@@ -178,21 +181,28 @@ sub cmd_headers {
     my $orphan_block;
     for (my $i = 0; $i < $num; $i++) {
         my $block = Bitcoin::Block->deserialize($data);
+        if (!$block || !$block->validate) {
+            $self->abort("bad_block_header");
+            return -1;
+        }
         Debugf("Received block header: %s, prev_hash %s",
             unpack("H*", scalar reverse $block->hash), unpack("H*", scalar reverse $block->prev_hash));
-        my $exising = Bitcoin::Block->find(hash => $block->hash);
-        if ($exising) {
-            $known_block = $exising;
+        my $existing = Bitcoin::Block->find(hash => $block->hash);
+        if ($existing) {
+            $known_block = $existing;
         }
         else {
+            my $db_transaction = QBitcoin::ORM::Transaction->new;
             if ($self->process_block($block)) {
                 $new_block = $block;
                 $block->scanned = $block->time >= GENESIS_TIME ? 0 : 1;
                 $block->create();
                 $HAVE_BLOCK0 = 1;
+                $db_transaction->commit;
             }
             else {
                 $orphan_block //= $block;
+                $db_transaction->rollback;
             }
         }
         my $tx_num = $data->get_varint(); # always 0
@@ -259,22 +269,53 @@ sub process_block {
     my ($block) = @_;
 
     state $LAST_BLOCK;
+    state $CHAINWORK;
+    # https://bitcoin.stackexchange.com/questions/26869/what-is-chainwork
+    my $chainwork = $block->difficulty * 4295032833; # it's 0x0100010001, avoid perl warning about too large hex number
     if ($block->prev_hash eq "\x00" x 32) {
         $block->height = 0;
+        $CHAINWORK = $block->chainwork = $chainwork;
     }
     else {
-        my $existing;
-        $existing = $LAST_BLOCK if $LAST_BLOCK && $LAST_BLOCK->hash eq $block->prev_hash;
-        $existing //= Bitcoin::Block->find(hash => $block->prev_hash);
-        if ($existing) {
-            $block->height = $existing->height+1;
-            my $revert_height;
-            foreach my $revert_block (Bitcoin::Block->find(height => { '>=' => $block->height }, -sortby => 'height DESC')) {
-                if (!$revert_height) {
-                    $revert_height = $revert_block->height;
-                    Noticef("Revert blockchain height %u-%u", $block->height, $revert_height);
+        my $prev_block;
+        $prev_block = $LAST_BLOCK if $LAST_BLOCK && $LAST_BLOCK->hash eq $block->prev_hash;
+        $prev_block //= Bitcoin::Block->find(hash => $block->prev_hash);
+        if ($prev_block) {
+            if (MAINNET) {
+                # check difficulty, it should not be less than max(last N blocks)/4 for mainnet
+                # it's only for prevent spam by many blocks with small difficulty
+                my $prev_difficulty = max map { $_->difficulty } $prev_block, Bitcoin::Block->find(hash => $prev_block->prev_hash);
+                if ($block->difficulty < $prev_difficulty / 4.001) {
+                    Warningf("Too low difficulty for block %s, ignore it", unpack("H*", scalar reverse $block->hash));
+                    return undef;
                 }
-                $revert_block->delete();
+            }
+            $block->chainwork = $prev_block->chainwork + $chainwork;
+            $CHAINWORK //= (map { $_->chainwork } Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1))[0];
+            if ($block->chainwork > $CHAINWORK) {
+                my $start_block = $prev_block;
+                my $new_height = 1;
+                while (!defined $start_block->height) {
+                    $start_block = Bitcoin::Block->find(hash => $start_block->prev_hash)
+                        or die "Bitcoin blockchain consistensy broken\n";
+                    $new_height++;
+                }
+                my $revert_height;
+                foreach my $revert_block (Bitcoin::Block->find(height => { '>' => $start_block->height }, -sortby => 'height DESC')) {
+                    if (!$revert_height) {
+                        $revert_height = $revert_block->height;
+                        Noticef("Revert blockchain height %u-%u", $start_block->height+1, $revert_height);
+                    }
+                    # TODO: rollback QBT blocks if $revert_block contains QBT coinbase
+                    $revert_block->update(height => undef);
+                }
+                $block->height = $start_block->height + $new_height--;
+                for (my $cur_block = $prev_block; !defined $cur_block->height;) {
+                    $cur_block->update(height => $start_block->height + $new_height--);
+                    $cur_block = Bitcoin::Block->find(hash => $cur_block->prev_hash)
+                        or die "Can't find prev block, check bitcoin blockchain consistensy\n";
+                }
+                $CHAINWORK = $block->chainwork;
             }
         }
         else {
@@ -295,7 +336,7 @@ sub cmd_block {
 
     my $block_data = Bitcoin::Serialized->new($payload);
     my $block = Bitcoin::Block->deserialize($block_data);
-    if (!$block) {
+    if (!$block || !$block->validate) {
         $self->abort("bad_block_data");
         return -1;
     }
@@ -311,10 +352,14 @@ sub cmd_block {
         $block->height = $existing->height;
     }
     else {
-        $self->process_block($block)
-            or return 0;
+        my $db_transaction = QBitcoin::ORM::Transaction->new;
+        if (!$self->process_block($block)) {
+            $db_transaction->rollback;
+            return 0;
+        }
         $block->scanned = $block->time >= GENESIS_TIME ? 0 : 1;
         $block->create();
+        $db_transaction->commit;
         $HAVE_BLOCK0 = 1;
     }
 

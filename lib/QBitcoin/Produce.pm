@@ -52,7 +52,8 @@ sub produce {
 }
 
 sub _produce_my_utxo {
-    my ($my_address) = my_address(); # first one
+    my ($my_address) = my_address() # first one
+        or return;
     state $last_time = 0;
     my $time = time();
     my $age = int($time - GENESIS_TIME);
