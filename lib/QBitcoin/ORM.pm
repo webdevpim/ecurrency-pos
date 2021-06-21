@@ -38,8 +38,19 @@ use constant IGNORE => \undef; # { key => IGNORE } may be used to override defau
 sub dbh {
     state $dbh;
     return $dbh if $dbh;
-    my $db_name = $config->{"database"} // DB_NAME;
-    my $dsn = $config->{"dsn"} // "DBI:mysql:$db_name;mysql_read_default_file=$ENV{HOME}/my.cnf:localhost";
+    my $dbi = $config->{dbi} // "mysql";
+    my $db_name = $config->{database} // DB_NAME;
+    my $location = "localhost";
+    if (lc($dbi) eq "sqlite") {
+        $dbi = "SQLite";
+        $location = "";
+        $db_name .= ".sqlite" unless $db_name =~ /\.sqlite$/;
+    }
+    elsif ($dbi eq "mysql") {
+        $db_name .= ";mysql_read_default_file=$ENV{HOME}/my.cnf";
+    }
+    my $dsn = $config->{"dsn"} // ("DBI:$dbi:$db_name" . ($location ? ":$location" : ""));
+    Debugf("dsn: %s", $dsn);
     my $login = $config->{"db.login"};
     my $password = $config->{"db.password"};
     return $dbh = DBI->connect($dsn, $login, $password, DB_OPTS);
