@@ -198,11 +198,12 @@ sub cmd_headers {
                 $block->scanned = $block->time >= GENESIS_TIME ? 0 : 1;
                 $block->create();
                 $HAVE_BLOCK0 = 1;
+                $db_transaction->commit;
             }
             else {
                 $orphan_block //= $block;
+                $db_transaction->rollback;
             }
-            $db_transaction->commit;
         }
         my $tx_num = $data->get_varint(); # always 0
     }
@@ -352,8 +353,10 @@ sub cmd_block {
     }
     else {
         my $db_transaction = QBitcoin::ORM::Transaction->new;
-        $self->process_block($block)
-            or return 0;
+        if (!$self->process_block($block)) {
+            $db_transaction->rollback;
+            return 0;
+        }
         $block->scanned = $block->time >= GENESIS_TIME ? 0 : 1;
         $block->create();
         $db_transaction->commit;
