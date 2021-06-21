@@ -56,6 +56,12 @@ sub dbh {
     return $dbh = DBI->connect($dsn, $login, $password, DB_OPTS);
 }
 
+sub for_log {
+    my ($data) = @_;
+    defined($data) || return "undef";
+    return $data =~ /^[[:print:]]*$/ ? "'$data'" : "X'" . unpack("H*", $data) . "'";
+}
+
 sub find {
     my $class = shift;
     my $args = ref $_[0] ? $_[0] : { @_ };
@@ -151,12 +157,12 @@ sub find {
     $sql .= " ORDER BY $sortby" if $sortby;
     $limit = 1 unless wantarray;
     $sql .= " LIMIT $limit" if $limit;
-    DEBUG_ORM && Debugf("sql: [%s], values: [%s]", $sql, join(',', map { $_ // "undef" } @values));
+    DEBUG_ORM && Debugf("sql: [%s], values: [%s]", $sql, join(',', map { for_log($_) } @values));
     my $sth = dbh->prepare($sql);
     $sth->execute(@values);
     my @result;
     while (my $res = $sth->fetchrow_hashref()) {
-        DEBUG_ORM && Debugf("orm: found {%s}", join(',', map { "'$_':" . (!defined($res->{$_}) ? "null" : $class->FIELDS->{$_} == BINARY ? "X'" . unpack("H*", $res->{$_}) . "'" : $class->FIELDS->{$_} == NUMERIC ? $res->{$_} : "'$res->{$_}'") } sort keys %$res));
+        DEBUG_ORM && Debugf("orm: found {%s}", join(',', map { "'$_':" . (!defined($res->{$_}) ? "null" : $class->FIELDS->{$_} == BINARY ? for_log($res->{$_}) : $class->FIELDS->{$_} == NUMERIC ? $res->{$_} : "'$res->{$_}'") } sort keys %$res));
         $res = $class->pre_load($res) if $class->can('pre_load');
         my $item = $class->new($res);
         $item = $item->on_load if $class->can('on_load');
@@ -205,7 +211,7 @@ sub create {
         }
     }
     my $sql = "INSERT INTO `$table` (" . join(',', @keys) . ") VALUES (" . join(',', @placeholders) . ")";
-    DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values));
+    DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { for_log($_) } @values));
     my $res = dbh->do($sql, undef, @values);
     if ($res != 1) {
         die "Can't create object $table\n";
@@ -252,7 +258,7 @@ sub replace {
         }
     }
     my $sql = "REPLACE INTO `" . $table . "` (" . join(',', @keys) . ") VALUES (" . join(',', @placeholders) . ")";
-    DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values));
+    DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { for_log($_) } @values));
     dbh->do($sql, undef, @values);
     if ($class->FIELDS->{id} && !$self->id) {
         my $id = dbh->last_insert_id();
@@ -304,7 +310,7 @@ sub update {
         $sql .= " WHERE id = ?";
         @pk_values = ($self->id);
     }
-    DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values, @pk_values));
+    DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { for_log($_) } @values, @pk_values));
     dbh->do($sql, undef, @values, @pk_values);
 }
 
