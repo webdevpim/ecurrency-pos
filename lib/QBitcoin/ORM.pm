@@ -18,6 +18,7 @@ use constant DB_TYPES => {
 use constant DB_TYPES;
 
 use constant DEBUG_ORM => 1;
+use constant BIN_UNHEX => 0; # does not work for sqlite
 
 use parent 'Exporter';
 our @EXPORT_OK = qw(dbh find create replace update delete IGNORE DEBUG_ORM);
@@ -52,7 +53,7 @@ sub find {
         or die "No TABLE defined in $class\n";
     my $sql = "SELECT " .
         join(', ', map { $class->FIELDS->{$_} == TIMESTAMP ? "UNIX_TIMESTAMP($_) AS $_" : $_ } keys %{$class->FIELDS}) .
-        " FROM $table";
+        " FROM `$table`";
     my @values;
     my $condition = '';
     my $sortby;
@@ -74,7 +75,7 @@ sub find {
         $condition .= " AND" if $condition;
         if (ref $value eq 'ARRAY') {
             # "IN()" is sql syntax error, "IN(NULL)" matches nothing
-            if ($type == BINARY && DEBUG_ORM) {
+            if ($type == BINARY && BIN_UNHEX) {
                 $condition .= " $key IN (" . (@$value ? join(',', ('UNHEX(?)')x@$value) : "NULL") . ")";
                 push @values, map unpack("H*", $_), @$value;
             }
@@ -92,7 +93,7 @@ sub find {
                     $condition .= "$key $op $$v ";
                 }
                 elsif (ref $v eq 'ARRAY') { # key => { not => [ 'value1', 'value2 ] }
-                    if ($type == BINARY && DEBUG_ORM) {
+                    if ($type == BINARY && BIN_UNHEX) {
                         $condition .= " $key $op IN (" . (@$value ? join(',', ('UNHEX(?)')x@$value) : "NULL") . ")";
                         push @values, map unpack("H*", $_), @$value;
                     }
@@ -122,7 +123,7 @@ sub find {
                 $condition .= " $key = FROM_UNIXTIME(?)";
                 push @values, $value;
             }
-            if ($type == BINARY && DEBUG_ORM) {
+            if ($type == BINARY && BIN_UNHEX) {
                 $condition .= " $key = UNHEX(?)";
                 push @values, unpack("H*", $value);
             }
@@ -171,27 +172,28 @@ sub create {
 
     my $table = $class->TABLE
         or die "No TABLE defined in $class\n";
-    my $sql = "INSERT INTO $table SET ";
+    my @keys;
+    my @placeholders;
     my @values;
     foreach my $key (keys %$args) {
         $key =~ KEY_RE
             or die "Incorrect key [$key]";
-        $sql .= ", " if @values;
-        $sql .= "$key = ";
+        push @keys, $key;
         my $type = $class->FIELDS->{$key};
         if ($type == TIMESTAMP) {
-            $sql .= "FROM_UNIXTIME(?)";
+            push @placeholders, 'FROM_UNIXTIME(?)';
             push(@values, $args->{$key});
         }
-        elsif ($type == BINARY && DEBUG_ORM) {
-            $sql .= "UNHEX(?)";
+        elsif ($type == BINARY && BIN_UNHEX) {
+            push @placeholders, "UNHEX(?)";
             push(@values, unpack("H*", $args->{$key}));
         }
         else {
-            $sql .= "?";
+            push @placeholders, "?";
             push @values, $args->{$key};
         }
     }
+    my $sql = "INSERT INTO `$table` (" . join(',', @keys) . ") VALUES (" . join(',', @placeholders) . ")";
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values));
     my $res = dbh->do($sql, undef, @values);
     if ($res != 1) {
@@ -212,32 +214,33 @@ sub replace {
     my $class = ref($self);
     my $table = $class->TABLE
         or die "No TABLE defined in $class\n";
-    my $sql = "REPLACE $table SET ";
+    my @keys;
+    my @placeholders;
     my @values;
     foreach my $key (keys %{$class->FIELDS}) {
         $key =~ KEY_RE
             or die "Incorrect key [$key]";
-        $sql .= ", " if @values;
-        $sql .= "$key = ";
+        push @keys, $key;
         my $type = $class->FIELDS->{$key}
             or die "Unknown key [$key] for $table\n";
         if (!defined $self->$key) {
-            $sql .= "?";
+            push @placeholders, "?";
             push @values, undef;
         }
         elsif ($type == TIMESTAMP) {
-            $sql .= "FROM_UNIXTIME(?)";
-            push(@values, $self->$key);
+            push @placeholders, "FROM_UNIXTIME(?)";
+            push @values, $self->$key;
         }
-        elsif ($type == BINARY && DEBUG_ORM) {
-            $sql .= "UNHEX(?)";
-            push(@values, unpack("H*", $self->$key));
+        elsif ($type == BINARY && BIN_UNHEX) {
+            push @placeholders, "UNHEX(?)";
+            push @values, unpack("H*", $self->$key);
         }
         else {
-            $sql .= "?";
-            push(@values, $self->$key);
+            push @placeholders, "?";
+            push @values, $self->$key;
         }
     }
+    my $sql = "REPLACE INTO `" . $table . "` (" . join(',', @keys) . ") VALUES (" . join(',', @placeholders) . ")";
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values));
     dbh->do($sql, undef, @values);
     if ($class->FIELDS->{id} && !$self->id) {
@@ -255,7 +258,7 @@ sub update {
     return unless %$args;
     my $table = $self->TABLE
         or die "No TABLE defined in " . ref($self) . "\n";
-    my $sql = "UPDATE $table SET ";
+    my $sql = "UPDATE `$table` SET ";
     my @values;
     my $count;
     foreach my $key (keys %$args) {
@@ -271,7 +274,7 @@ sub update {
                 $sql .= "$key = FROM_UNIXTIME(?)";
                 push @values, $args->{$key};
             }
-            elsif ($self->FIELDS->{$key} == BINARY && DEBUG_ORM) {
+            elsif ($self->FIELDS->{$key} == BINARY && BIN_UNHEX) {
                 $sql .= "$key = UNHEX(?)";
                 push @values, unpack("H*", $args->{$key});
             }
@@ -299,7 +302,7 @@ sub delete {
 
     my $table = $self->TABLE
         or die "No TABLE defined in " . ref($self) . "\n";
-    my $sql = "DELETE FROM $table ";
+    my $sql = "DELETE FROM `$table` ";
     my @pk_values;
     if ($self->can('PRIMARY_KEY')) {
         $sql .= "WHERE " . join(" AND ", map { "$_ = ?" } $self->PRIMARY_KEY);
