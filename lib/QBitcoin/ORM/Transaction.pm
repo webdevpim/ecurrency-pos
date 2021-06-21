@@ -26,8 +26,11 @@ sub commit {
 
 sub DESTROY {
     my $self = shift;
-    Err("Destroy sql transaction without commit") if $SQL_TRANSACTION;
-    undef $SQL_TRANSACTION;
+    if ($SQL_TRANSACTION) {
+        Err("Destroy sql transaction without commit");
+        dbh->rollback;
+        undef $SQL_TRANSACTION;
+    }
 }
 
 1;
