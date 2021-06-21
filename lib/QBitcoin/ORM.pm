@@ -212,7 +212,7 @@ sub create {
     }
     $self //= $class->new($args);
     if ($class->FIELDS->{id}) {
-        my ($id) = dbh->selectrow_array("SELECT LAST_INSERT_ID()");
+        my $id = dbh->last_insert_id();
         $self->{id} = $id;
         DEBUG_ORM && Debugf("orm: last_insert_id: %u", $id);
     }
@@ -255,7 +255,7 @@ sub replace {
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { $_ // "undef" } @values));
     dbh->do($sql, undef, @values);
     if ($class->FIELDS->{id} && !$self->id) {
-        my ($id) = dbh->selectrow_array("SELECT LAST_INSERT_ID()");
+        my $id = dbh->last_insert_id();
         $self->{id} = $id;
         DEBUG_ORM && Debugf("orm: last_insert_id: %u", $id);
     }
