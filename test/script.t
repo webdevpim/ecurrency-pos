@@ -18,6 +18,8 @@ $config->{verbose} = 0;
 my @scripts_ok = (
     [ op_1      => OP_1 ],
     [ op_verify => OP_1 . OP_1 . OP_VERIFY ],
+    [ op_if     => OP_1 . OP_IF . OP_1 . OP_VERIFY . OP_1 . OP_ENDIF ],
+    [ op_ifif   => OP_0 . OP_IF . OP_0 . OP_VERIFY . OP_ELSE . OP_1 . OP_IF . OP_1 . OP_ELSE . OP_0 . OP_ENDIF . OP_ENDIF ],
 );
 
 my @scripts_fail = (
@@ -27,6 +29,9 @@ my @scripts_fail = (
     [ with_stack  => OP_1 . OP_1 ],
     [ zero_stack  => OP_0 ],
     [ op_verify   => OP_0 . OP_1 . OP_VERIFY ],
+    [ op_if       => OP_IF . OP_1 . OP_ENDIF ],
+    [ op_if2      => OP_1 . OP_IF . OP_0 . OP_ELSE . OP_1 . OP_ENDIF ],
+    [ op_ifif     => OP_1 . OP_1 . OP_IF . OP_ELSE . OP_IF . OP_ENDIF . OP_1 ],
 );
 
 foreach my $check_data (@scripts_ok) {
