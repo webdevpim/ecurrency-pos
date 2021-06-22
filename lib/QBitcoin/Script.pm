@@ -5,6 +5,8 @@ use strict;
 use QBitcoin::Log;
 use QBitcoin::Crypto qw(check_sig hash160);
 use QBitcoin::Script::OpCodes qw(OPCODES :OPCODES);
+use QBitcoin::Script::Const;
+use QBitcoin::Script::State;
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(script_eval pushdata);
@@ -20,11 +22,6 @@ our @EXPORT_OK = qw(script_eval pushdata);
 # https://en.bitcoin.it/w/images/en/7/70/Bitcoin_OpCheckSig_InDetail.png
 # https://developer.bitcoin.org/devguide/transactions.html
 # https://academy.bit2me.com/en/what-is-bitcoin-script/# (?)
-
-use constant {
-    FALSE => "\x00",
-    TRUE  => "\x01",
-};
 
 sub unpack_int($) {
     my ($data) = @_;
@@ -124,8 +121,8 @@ foreach my $opcode (keys %{&OPCODES}) {
     elsif ($INT_2_1{$cmd}) {
         $OP_CMD[OPCODES->{$opcode}] = sub {
             my ($state) = @_;
-            return unless $state->[2]; # ifstate
-            my $stack = $state->[1];
+            return unless $state->ifstate;
+            my $stack = $state->stack;
             @$stack >= 2 or return 0;
             local $a = unpack_int(pop @$stack) // return 0;
             local $b = unpack_int(pop @$stack) // return 0;
@@ -136,8 +133,8 @@ foreach my $opcode (keys %{&OPCODES}) {
     elsif ($BIN_1_1{$cmd}) {
         $OP_CMD[OPCODES->{$opcode}] = sub {
             my ($state) = @_;
-            return unless $state->[2]; # ifstate
-            my $stack = $state->[1];
+            return unless $state->ifstate;
+            my $stack = $state->stack;
             @$stack >= 2 or return 0;
             local $a = $stack->[-1];
             $stack->[-1] = $BIN_1_1{$cmd}->();
@@ -147,8 +144,8 @@ foreach my $opcode (keys %{&OPCODES}) {
     elsif (exists $PUSH_CONST{$cmd}) {
         $OP_CMD[OPCODES->{$opcode}] = sub {
             my ($state) = @_;
-            return unless $state->[2]; # ifstate
-            push @{$state->[1]}, $PUSH_CONST{$cmd};
+            return unless $state->ifstate;
+            push @{$state->stack}, $PUSH_CONST{$cmd};
             return undef;
         };
     }
@@ -198,7 +195,7 @@ sub cmd_pushdatan($$) {
     my ($script, $stack, $ifstate) = @$state;
     length($script) >= $bytes
         or return 0;
-    my $data = substr($state->[0], 0, $bytes, "");
+    my $data = substr($state->script, 0, $bytes, "");
     return unless $ifstate;
     push @$stack, $data;
     return undef;
@@ -206,71 +203,66 @@ sub cmd_pushdatan($$) {
 
 sub cmd_dup($) {
     my ($state) = @_;
-    return unless $state->[2]; # ifstate
-    my $stack = $state->[1];
+    return unless $state->ifstate;
+    my $stack = $state->stack;
     push @$stack, $stack->[-1];
     return undef;
 }
 
 sub cmd_return($) {
-    # return if $state->[2]->[0]; # ifstack -- "return" cannot be inside "if" condition
+    # return if $state->ifstate; # "return" cannot be inside "if" condition
     return 0;
 }
 
 sub cmd_if($) {
     my ($state) = @_;
-    my $stack = $state->[1];
+    my $stack = $state->stack;
     @$stack or return 0;
     my $new_state = is_true(pop @$stack);
-    push @{$state->[3]}, $new_state;
-    $state->[2] &&= $new_state;
+    push @{$state->ifstack}, $new_state;
+    $state->ifstate &&= $new_state;
     return undef;
 }
 
 sub cmd_notif($) {
     my ($state) = @_;
-    my $stack = $state->[1];
+    my $stack = $state->stack;
     @$stack or return 0;
     my $new_state = !is_true(pop @$stack);
-    push @{$state->[3]}, $new_state;
-    $state->[2] &&= $new_state;
+    push @{$state->ifstack}, $new_state;
+    $state->ifstate &&= $new_state;
     return undef;
-}
-
-sub set_ifstate($) {
-    my ($state) = @_;
-    $state->[2] = !grep { !$_ } @{$state->[3]};
 }
 
 sub cmd_else($) {
     my ($state) = @_;
-    my $ifstack = $state->[3];
+    my $ifstack = $state->ifstack;
     @$ifstack or return 0;
     $ifstack->[-1] = !$ifstack->[-1];
-    set_ifstate($state);
+    $state->set_ifstate();
     return undef;
 }
 
 sub cmd_endif($) {
     my ($state) = @_;
-    my $ifstack = $state->[3];
+    my $ifstack = $state->ifstack;
     @$ifstack or return 0;
     pop @$ifstack;
-    set_ifstate($state);
+    $state->set_ifstate();
     return undef;
 }
 
 sub cmd_verify($) {
     my ($state) = @_;
-    return unless $state->[2]; # ifstate
-    my $stack = $state->[1];
+    return unless $state->ifstate;
+    my $stack = $state->stack;
     return @$stack && is_true(pop @$stack) ? undef : 0;
 }
 
 sub cmd_equal($) {
     my ($state) = @_;
-    return unless $state->[2]; # ifstate
-    my $stack = $state->[1];
+    return unless $state->ifstate;
+    my $stack = $state->stack;
     @$stack >= 2 or return 0;
     my $data = pop @$stack;
     $stack->[-1] = $stack->[-1] eq $data;
@@ -279,8 +271,8 @@ sub cmd_equal($) {
 
 sub cmd_equalverify($) {
     my ($state) = @_;
-    return unless $state->[2]; # ifstate
-    my $stack = $state->[1];
+    return unless $state->ifstate;
+    my $stack = $state->stack;
     @$stack >= 2 or return 0;
     my $data1 = pop @$stack;
     my $data2 = pop @$stack;
@@ -289,19 +281,19 @@ sub cmd_equalverify($) {
 
 sub cmd_checksig($) {
     my ($state) = @_;
-    return unless $state->[2]; # ifstate
-    my $stack = $state->[1];
+    return unless $state->ifstate;
+    my $stack = $state->stack;
     @$stack >= 2 or return 0;
     my $pubkey = pop @$stack;
     my $signature = pop @$stack;
-    push @$stack, check_sig($state->[4], $signature, $pubkey) ? TRUE : FALSE;
+    push @$stack, check_sig($state->tx_data, $signature, $pubkey) ? TRUE : FALSE;
     return undef;
 }
 
 sub execute {
     my ($state) = @_;
-    while (length($state->[0])) {
-        my $cmd_code = substr($state->[0], 0, 1, "");
+    while (length($state->script)) {
+        my $cmd_code = substr($state->script, 0, 1, "");
         if (my $cmd_func = $OP_CMD[ord($cmd_code)]) {
             my $res = $cmd_func->($state);
             return $res if defined $res;
@@ -316,18 +308,17 @@ sub execute {
 sub script_eval($$$) {
     my ($close_script, $open_script, $tx_data) = @_;
 
-    my $state = [$close_script, [], 1, [], $tx_data]; # script, stack, if-state, if-stack, tx-data
+    my $state = QBitcoin::Script::State->new($close_script, $tx_data);
     my $res;
     $res = execute($state);
     return $res if defined($res);
 
     # should we check/clear the if-stack here?
-    $state->[0] = $open_script;
+    $state->script = $open_script;
     $res = execute($state);
     return $res if defined($res);
 
-    my $stack = $state->[1];
-    return (@$stack == 1 && $stack->[0] eq TRUE && !@{$state->[3]});
+    return $state->ok;
 }
 
 1;
