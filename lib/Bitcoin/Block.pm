@@ -56,6 +56,7 @@ sub deserialize {
 sub difficulty {
     my $self = shift;
     # https://bitcoin.stackexchange.com/questions/5838/how-is-difficulty-calculated
+    # https://www.oreilly.com/library/view/mastering-bitcoin/9781491902639/ch08.html#difficulty_bits
     return 0xffff / ($self->bits & 0xffffff) * (1 << (8*(29 - ($self->bits >> 24))));
 }
 
