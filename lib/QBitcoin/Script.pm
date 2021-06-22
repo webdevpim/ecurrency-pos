@@ -124,7 +124,7 @@ foreach my $opcode (keys %{&OPCODES}) {
     elsif ($INT_2_1{$cmd}) {
         $OP_CMD[OPCODES->{$opcode}] = sub {
             my ($state) = @_;
-            return if $state->[2]->[0]; # ifstack
+            return unless $state->[2]; # ifstate
             my $stack = $state->[1];
             @$stack >= 2 or return 0;
             local $a = unpack_int(pop @$stack) // return 0;
@@ -136,7 +136,7 @@ foreach my $opcode (keys %{&OPCODES}) {
     elsif ($BIN_1_1{$cmd}) {
         $OP_CMD[OPCODES->{$opcode}] = sub {
             my ($state) = @_;
-            return if $state->[2]->[0]; # ifstack
+            return unless $state->[2]; # ifstate
             my $stack = $state->[1];
             @$stack >= 2 or return 0;
             local $a = $stack->[-1];
@@ -147,7 +147,7 @@ foreach my $opcode (keys %{&OPCODES}) {
     elsif (exists $PUSH_CONST{$cmd}) {
         $OP_CMD[OPCODES->{$opcode}] = sub {
             my ($state) = @_;
-            return if $state->[2]->[0]; # ifstack
+            return unless $state->[2]; # ifstate
             push @{$state->[1]}, $PUSH_CONST{$cmd};
             return undef;
         };
@@ -195,18 +195,18 @@ sub is_true($) {
 
 sub cmd_pushdatan($$) {
     my ($bytes, $state) = @_;
-    my ($script, $stack, $ifstack) = @$state;
+    my ($script, $stack, $ifstate) = @$state;
     length($script) >= $bytes
         or return 0;
     my $data = substr($state->[0], 0, $bytes, "");
-    return if $ifstack->[0];
+    return unless $ifstate;
     push @$stack, $data;
     return undef;
 }
 
 sub cmd_dup($) {
     my ($state) = @_;
-    return if $state->[2]->[0]; # ifstack
+    return unless $state->[2]; # ifstate
     my $stack = $state->[1];
     push @$stack, $stack->[-1];
     return undef;
@@ -217,16 +217,59 @@ sub cmd_return($) {
     return 0;
 }
 
+sub cmd_if($) {
+    my ($state) = @_;
+    my $stack = $state->[1];
+    @$stack or return 0;
+    my $new_state = is_true(pop @$stack);
+    push @{$state->[3]}, $new_state;
+    $state->[2] &&= $new_state;
+    return undef;
+}
+
+sub cmd_notif($) {
+    my ($state) = @_;
+    my $stack = $state->[1];
+    @$stack or return 0;
+    my $new_state = !is_true(pop @$stack);
+    push @{$state->[3]}, $new_state;
+    $state->[2] &&= $new_state;
+    return undef;
+}
+
+sub set_ifstate($) {
+    my ($state) = @_;
+    $state->[2] = !grep { !$_ } @{$state->[3]};
+}
+
+sub cmd_else($) {
+    my ($state) = @_;
+    my $ifstack = $state->[3];
+    @$ifstack or return 0;
+    $ifstack->[-1] = !$ifstack->[-1];
+    set_ifstate($state);
+    return undef;
+}
+
+sub cmd_endif($) {
+    my ($state) = @_;
+    my $ifstack = $state->[3];
+    @$ifstack or return 0;
+    pop @$ifstack;
+    set_ifstate($state);
+    return undef;
+}
+
 sub cmd_verify($) {
     my ($state) = @_;
-    return if $state->[2]->[0]; # ifstack
+    return unless $state->[2]; # ifstate
     my $stack = $state->[1];
     return @$stack && is_true(pop @$stack) ? undef : 0;
 }
 
 sub cmd_equal($) {
     my ($state) = @_;
-    return if $state->[2]->[0]; # ifstack
+    return unless $state->[2]; # ifstate
     my $stack = $state->[1];
     @$stack >= 2 or return 0;
     my $data = pop @$stack;
@@ -236,7 +279,7 @@ sub cmd_equal($) {
 
 sub cmd_equalverify($) {
     my ($state) = @_;
-    return if $state->[2]->[0]; # ifstack
+    return unless $state->[2]; # ifstate
     my $stack = $state->[1];
     @$stack >= 2 or return 0;
     my $data1 = pop @$stack;
@@ -246,12 +289,12 @@ sub cmd_equalverify($) {
 
 sub cmd_checksig($) {
     my ($state) = @_;
-    return if $state->[2]->[0]; # ifstack
+    return unless $state->[2]; # ifstate
     my $stack = $state->[1];
     @$stack >= 2 or return 0;
     my $pubkey = pop @$stack;
     my $signature = pop @$stack;
-    push @$stack, check_sig($state->[3], $signature, $pubkey) ? TRUE : FALSE;
+    push @$stack, check_sig($state->[4], $signature, $pubkey) ? TRUE : FALSE;
     return undef;
 }
 
@@ -273,7 +316,7 @@ sub execute {
 sub script_eval($$$) {
     my ($close_script, $open_script, $tx_data) = @_;
 
-    my $state = [$close_script, [], [], $tx_data]; # script, stack, if-stack, tx-data
+    my $state = [$close_script, [], 1, [], $tx_data]; # script, stack, if-state, if-stack, tx-data
     my $res;
     $res = execute($state);
     return $res if defined($res);
@@ -284,7 +327,7 @@ sub script_eval($$$) {
     return $res if defined($res);
 
     my $stack = $state->[1];
-    return (@$stack == 1 && $stack->[0] eq TRUE && !@{$state->[2]});
+    return (@$stack == 1 && $stack->[0] eq TRUE && !@{$state->[3]});
 }
 
 1;
