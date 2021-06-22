@@ -53,7 +53,11 @@ sub dbh {
     Debugf("dsn: %s", $dsn);
     my $login = $config->{"db.login"};
     my $password = $config->{"db.password"};
-    return $dbh = DBI->connect($dsn, $login, $password, DB_OPTS);
+    $dbh = DBI->connect($dsn, $login, $password, DB_OPTS);
+    if ($dbh eq "SQLite") {
+        $dbh->do("PRAGMA foreign_keys = ON");
+    };
+    return $dbh;
 }
 
 sub for_log {
