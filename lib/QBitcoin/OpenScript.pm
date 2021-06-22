@@ -31,8 +31,8 @@ sub script_for_address {
 
 sub check_input {
     my ($class) = shift;
-    my ($open_script, $close_script, $sign_data) = @_;
-    my $res = script_eval($close_script, $open_script, $sign_data);
+    my ($open_script, $close_script, $tx, $input_num) = @_;
+    my $res = script_eval($close_script, $open_script, $tx, $input_num);
     return $res ? 0 : -1; # if script_eval return true then it's ok (0)
 }
 

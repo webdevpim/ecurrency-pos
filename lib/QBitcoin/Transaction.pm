@@ -504,15 +504,15 @@ sub validate {
     my @stored_in;
     my $input_value = 0;
     my %inputs;
-    my $sign_data = $self->sign_data;
-    foreach my $in (@{$self->in}) {
+    foreach my $num (0 .. $#{$self->in}) {
+        my $in = $self->in->[$num];
         if ($inputs{$in->{txo}->key}++) {
             Warningf("Input %s:%u included in transaction %s twice",
                 $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
             return -1;
         }
         $input_value += $in->{txo}->value;
-        if ($in->{txo}->check_script($in->{close_script}, $sign_data) != 0) {
+        if ($in->{txo}->check_script($in->{close_script}, $self, $num) != 0) {
             Warningf("Unmatched close script for input %s:%u in transaction %s",
                 $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
             return -1;

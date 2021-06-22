@@ -3,10 +3,13 @@ use warnings;
 use strict;
 
 use QBitcoin::Log;
-use QBitcoin::Crypto qw(check_sig hash160);
+use QBitcoin::Crypto qw(hash160);
 use QBitcoin::Script::OpCodes qw(OPCODES :OPCODES);
 use QBitcoin::Script::Const;
 use QBitcoin::Script::State;
+
+use Role::Tiny::With;
+with 'QBitcoin::Script::CheckSig';
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(script_eval pushdata);
@@ -280,17 +283,6 @@ sub cmd_equalverify($) {
     return $data1 eq $data2 ? undef : 0;
 }
 
-sub cmd_checksig($) {
-    my ($state) = @_;
-    return unless $state->ifstate;
-    my $stack = $state->stack;
-    @$stack >= 2 or return 0;
-    my $pubkey = pop @$stack;
-    my $signature = pop @$stack;
-    push @$stack, check_sig($state->tx_data, $signature, $pubkey) ? TRUE : FALSE;
-    return undef;
-}
-
 sub execute {
     my ($state) = @_;
     while (length($state->script)) {
@@ -306,10 +298,10 @@ sub execute {
     return undef;
 }
 
-sub script_eval($$$) {
-    my ($close_script, $open_script, $tx_data) = @_;
+sub script_eval($$$$) {
+    my ($close_script, $open_script, $tx, $input_num) = @_;
 
-    my $state = QBitcoin::Script::State->new($close_script, $tx_data);
+    my $state = QBitcoin::Script::State->new($close_script, $tx, $input_num);
     my $res;
     $res = execute($state);
     return $res if defined($res);
