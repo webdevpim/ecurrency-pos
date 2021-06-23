@@ -231,7 +231,7 @@ sub drop_pending_block {
         }
     }
     if ($block->pending_tx) {
-        foreach my $tx_hash (keys %{$block->pending_tx}) {
+        foreach my $tx_hash (@{$block->pending_tx}) {
             delete $PENDING_TX_BLOCK{$tx_hash}->{$block->hash};
             if (!%{$PENDING_TX_BLOCK{$tx_hash}}) {
                 delete $PENDING_TX_BLOCK{$tx_hash};
