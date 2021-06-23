@@ -296,6 +296,20 @@ sub cmd_tx {
     $tx->receive() == 0
         or return -1;
     Debugf("Received tx %s fee %i size %u", $tx->hash_str, $tx->fee, $tx->size);
+    if ($self->block_pending_tx($tx)) {
+        return -1;
+    }
+    if (blockchain_synced() && mempool_synced() && $tx->fee >= 0) {
+        # announce to other peers
+        $tx->announce($self);
+    }
+    $tx->process_pending($self);
+    return 0;
+}
+
+sub block_pending_tx {
+    my $self = shift;
+    my ($tx) = @_;
     if (my $blocks = delete $PENDING_TX_BLOCK{$tx->hash}) {
         foreach my $block_hash (keys %$blocks) {
             my $block = $PENDING_BLOCK{$block_hash};
@@ -316,12 +330,7 @@ sub cmd_tx {
             }
         }
     }
-    if (blockchain_synced() && mempool_synced() && $tx->fee >= 0) {
-        # announce to other peers
-        $tx->announce($self);
-    }
-    $tx->process_pending($self);
-    return 0;
+    return undef;
 }
 
 sub request_new_block {
