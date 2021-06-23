@@ -103,8 +103,8 @@ sub receive {
     if ($HEIGHT && ($self->weight < $best_block[$HEIGHT]->weight ||
         ($self->weight == $best_block[$HEIGHT]->weight && $self->branch_height <= $HEIGHT))) {
         my $has_weight = $self->received_from ? ($self->received_from->has_weight // -1) : -1;
-        Debugf("Received block height %s from %s has too low weight for us",
-            $self->height, $self->received_from ? $self->received_from->ip : "me");
+        Debugf("Received block height %s from %s has too low weight for us: %u < %u",
+            $self->height, $self->received_from ? $self->received_from->ip : "me", $self->weight, $best_block[$HEIGHT]->weight);
         return 0;
     }
 
