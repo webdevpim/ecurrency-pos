@@ -8,15 +8,15 @@ use QBitcoin::Crypto qw(hash256);
 use Role::Tiny;
 
 sub _merkle_hash {
-    return hash256($_[0] lt $_[1] ? $_[0] . $_[1] : $_[1] . $_[0]);
+    return hash256($_[0] . $_[1]);
 }
 
 sub _merkle_root {
     my ($level, $start, $hashes) = @_;
     my $cur_hash = $start < @$hashes ? $hashes->[$start] : $hashes->[-1];
     my $level_size = 1;
-    for (my $cur_level = 0; $cur_level < $level; $cur_level++) {
-        my $next_hash = $start < @$hashes ? _merkle_root($cur_level, $start + $level_size, $hashes) : $cur_hash;
+    for (my $cur_level = 0; $cur_level < $level; $cur_level++, $level_size *= 2) {
+        my $next_hash = $start + $level_size < @$hashes ? _merkle_root($cur_level, $start + $level_size, $hashes) : $cur_hash;
         $cur_hash = _merkle_hash($cur_hash, $next_hash);
     }
     return $cur_hash;

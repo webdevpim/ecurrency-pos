@@ -362,7 +362,10 @@ sub cmd_block {
     }
 
     if (!$block->scanned) {
-        $self->process_transactions($block, $block_data);
+        if ($self->process_transactions($block, $block_data)) {
+            $self->abort("bad_block_data");
+            return -1;
+        }
     }
 
     if ($block->height) {
@@ -380,12 +383,21 @@ sub process_transactions {
     my ($block, $tx_data) = @_;
 
     my $tx_num = $tx_data->get_varint();
+    my @transactions;
     for (my $i = 0; $i < $tx_num; $i++) {
         my $tx = Bitcoin::Transaction->deserialize($tx_data);
         Debugf("process transaction: %s", $tx->hash_hex);
+        push @transactions, $tx;
         # TODO: check for QBTC open_script (lock coins)
     }
+    $block->transactions = \@transactions;
+    if ($block->merkle_root ne $block->calculate_merkle_root) {
+        Errf("Incorrect merkle root for block %s: %s != %s", $block->hash_hex,
+            unpack("H*", $block->merkle_root), unpack("H*", $block->calculate_merkle_root));
+        return -1;
+    }
     $block->update(scanned => 1);
+    return undef;
 }
 
 sub cmd_mempool {

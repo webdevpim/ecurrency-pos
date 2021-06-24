@@ -20,7 +20,9 @@ check_merkle([qw(a b)], "[ab]");
 check_merkle([qw(a b c)], "[[ab][cc]]");
 check_merkle([qw(a b c d)], "[[ab][cd]]");
 check_merkle([qw(a b c d e)], "[[[ab][cd]][[ee][ee]]]");
-check_merkle([qw(a b c d e f)], "[[[ab][cd]][[ef][ff]]]");
+check_merkle([qw(a b c d e f)], "[[[ab][cd]][[ef][ef]]]");
+check_merkle([qw(a b c d e f g)], "[[[ab][cd]][[ef][gg]]]");
+check_merkle([qw(a b c d e f g h i j k)], "[[[[ab][cd]][[ef][gh]]][[[ij][kk]][[ij][kk]]]]");
 
 sub check_merkle {
     my ($hashes, $expect) = @_;

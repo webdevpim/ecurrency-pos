@@ -6,6 +6,8 @@ use QBitcoin::Log;
 use QBitcoin::Accessors qw(new mk_accessors);
 use QBitcoin::ORM qw(:types find create update delete);
 use QBitcoin::Crypto qw(hash256);
+use Role::Tiny::With;
+with 'QBitcoin::Block::MerkleTree';
 
 use constant TABLE => 'btc_block';
 
@@ -24,6 +26,7 @@ use constant FIELDS => {
 use constant PRIMARY_KEY => 'hash';
 
 mk_accessors(keys %{&FIELDS});
+mk_accessors(qw(transactions));
 
 sub calculate_hash {
     my $self = shift;
