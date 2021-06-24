@@ -55,12 +55,22 @@ sub deserialize {
     my $lock_time = unpack("V", $tx_data->get(4));
     my $end_index = $tx_data->index;
     $tx_data->index = $start_index; # rewind
-    my $hash = reverse hash256($tx_data->get($end_index - $start_index));
+    my $hash = hash256($tx_data->get($end_index - $start_index));
     return $class->new(
         in   => \@tx_in,
         out  => \@tx_out,
         hash => $hash,
     );
+}
+
+sub hash_hex {
+    my $self = shift;
+    return unpack("H*", scalar reverse $self->hash);
+}
+
+sub hash_str {
+    my $self = shift;
+    return unpack("H*", scalar reverse substr($self->hash, -4));
 }
 
 1;

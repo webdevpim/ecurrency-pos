@@ -75,9 +75,14 @@ sub validate {
     return 1;
 }
 
-sub hash_str {
+sub hash_hex {
     my $self = shift;
-    return unpack("H*", substr($self->hash, 0, 4));
+    return unpack("H*", scalar reverse $self->hash);
+}
+
+sub prev_hash_hex {
+    my $self = shift;
+    return unpack("H*", scalar reverse $self->prev_hash);
 }
 
 1;

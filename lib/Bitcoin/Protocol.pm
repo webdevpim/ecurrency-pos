@@ -185,8 +185,7 @@ sub cmd_headers {
             $self->abort("bad_block_header");
             return -1;
         }
-        Debugf("Received block header: %s, prev_hash %s",
-            unpack("H*", scalar reverse $block->hash), unpack("H*", scalar reverse $block->prev_hash));
+        Debugf("Received block header: %s, prev_hash %s", $block->hash_hex, $block->prev_hash_hex);
         my $existing = Bitcoin::Block->find(hash => $block->hash);
         if ($existing) {
             $known_block = $existing;
@@ -223,7 +222,7 @@ sub cmd_headers {
         }
         else {
             # Is it genesis block? Request it
-            Debugf("Request genesis block %s", unpack("H*", scalar reverse $orphan_block->prev_hash));
+            Debugf("Request genesis block %s", $orphan_block->prev_hash_hex);
             $self->send_message("getdata",
                 pack("CVa32", 1, MSG_BLOCK, $self->can('BTC_GENESIS') ? $self->BTC_GENESIS : $orphan_block->prev_hash));
         }
@@ -239,7 +238,7 @@ sub request_transactions {
 
     my ($block) = Bitcoin::Block->find(scanned => 0, -sortby => 'height ASC', -limit => 1);
     if ($block) {
-        Debugf("Request block data: %s", unpack("H*", scalar reverse $block->hash));
+        Debugf("Request block data: %s", $block->hash_hex);
         $self->send_message("getdata", pack("CVa32", 1, MSG_BLOCK, $block->hash));
         return 1;
     }
@@ -286,7 +285,7 @@ sub process_block {
                 # it's only for prevent spam by many blocks with small difficulty
                 my $prev_difficulty = max map { $_->difficulty } $prev_block, Bitcoin::Block->find(hash => $prev_block->prev_hash);
                 if ($block->difficulty < $prev_difficulty / 4.001) {
-                    Warningf("Too low difficulty for block %s, ignore it", unpack("H*", scalar reverse $block->hash));
+                    Warningf("Too low difficulty for block %s, ignore it", $block->hash_hex);
                     return undef;
                 }
             }
@@ -319,7 +318,7 @@ sub process_block {
             }
         }
         else {
-            Warningf("Received orphan block %s, prev hash %s", $block->hash_str, unpack("H*", scalar reverse $block->prev_hash));
+            Warningf("Received orphan block %s, prev hash %s", $block->hash_hex, $block->prev_hash_hex);
             if ($HAVE_BLOCK0 && !$self->syncing) {
                 $self->request_blocks();
             }
@@ -341,12 +340,11 @@ sub cmd_block {
         return -1;
     }
 
-    Debugf("Received block: %s, prev_hash %s",
-        unpack("H*", scalar reverse $block->hash), unpack("H*", scalar reverse $block->prev_hash));
+    Debugf("Received block: %s, prev_hash %s", $block->hash_hex, $block->prev_hash_hex);
 
     if (my $existing = Bitcoin::Block->find(hash => $block->hash)) {
         if ($existing->scanned) {
-            Debugf("Received already scanned block %s, ignored", $block->hash_str);
+            Debugf("Received already scanned block %s, ignored", $block->hash_hex);
             return 0;
         }
         $block->height = $existing->height;
@@ -384,7 +382,7 @@ sub process_transactions {
     my $tx_num = $tx_data->get_varint();
     for (my $i = 0; $i < $tx_num; $i++) {
         my $tx = Bitcoin::Transaction->deserialize($tx_data);
-        Debugf("process transaction: %s", unpack("H*", $tx->hash));
+        Debugf("process transaction: %s", $tx->hash_hex);
         # TODO: check for QBTC open_script (lock coins)
     }
     $block->update(scanned => 1);
