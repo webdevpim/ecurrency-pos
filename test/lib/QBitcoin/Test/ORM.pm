@@ -25,7 +25,6 @@ sub create_database {
         $cmd =~ s/\\\n//gs;
         next unless $cmd =~ /\S/s;
         $cmd =~ s/\sAUTO_INCREMENT\s/ /s;
-print STDERR "Run sql command: [$cmd]\n";
         $dbh->do($cmd)
             or die "SQL error in cmd[$cmd]: " . $dbh->errstr;
     }
