@@ -210,7 +210,8 @@ sub cmd_dup($) {
 }
 
 sub cmd_return($) {
-    # return if $state->ifstate; # "return" cannot be inside "if" condition
+    my ($state) = @_;
+    return if $state->ifstate;
     return 0;
 }
 
