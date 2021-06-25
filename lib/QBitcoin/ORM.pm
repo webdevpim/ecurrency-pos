@@ -54,7 +54,7 @@ sub dbh {
     my $login = $config->{"db.login"};
     my $password = $config->{"db.password"};
     $dbh = DBI->connect($dsn, $login, $password, DB_OPTS);
-    if ($dbh eq "SQLite") {
+    if ($dbi eq "SQLite") {
         $dbh->do("PRAGMA foreign_keys = ON");
     };
     return $dbh;
