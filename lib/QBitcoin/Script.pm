@@ -211,7 +211,7 @@ sub cmd_dup($) {
 
 sub cmd_return($) {
     my ($state) = @_;
-    return if $state->ifstate;
+    return unless $state->ifstate;
     return 0;
 }
 
