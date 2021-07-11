@@ -10,6 +10,7 @@ use QBitcoin::ORM qw(dbh);
 
 our @EXPORT_OK = qw(dbh);
 
+$config->{dbi} = "sqlite";
 $config->{dsn} = "DBI:SQLite::memory:";
 
 my $schema = "$Bin/../db/qbitcoin.sql";
