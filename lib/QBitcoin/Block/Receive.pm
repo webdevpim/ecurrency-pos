@@ -86,7 +86,7 @@ sub receive {
     if (COMPACT_MEMORY) {
         if (defined($HEIGHT) && $best_block[$HEIGHT] && $self->weight < $best_block[$HEIGHT]->weight) {
             if (!$self->received_from || ($self->received_from->has_weight // -1) <= $best_block[$HEIGHT]->weight) {
-                Debugf("Received block weight %u not more than our best branch weight %u, ignore",
+                Debugf("Received block weight %Lu not more than our best branch weight %Lu, ignore",
                     $self->weight, $best_block[$HEIGHT]->weight);
                 $self->free_block();
                 return 0;
@@ -103,7 +103,7 @@ sub receive {
     if ($HEIGHT && ($self->weight < $best_block[$HEIGHT]->weight ||
         ($self->weight == $best_block[$HEIGHT]->weight && $self->branch_height <= $HEIGHT))) {
         my $has_weight = $self->received_from ? ($self->received_from->has_weight // -1) : -1;
-        Debugf("Received block height %s from %s has too low weight for us: %u < %u",
+        Debugf("Received block height %u from %s has too low weight for us: %Lu < %Lu",
             $self->height, $self->received_from ? $self->received_from->ip : "me", $self->weight, $best_block[$HEIGHT]->weight);
         return 0;
     }
@@ -118,8 +118,9 @@ sub receive {
         last if $best_block && $best_block->hash eq $new_best->prev_hash;
         $new_best->prev_block->next_block = $new_best;
     }
+    # $new_best is first block in new branch after fork, i.e $new_nest->prev_block is in the current best branch
     if ($new_best->height < ($HEIGHT // -1)) {
-        Infof("Check alternate branch started with block %s height %u with weight %u (current best weight %u)",
+        Infof("Check alternate branch started with block %s height %u with weight %Lu (current best weight %Lu)",
             $new_best->hash_str, $new_best->height, $self->weight, $self->best_weight);
     }
 
@@ -127,13 +128,13 @@ sub receive {
     # then set output in all txo in new branch and check it against possible double-spend
     for (my $b = $class->best_block($HEIGHT // $new_best->height); $b && $b->height >= $new_best->height; $b = $b->prev_block) {
         $b->prev_block->next_block = $b;
-        Debugf("Remove block %s height %s from the best branch", $b->hash_str, $b->height);
+        Debugf("Remove block %s height %u from the best branch", $b->hash_str, $b->height);
         foreach my $tx (reverse @{$b->transactions}) {
             $tx->unconfirm();
         }
     }
     for (my $b = $new_best; $b; $b = $b->next_block) {
-        Debugf("Add block %s height %s to the best branch", $b->hash_str, $b->height);
+        Debugf("Add block %s height %u to the best branch", $b->hash_str, $b->height);
         my $fail_tx;
 
         foreach my $tx (@{$b->transactions}) {
@@ -184,7 +185,7 @@ sub receive {
                 $fail_tx = "block"; # does not match any transaction hash
             }
             elsif ($self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ) != $b->weight) {
-                Warningf("Incorrect weight for block %s: %u != %u", $b->hash_str,
+                Warningf("Incorrect weight for block %s: %Lu != %Lu", $b->hash_str,
                     $b->weight, $self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ));
                 $fail_tx = "block";
             }
@@ -193,13 +194,13 @@ sub receive {
         if ($fail_tx) {
             # If we have tx included in two different blocks then process rollback until second tx occurence
             # It's not possible to include a tx twice in the same block, it's checked on block validation
-            Debugf("Revert block %s height %s from best branch", $b->hash_str, $b->height);
+            Debugf("Revert block %s height %u from best branch", $b->hash_str, $b->height);
             foreach my $tx (@{$b->transactions}) { # TODO: Do we need reverse order for unconfirm here?
                 last if $fail_tx eq $tx->hash;
                 $tx->unconfirm();
             }
             for (my $b1 = $b->prev_block; $b1 && $b1->height >= $new_best->height; $b1 = $b1->prev_block) {
-                Debugf("Revert block %s height %s from the best branch", $b1->hash_str, $b1->height);
+                Debugf("Revert block %s height %u from the best branch", $b1->hash_str, $b1->height);
                 foreach my $tx (reverse @{$b1->transactions}) {
                     $tx->unconfirm();
                 }
@@ -208,7 +209,7 @@ sub receive {
             my $old_best = $class->best_block($new_best->height);
             $old_best->prev_block->next_block = $old_best if $old_best && $old_best->prev_block;
             for (my $b1 = $old_best; $b1; $b1 = $b1->next_block) {
-                Debugf("Return block %s height %s to the best branch", $b1->hash_str, $b1->height);
+                Debugf("Return block %s height %u to the best branch", $b1->hash_str, $b1->height);
                 foreach my $tx (@{$b1->transactions}) {
                     $tx->block_height = $b1->height;
                     foreach my $in (@{$tx->in}) {
@@ -248,7 +249,7 @@ sub receive {
 
     if (defined($HEIGHT) && $new_best->height <= $HEIGHT) {
         QBitcoin::Generate::Control->generate_new() if $new_best->height < $HEIGHT;
-        Debugf("%s block height %u hash %s, best branch altered, weight %u, %u transactions",
+        Debugf("%s block height %u hash %s, best branch altered, weight %Lu, %u transactions",
             $self->received_from ? "received" : "loaded", $self->height,
             $self->hash_str, $self->weight, scalar(@{$self->transactions}));
         if ($self->height < $HEIGHT) {
@@ -260,7 +261,7 @@ sub receive {
         }
     }
     else {
-        Debugf("%s block height %u hash %s in the best branch, weight %u, %u transactions",
+        Debugf("%s block height %u hash %s in the best branch, weight %Lu, %u transactions",
             $self->received_from ? "received" : "loaded", $self->height,
             $self->hash_str, $self->weight, scalar(@{$self->transactions}));
     }
@@ -311,11 +312,9 @@ sub want_cleanup_branch {
 
 sub cleanup_old_blocks {
     my $first_free_height = $HEIGHT - INCORE_LEVELS;
-    # Remove linked blocks and branches with weight less than our best for all levels below $free_height
-    # Keep only unlinked branches with weight more than our best and have blocks within last INCORE_LEVELS
     for (my $free_height = $MIN_INCORE_HEIGHT; $free_height <= $first_free_height; $free_height++) {
         foreach my $b (values %{$block_pool[$free_height]}) {
-            next if $best_block[$free_height] &&  $b->hash eq $best_block[$free_height]->hash; # cleanup best branch after all other
+            next if $best_block[$free_height] && $b->hash eq $best_block[$free_height]->hash; # cleanup best branch after all other
             # cleanup only full branches; if prev_block has single descendant then this branch was already checked
             next if keys(%{$prev_block[$free_height]->{$b->prev_hash}}) == 1;
             drop_branch($b) if want_cleanup_branch($b);
@@ -325,6 +324,9 @@ sub cleanup_old_blocks {
         if ($best_block[$free_height] && $best_block[$free_height+1]) {
             # we have only best block on this level with single descendant, drop it and cleanup the level
             free_block($best_block[$free_height]);
+            foreach my $descendant (values %{$prev_block[$free_height+1]->{$best_block[$free_height]->hash}}) {
+                $descendant->prev_block(undef);
+            }
             foreach my $prev_hash (keys %{$prev_block[$free_height]}) {
                 delete $prev_block[$free_height]->{$prev_hash} unless %{$prev_block[$free_height]->{$prev_hash}};
             }
@@ -343,7 +345,7 @@ sub cleanup_old_blocks {
 sub free_block {
     my ($block) = @_;
 
-    Debugf("Free block %s height %s from memory cache", $block->hash_str, $block->height);
+    Debugf("Free block %s height %u from memory cache", $block->hash_str, $block->height);
     $block->prev_block(undef);
     $block->next_block(undef);
     delete $block_pool[$block->height]->{$block->hash};

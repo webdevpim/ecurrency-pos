@@ -14,17 +14,17 @@ use QBitcoin::Block;
 my $merkle_module = Test::MockModule->new('QBitcoin::Block::MerkleTree');
 $merkle_module->mock('_merkle_hash', sub { "[$_[0]$_[1]]" });
 
-check_merkle([], "\x00" x 32);
-check_merkle(["a"], "a"); 
-check_merkle([qw(a b)], "[ab]");
-check_merkle([qw(a b c)], "[[ab][cc]]");
-check_merkle([qw(a b c d)], "[[ab][cd]]");
-check_merkle([qw(a b c d e)], "[[[ab][cd]][[ee][ee]]]");
-check_merkle([qw(a b c d e f)], "[[[ab][cd]][[ef][ef]]]");
-check_merkle([qw(a b c d e f g)], "[[[ab][cd]][[ef][gg]]]");
-check_merkle([qw(a b c d e f g h i j k)], "[[[[ab][cd]][[ef][gh]]][[[ij][kk]][[ij][kk]]]]");
+merkle_root([], "\x00" x 32);
+merkle_root(["a"], "a");
+merkle_root([qw(a b)], "[ab]");
+merkle_root([qw(a b c)], "[[ab][cc]]");
+merkle_root([qw(a b c d)], "[[ab][cd]]");
+merkle_root([qw(a b c d e)], "[[[ab][cd]][[ee][ee]]]");
+merkle_root([qw(a b c d e f)], "[[[ab][cd]][[ef][ef]]]");
+merkle_root([qw(a b c d e f g)], "[[[ab][cd]][[ef][gg]]]");
+merkle_root([qw(a b c d e f g h i j k)], "[[[[ab][cd]][[ef][gh]]][[[ij][kk]][[ij][kk]]]]");
 
-sub check_merkle {
+sub merkle_root {
     my ($hashes, $expect) = @_;
 
     my @tr = map { QBitcoin::Transaction->new(hash => $_) } @$hashes;

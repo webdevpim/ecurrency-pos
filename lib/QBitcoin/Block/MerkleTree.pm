@@ -30,12 +30,46 @@ sub calculate_merkle_root {
     my $level = 0;
     my $level_size = 1; # 2**$level
     my $cur_hash = $hashes[0];
-    while ($level_size  < @hashes) {
+    while ($level_size < @hashes) {
         $cur_hash = _merkle_hash($cur_hash, _merkle_root($level, $level_size, \@hashes));
         ++$level;
-        $level_size *= 2;
+        $level_size <<= 1;
     }
     return $cur_hash;
+}
+
+sub merkle_path {
+    my $self = shift;
+    my ($tx_num) = @_;
+    my @hashes = map { $_->hash } @{$self->transactions};
+    my $level = 0;
+    my $level_size = 1; # 2**$level
+    my @path;
+    while ($level_size < @hashes) {
+        my $start = $level_size * ($tx_num & 1 ? $tx_num-1 : ($tx_num+1) * $level_size > $#hashes ? $tx_num : $tx_num+1);
+        push @path, _merkle_root($level, $start, \@hashes);
+        ++$level;
+        $level_size <<= 1;
+        $tx_num >>= 1;
+    }
+    return join "", @path;
+}
+
+sub check_merkle_path {
+    my $self = shift;
+    my ($hash, $tx_num, $merkle_path) = @_;
+
+    my $cur_hash = $hash;
+    my $hashlen = length($cur_hash);
+    my $pathlen = length($merkle_path);
+    my $ndx = 0;
+    while ($ndx < $pathlen) {
+        my $next_hash = substr($merkle_path, $ndx, $hashlen);
+        $ndx += $hashlen;
+        $cur_hash = _merkle_hash($tx_num & 1 ? ( $next_hash, $cur_hash ) : ( $cur_hash, $next_hash ));
+        $tx_num >>= 1;
+    }
+    return $cur_hash eq $self->merkle_root;
 }
 
 1;

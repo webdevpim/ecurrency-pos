@@ -343,8 +343,8 @@ sub request_new_block {
         $height //= $best_height+1;
         $height = $best_height+1 if $height > $best_height+1;
         $height-- if $height > height_by_time(time());
-        if ($self->has_weight > $best_weight ||
-            $self->has_weight == $best_weight && $height > $best_height) {
+        if (($self->has_weight // -1) > $best_weight ||
+            (($self->has_weight // -1) == $best_weight && $height > $best_height)) {
             $self->send_message("sendblock", pack("V", $height));
             if ($self->has_weight > $best_weight) { # otherwise remote may have no such block, no syncing
                 $self->syncing(1);
