@@ -20,6 +20,7 @@ use constant {
     MY_UTXO_PROB => 10 * BLOCK_INTERVAL, # probability 1/2 for generating 1 utxo per 10 blocks
     TX_FEE_PROB  =>  2 * BLOCK_INTERVAL, # probability 1/2 for generating 1 tx with fee >0 per 2 blocks
     TX_ZERO_PROB => 20 * BLOCK_INTERVAL, # probability 1/2 for generating 1 tx with 0 fee per 20 blocks
+    UPGRADE_PROB => 1000, # each 1000th bitcoin txo considering as upgrade
     FEE_MY_TX    => 0.1,
 };
 

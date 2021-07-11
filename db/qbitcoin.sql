@@ -67,3 +67,20 @@ CREATE TABLE `btc_block` (
 CREATE UNIQUE INDEX IF NOT EXISTS `btc_height` ON `btc_block` (height);
 CREATE UNIQUE INDEX IF NOT EXISTS `btc_hash`   ON `btc_block` (hash);
 CREATE INDEX IF NOT EXISTS `scanned` ON `btc_block` (scanned);
+
+CREATE TABLE `coinbase` (
+  btc_block_height int unsigned DEFAULT NULL,
+  btc_tx_num smallint unsigned DEFAULT NULL,
+  btc_out_num smallint unsigned NOT NULL,
+  btc_tx_hash binary(32) NOT NULL,
+  merkle_path binary(512) NOT NULL, -- 16-level btree with 32-byte (256-bit) hashes
+  value bigint unsigned NOT NULL,
+  open_script int unsigned NOT NULL,
+  tx_out int unsigned DEFAULT NULL,
+  close_script blob DEFAULT NULL,
+  PRIMARY KEY (btc_tx_hash),
+  FOREIGN KEY (btc_block_height) REFERENCES `btc_block`   (height) ON DELETE RESTRICT, -- should never happens
+  FOREIGN KEY (tx_out)           REFERENCES `transaction` (id)     ON DELETE SET NULL,
+  FOREIGN KEY (open_script)      REFERENCES `open_script` (id)     ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS `coinbase_tx_out` ON `coinbase` (tx_out);

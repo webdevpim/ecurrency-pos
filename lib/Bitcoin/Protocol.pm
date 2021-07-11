@@ -6,8 +6,12 @@ use feature 'state';
 use parent 'QBitcoin::Protocol::Common';
 use List::Util qw(max);
 use QBitcoin::Const qw(GENESIS_TIME);
+use QBitcoin::Config;
 use QBitcoin::Log;
 use QBitcoin::Crypto qw(hash256);
+use QBitcoin::Script::OpCodes qw(:OPCODES);
+use QBitcoin::Produce;
+use QBitcoin::Coinbase;
 use QBitcoin::ORM::Transaction;
 use Bitcoin::Serialized;
 use Bitcoin::Block;
@@ -17,6 +21,7 @@ use constant TESTNET => 1;
 use constant MAINNET => !TESTNET;
 
 use constant {
+    QBT_SCRIPT_START  => OP_RETURN . 'QBT',
     PROTOCOL_VERSION  => 70011,
     #PROTOCOL_FEATURES => 0x409,
     PROTOCOL_FEATURES => 0x1,
@@ -28,6 +33,7 @@ use constant {
 #            "000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943" :
 #            "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"),
 };
+use constant QBT_SCRIPT_START_LEN => length(QBT_SCRIPT_START);
 
 use constant {
     MSG_TX    => 1,
@@ -378,6 +384,22 @@ sub cmd_block {
     return 0;
 }
 
+sub add_coinbase($$$) {
+    my ($block, $tx_num, $out_num) = @_;
+    my $tx = $block->transactions->[$tx_num];
+    my $out = $tx->out->[$out_num];
+    my $coinbase = QBitcoin::Coinbase->new(
+        btc_block_height => $block->height,
+        btc_tx_num       => $tx_num,
+        btc_out_num      => $out_num,
+        btc_tx_hash      => $tx->hash,
+        merkle_path      => $block->merkle_path($tx_num),
+        value            => $out->{value},
+        open_script      => substr($out->{open_script}, QBT_SCRIPT_START_LEN),
+    );
+    $coinbase->store();
+}
+
 sub process_transactions {
     my $self = shift;
     my ($block, $tx_data) = @_;
@@ -388,13 +410,24 @@ sub process_transactions {
         my $tx = Bitcoin::Transaction->deserialize($tx_data);
         Debugf("process transaction: %s", $tx->hash_hex);
         push @transactions, $tx;
-        # TODO: check for QBTC open_script (lock coins)
     }
     $block->transactions = \@transactions;
     if ($block->merkle_root ne $block->calculate_merkle_root) {
         Errf("Incorrect merkle root for block %s: %s != %s", $block->hash_hex,
             unpack("H*", $block->merkle_root), unpack("H*", $block->calculate_merkle_root));
         return -1;
+    }
+    for (my $i = 0; $i < $tx_num; $i++) {
+        my $tx = $block->transactions->[$i];
+        for (my $num = 0; $num < @{$tx->out}; $num++) {
+            my $out = $tx->out->[$num];
+            if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) eq QBT_SCRIPT_START) {
+                add_coinbase($block, $i, $num);
+            }
+            elsif ($config->{produce}) {
+                add_coinbase($block, $i, $num) if rand() < 1/QBitcoin::Produce->UPGRADE_PROB;
+            }
+        }
     }
     $block->update(scanned => 1);
     return undef;
