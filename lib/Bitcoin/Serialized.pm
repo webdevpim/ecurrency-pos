@@ -17,7 +17,7 @@ sub index :lvalue {
     $_[0]->[1];
 }
 
-sub length {
+sub length :method {
     length($_[0]->[0]) - $_[0]->[1];
 }
 

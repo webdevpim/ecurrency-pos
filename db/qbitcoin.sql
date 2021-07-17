@@ -74,11 +74,11 @@ CREATE TABLE `coinbase` (
   btc_out_num smallint unsigned NOT NULL,
   btc_tx_hash binary(32) NOT NULL,
   merkle_path binary(512) NOT NULL, -- 16-level btree with 32-byte (256-bit) hashes
+  btc_tx_data longblob NOT NULL, -- or 'blob' for sqlite
   value bigint unsigned NOT NULL,
   open_script int unsigned NOT NULL,
   tx_out int unsigned DEFAULT NULL,
-  close_script blob DEFAULT NULL,
-  PRIMARY KEY (btc_tx_hash),
+  PRIMARY KEY (btc_tx_hash, btc_out_num),
   FOREIGN KEY (btc_block_height) REFERENCES `btc_block`   (height) ON DELETE RESTRICT, -- should never happens
   FOREIGN KEY (tx_out)           REFERENCES `transaction` (id)     ON DELETE SET NULL,
   FOREIGN KEY (open_script)      REFERENCES `open_script` (id)     ON DELETE RESTRICT

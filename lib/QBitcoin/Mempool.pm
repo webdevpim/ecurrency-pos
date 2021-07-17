@@ -22,15 +22,14 @@ sub want_tx {
 
 sub choose_for_block {
     my $class = shift;
-    my ($stake_tx) = @_;
+    my ($size) = @_;
     my @mempool = sort { compare_tx($a, $b) } QBitcoin::Transaction->mempool_list()
         or return ();
     Debugf("Mempool: %s", join(',', map { $_->hash_str } @mempool));
-    if (!$stake_tx) {
+    if ($size == 0) {
         # We can include only transactions with zero fee into block without stake transaction
         @mempool = grep { $_->fee == 0 } @mempool;
     }
-    my $size = $stake_tx ? $stake_tx->size : 0;
     my $empty_tx = 0;
     # It's not possible that input was spent in stake transaction
     # b/c we do not use inputs existing in any mempool transaction for stake tx

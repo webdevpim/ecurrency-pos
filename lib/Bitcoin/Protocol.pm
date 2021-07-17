@@ -8,7 +8,7 @@ use List::Util qw(max);
 use QBitcoin::Const qw(GENESIS_TIME);
 use QBitcoin::Config;
 use QBitcoin::Log;
-use QBitcoin::Crypto qw(hash256);
+use QBitcoin::Crypto qw(hash256 checksum32);
 use QBitcoin::Script::OpCodes qw(:OPCODES);
 use QBitcoin::Produce;
 use QBitcoin::Coinbase;
@@ -393,6 +393,7 @@ sub add_coinbase($$$) {
         btc_tx_num       => $tx_num,
         btc_out_num      => $out_num,
         btc_tx_hash      => $tx->hash,
+        btc_tx_data      => $tx->data,
         merkle_path      => $block->merkle_path($tx_num),
         value            => $out->{value},
         open_script      => substr($out->{open_script}, QBT_SCRIPT_START_LEN),
@@ -425,7 +426,10 @@ sub process_transactions {
                 add_coinbase($block, $i, $num);
             }
             elsif ($config->{produce}) {
-                add_coinbase($block, $i, $num) if rand() < 1/QBitcoin::Produce->UPGRADE_PROB;
+                # Do not use rand() for get this upgrade deterministic and verifiable
+                if (unpack("Q", checksum32($tx->hash . $num)) < 0x10000 * 0x10000 / QBitcoin::Produce->UPGRADE_PROB) {
+                    add_coinbase($block, $i, $num);
+                }
             }
         }
     }

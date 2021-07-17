@@ -72,8 +72,18 @@ sub generate {
     }
 
     my $stake_tx = make_stake_tx(0);
-    my @transactions = QBitcoin::Mempool->choose_for_block($stake_tx);
-    if (@transactions && $transactions[0]->fee > 0) {
+    my $size = $stake_tx ? $stake_tx->size : 0;
+    my @coinbase;
+    foreach my $coinbase (QBitcoin::Coinbase->get_new()) {
+        my $coinbase_tx = QBitcoin::Transaction->new_coinbase($coinbase);
+        last if $size + $coinbase_tx->size > MAX_BLOCK_SIZE - BLOCK_HEADER_SIZE;
+        $size += $coinbase_tx->size;
+        push @coinbase, $coinbase_tx;
+    }
+    my @transactions = QBitcoin::Mempool->choose_for_block($size);
+    my $first_tx = $transactions[0];
+    unshift @transactions, @coinbase;
+    if ($first_tx && $first_tx->fee > 0) {
         return unless $stake_tx;
         my $fee = sum map { $_->fee } @transactions;
         # Generate new stake_tx with correct output value
