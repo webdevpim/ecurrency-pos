@@ -565,6 +565,21 @@ sub stake_weight {
     return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
 }
 
+sub coinbase_weight {
+    my $self = shift;
+    my ($block_height) = @_;
+    my $weight = 0;
+    if (!@{$self->in}) {
+        my $coinbase = $self->up;
+        # Early confirmation should have more weight than later
+        my $base_height = height_by_time($coinbase->btc_block_time);
+        my $virtual_height = height_by_time($coinbase->btc_block_time - COINBASE_WEIGHT_TIME); # MB negative, it's ok
+        $weight = $coinbase->value * ($base_height - $virtual_height);
+        $weight *= ($base_height - $virtual_height) / ($block_height - $virtual_height);
+    }
+    return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
+}
+
 # Create a transaction with already exising coinbase output
 sub new_coinbase {
     my $class = shift;

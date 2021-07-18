@@ -53,6 +53,14 @@ sub self_weight {
         if (@{$self->transactions}) {
             if (defined(my $stake_weight = $self->transactions->[0]->stake_weight($self->height))) {
                 $self->{self_weight} = $stake_weight + @{$self->transactions};
+                # coinbase increases block weight
+                foreach my $transaction (@{$self->transactions}) {
+                    if (@{$transaction->in}) {
+                        last if $transaction->fee >= 0;
+                        next;
+                    }
+                    $self->{self_weight} += $transaction->coinbase_weight($self->height);
+                }
             }
             # otherwise we have unknown input in stake transaction; return undef and calculate next time
         }

@@ -24,7 +24,7 @@ use constant FIELDS => {
 };
 
 mk_accessors(keys %{&FIELDS});
-mk_accessors(qw(tx_hash btc_block_hash));
+mk_accessors(qw(tx_hash));
 
 sub store {
     my $self = shift;
@@ -90,10 +90,6 @@ sub validate {
 
 sub serialize {
     my $self = shift;
-    if (!$self->btc_block_hash) {
-        my ($btc_block) = QBitcoin::Block->find(height => $self->btc_block_height);
-        $self->btc_block_hash = $btc_block->hash;
-    }
     # value and open_script is matched transaction output and can be fetched from btc_tx_data and btc_out_num
     return {
         btc_block_hash => unpack("H*", $self->btc_block_hash),
@@ -102,6 +98,26 @@ sub serialize {
         btc_tx_data    => unpack("H*", $self->btc_tx_data),
         merkle_path    => unpack("H*", $self->merkle_path),
     };
+}
+
+sub btc_block_hash {
+    my $self = shift;
+    if (!defined $self->{btc_block_hash}) {
+        my ($btc_block) = QBitcoin::Block->find(height => $self->btc_block_height);
+        $self->{btc_block_hash} = $btc_block->hash;
+        $self->{btc_block_time} = $btc_block->time;
+    }
+    return $self->{btc_block_hash};
+}
+
+sub btc_block_time {
+    my $self = shift;
+    if (!defined $self->{btc_block_hash}) {
+        my ($btc_block) = QBitcoin::Block->find(height => $self->btc_block_height);
+        $self->{btc_block_hash} = $btc_block->hash;
+        $self->{btc_block_time} = $btc_block->time;
+    }
+    return $self->{btc_block_time};
 }
 
 sub deserialize {
