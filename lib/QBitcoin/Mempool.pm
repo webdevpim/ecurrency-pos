@@ -92,8 +92,11 @@ sub choose_for_block {
 }
 
 sub compare_tx {
-    return $b->fee*$a->size <=> $a->fee*$b->size ||
-        $a->received_time <=> $b->received_time ||
+    # coinbase first
+    return
+        ( @{$a->in} ? 1 : 0 ) <=> ( @{$b->in} ? 1 : 0 ) || # coinbase first
+        $b->fee * $a->size    <=> $a->fee * $b->size    ||
+        $a->received_time     <=> $b->received_time     ||
         $a->hash cmp $b->hash;
 }
 

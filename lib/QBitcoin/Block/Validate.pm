@@ -34,8 +34,10 @@ sub validate {
         # NB: we do not check that the $txin is unspent in this branch;
         # we will check this on include this block into the best branch
         if ($transaction->fee == 0) {
-            if (++$empty_tx > MAX_EMPTY_TX_IN_BLOCK) {
-                return "Too many empty transactions";
+            if (@{$transaction->in} > 0) {
+                if (++$empty_tx > MAX_EMPTY_TX_IN_BLOCK) {
+                    return "Too many empty transactions";
+                }
             }
         }
         else {
