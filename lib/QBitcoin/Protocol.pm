@@ -37,9 +37,12 @@ use parent 'QBitcoin::Protocol::Common';
 use Tie::IxHash;
 use QBitcoin::Const;
 use QBitcoin::Log;
-use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
+use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use QBitcoin::Block;
 use QBitcoin::Transaction;
+
+use Role::Tiny::With;
+with 'QBitcoin::Protocol::BTC' if UPGRADE_POW;
 
 use constant {
     MAGIC             => "QBTC",
@@ -73,7 +76,9 @@ sub cmd_version {
 
     $self->send_message("verack", "");
     $self->greeted = 1;
-    $self->request_mempool if blockchain_synced() && !mempool_synced();
+    $self->request_btc_blocks() if UPGRADE_POW && !btc_synced();
+    $self->request_mempool if blockchain_synced() && !mempool_synced() && (!UPGRADE_POW || btc_synced());
+    $self->announce_best_btc_block() if UPGRADE_POW;
     my $height = QBitcoin::Block->blockchain_height;
     if (defined($height)) {
         my $best_block = QBitcoin::Block->best_block($height);
@@ -381,7 +386,7 @@ sub request_new_block {
         if (($self->has_weight // -1) > $best_weight ||
             (($self->has_weight // -1) == $best_weight && $height > $best_height)) {
             $self->send_message("sendblock", pack("V", $height));
-            if ($self->has_weight > $best_weight) { # otherwise remote may have no such block, no syncing
+            if (($self->has_weight // -1) > $best_weight) { # otherwise remote may have no such block, no syncing
                 $self->syncing(1);
             }
         }
@@ -406,13 +411,13 @@ sub cmd_ihave {
         $self->syncing(0); # prevent blocking connection on infinite wait
     }
     $self->has_weight = $weight;
-    $self->request_new_block($height);
+    $self->request_new_block($height) unless UPGRADE_POW && !btc_synced();
     return 0;
 }
 
 sub cmd_sendblock {
     my $self = shift;
-    my $data = shift;
+    my ($data) = @_;
     if (length($data) != 4) {
         Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
         $self->abort("incorrect_params");

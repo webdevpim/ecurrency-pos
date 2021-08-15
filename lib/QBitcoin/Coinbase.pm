@@ -5,8 +5,11 @@ use strict;
 use QBitcoin::Accessors qw(new mk_accessors);
 use QBitcoin::Log;
 use QBitcoin::Const;
-use QBitcoin::ORM qw(:types dbh for_log DEBUG_ORM);
+use QBitcoin::ORM qw(:types dbh find for_log DEBUG_ORM);
 use QBitcoin::Crypto qw(hash256);
+use QBitcoin::ProtocolState qw(btc_synced);
+use Bitcoin::Serialized;
+use Bitcoin::Transaction;
 use Bitcoin::Block;
 
 use constant TABLE => 'coinbase';
@@ -29,9 +32,9 @@ mk_accessors(qw(tx_hash));
 sub store {
     my $self = shift;
     my $script = QBitcoin::OpenScript->store($self->open_script);
-    my $sql = "REPLACE INTO `" . TABLE . "` (btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, merkle_path, value, open_script, tx_out) VALUES (?,?,?,?,?,?,?,NULL)";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%s,%s,%lu,%u]", $sql, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, for_log($self->btc_tx_hash), for_log($self->merkle_path), $self->value, $script->id);
-    my $res = dbh->do($sql, undef, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, $self->btc_tx_hash, $self->merkle_path, $self->value, $script->id);
+    my $sql = "REPLACE INTO `" . TABLE . "` (btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, btc_tx_data, merkle_path, value, open_script, tx_out) VALUES (?,?,?,?,?,?,?,?,NULL)";
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%s,%s,%s,%lu,%u]", $sql, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, for_log($self->btc_tx_hash), for_log($self->btc_tx_data), for_log($self->merkle_path), $self->value, $script->id);
+    my $res = dbh->do($sql, undef, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, $self->btc_tx_hash, $self->btc_tx_data, $self->merkle_path, $self->value, $script->id);
     $res == 1
         or die "Can't store coinbase " . $self->btc_tx_num . ":" . $self->btc_out_num . ": " . (dbh->errstr // "no error") . "\n";
 }
@@ -40,8 +43,8 @@ sub store_published {
     my $self = shift;
     my ($tx) = @_;
 
-    my $sql = "UPDATE `" . TABLE . "` SET tx_out = ?, WHERE btc_tx_hash = ? AND btc_out_num = ?";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%s,%u]", $sql, $tx->id, for_log($self->btc_tx_hash), $self->btc_out_num);
+    my $sql = "UPDATE `" . TABLE . "` SET tx_out = ? WHERE btc_tx_hash = ? AND btc_out_num = ?";
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%u]", $sql, $tx->id, for_log($self->btc_tx_hash), $self->btc_out_num);
     my $res = dbh->do($sql, undef, $tx->id, $self->btc_tx_hash, $self->btc_out_num);
     $res == 1
         or die "Can't store coinbase " . for_log($self->btc_tx_hash) . ":" . $self->btc_out_num . " as processed: " . (dbh->errstr // "no error") . "\n";
@@ -56,27 +59,36 @@ sub get_new {
         -limit  => 1,
     );
     return () unless $matched_block;
-    my @coinbase = $class->find(
-        tx_out           => undef,
-        btc_block_height => { '<=' => $matched_block->height - COINBASE_CONFIRM_BLOCKS },
-    );
+    my $max_height = $matched_block->height - COINBASE_CONFIRM_BLOCKS;
+    # TODO: move this to QBitcoin::ORM
+    my $sql = "SELECT btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, btc_tx_data, merkle_path, value, s.data as open_script";
+    $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::OpenScript->TABLE . "` AS s ON (t.open_script = s.id)";
+    $sql .= " WHERE tx_out IS NULL AND btc_block_height <= ?";
+    my $sth = dbh->prepare($sql);
+    DEBUG_ORM && Debugf("sql: [%s] values [%u]", $sql, $max_height);
+    $sth->execute($max_height);
+    my @coinbase;
+    while (my $hash = $sth->fetchrow_hashref()) {
+        push @coinbase, $class->new($hash);
+    }
     return @coinbase;
 }
 
-# Coinbase can be included to only one transaction (unlike txo), so we do not need to build separate singleton cache for coinbase
+# Coinbase can be included in only one transaction (unlike txo), so we do not need to build separate singleton cache for coinbase
 # save them just as links from related transactions
 sub load_stored_coinbase {
     my $class = shift;
     my ($tx_id, $tx_hash) = @_;
     # TODO: move this to QBitcoin::ORM
-    my $sql = "SELECT btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, merkle_path, value, s.data as open_script";
-    $sql .= " FROM `" . $class->TABLE . "` AS t JOIN " . QBitcoin::OpenScript->TABLE . " s ON (t.open_script = s.id)";
+    my $sql = "SELECT btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, btc_tx_data, merkle_path, value, s.data as open_script";
+    $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::OpenScript->TABLE . "` AS s ON (t.open_script = s.id)";
     $sql .= " WHERE tx_out = ?";
     my $sth = dbh->prepare($sql);
     DEBUG_ORM && Debugf("sql: [%s] values [%u]", $sql, $tx_id);
     $sth->execute($tx_id);
     my $coinbase;
     if (my $hash = $sth->fetchrow_hashref()) {
+        DEBUG_ORM && Debug("orm found coinbase");
         $hash->{tx_hash} = $tx_hash;
         $coinbase = $class->new($hash);
     }
@@ -85,7 +97,7 @@ sub load_stored_coinbase {
 
 sub validate {
     my $self = shift;
-    # TODO: check if the coinbase is correct using merkle tree and bitcoin blockchain
+    # TODO: Check btc block confirmations and time
 }
 
 sub serialize {
@@ -100,10 +112,69 @@ sub serialize {
     };
 }
 
+sub deserialize {
+    my $class = shift;
+    my $args = @_ == 1 ? $_[0] : { @_ };
+    # TODO: validate $args
+    my $btc_block_hash = pack("H*", $args->{btc_block_hash});
+    my ($btc_block) = Bitcoin::Block->find(hash => $btc_block_hash);
+    if (!$btc_block) {
+        # unset btc_synced() if last btc block older than COINBASE_CONFIRM_TIME
+        # otherwise assume this is not correct coinbase
+        ($btc_block) = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1);
+        if (!$btc_block || $btc_block->time < time() - COINBASE_CONFIRM_TIME) {
+            # TODO: request btc blocks
+            btc_synced(0);
+            # TODO: set this tx as pending
+            Warningf("BTC blockchain not synced, can't validate coinbase");
+            return undef;
+        }
+        Warningf("Incorrect coinbase transaction based on unexistent btc block %s", unpack("H*", $btc_block_hash));
+        return undef;
+    }
+    my $btc_tx_data = pack("H*", $args->{btc_tx_data});
+    my $btc_tx_hash = hash256($btc_tx_data);
+    my $merkle_path = pack("H*", $args->{merkle_path});
+    # Check merkle path (but ignore mismatch for produced upgrades)
+    if (!$btc_block->check_merkle_path($btc_tx_hash, $args->{btc_tx_num}, $merkle_path)) {
+        Warningf("Merkle path check failed for btc upgrade transaction %s in block %s",
+            unpack("H*", scalar reverse $btc_tx_hash), $btc_block->hash_hex);
+        return undef;
+    }
+    # Deserialize btc transaction for get upgrade data (value, open_script)
+    my $transaction = Bitcoin::Transaction->deserialize(Bitcoin::Serialized->new($btc_tx_data));
+    if (!$transaction) {
+        Warningf("Incorrect btc upgrade transaction data %s", unpack("H*", scalar reverse $btc_tx_hash));
+        return undef;
+    }
+    my $out = $transaction->out->[$args->{btc_out_num}];
+    if (!$out) {
+        Warningf("Incorrect btc upgrade transaction data %s, no output %u", $transaction->hash_str, $args->{btc_out_num});
+        return undef;
+    }
+    if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) ne QBT_SCRIPT_START) {
+        Warningf("Incorrect btc upgrade transaction %s output open_script", $transaction->hash_str);
+        # TODO: remove this "unless" after finish testing with produced TXO
+        return undef unless BTC_TESTNET;
+    }
+    return $class->new({
+        btc_block_height => $btc_block->height,
+        btc_block_hash   => $btc_block_hash,
+        btc_block_time   => $btc_block->time,
+        btc_tx_num       => $args->{btc_tx_num},
+        btc_out_num      => $args->{btc_out_num},
+        btc_tx_data      => $btc_tx_data,
+        btc_tx_hash      => $btc_tx_hash,
+        merkle_path      => $merkle_path,
+        value            => $out->{value},
+        open_script      => substr($out->{open_script}, QBT_SCRIPT_START_LEN),
+    });
+}
+
 sub btc_block_hash {
     my $self = shift;
     if (!defined $self->{btc_block_hash}) {
-        my ($btc_block) = QBitcoin::Block->find(height => $self->btc_block_height);
+        my ($btc_block) = Bitcoin::Block->find(height => $self->btc_block_height);
         $self->{btc_block_hash} = $btc_block->hash;
         $self->{btc_block_time} = $btc_block->time;
     }
@@ -113,18 +184,11 @@ sub btc_block_hash {
 sub btc_block_time {
     my $self = shift;
     if (!defined $self->{btc_block_hash}) {
-        my ($btc_block) = QBitcoin::Block->find(height => $self->btc_block_height);
+        my ($btc_block) = Bitcoin::Block->find(height => $self->btc_block_height);
         $self->{btc_block_hash} = $btc_block->hash;
         $self->{btc_block_time} = $btc_block->time;
     }
     return $self->{btc_block_time};
-}
-
-sub deserialize {
-    my $class = shift;
-    my $args = @_ == 1 ? $_[0] : { @_ };
-    # TODO: create value and open_scipt by serialized raw data
-    return $class->new(%$args, btx_tx_hash => hash256($args->{btc_tx_data}));
 }
 
 1;

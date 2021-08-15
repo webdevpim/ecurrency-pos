@@ -9,6 +9,7 @@ use QBitcoin::Mempool;
 use QBitcoin::Block;
 use QBitcoin::OpenScript;
 use QBitcoin::TXO;
+use QBitcoin::Coinbase;
 use QBitcoin::MyAddress qw(my_address);
 use QBitcoin::Generate::Control;
 
@@ -73,19 +74,13 @@ sub generate {
 
     my $stake_tx = make_stake_tx(0);
     my $size = $stake_tx ? $stake_tx->size : 0;
-    my @coinbase;
     foreach my $coinbase (QBitcoin::Coinbase->get_new()) {
-        my $coinbase_tx = QBitcoin::Transaction->new_coinbase($coinbase);
-        last if $size + $coinbase_tx->size > MAX_BLOCK_SIZE - BLOCK_HEADER_SIZE;
-        $size += $coinbase_tx->size;
-        push @coinbase, $coinbase_tx;
+        # Create new coinbase transaction and add it to mempool (if it's not there)
+        QBitcoin::Transaction->new_coinbase($coinbase);
     }
     my @transactions = QBitcoin::Mempool->choose_for_block($size);
-    my $first_tx = $transactions[0];
-    unshift @transactions, @coinbase;
-    if ($first_tx && $first_tx->fee > 0) {
+    if (my $fee = sum map { $_->fee } @transactions) {
         return unless $stake_tx;
-        my $fee = sum map { $_->fee } @transactions;
         # Generate new stake_tx with correct output value
         $stake_tx = make_stake_tx($fee);
         Infof("Generated stake tx %s with input amount %u, consume %u fee", $stake_tx->hash_str,

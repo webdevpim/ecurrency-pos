@@ -4,9 +4,10 @@ use strict;
 
 my $mempool_synced;
 my $blockchain_synced;
+my $btc_synced;
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(mempool_synced blockchain_synced);
+our @EXPORT_OK = qw(mempool_synced blockchain_synced btc_synced);
 
 sub mempool_synced {
     if (@_) {
@@ -20,6 +21,13 @@ sub blockchain_synced {
         $blockchain_synced = $_[0];
     }
     return $blockchain_synced;
+}
+
+sub btc_synced {
+    if (@_) {
+        $btc_synced = $_[0];
+    }
+    return $btc_synced;
 }
 
 1;

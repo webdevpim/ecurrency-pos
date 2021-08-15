@@ -12,6 +12,7 @@ use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ORM qw(find create delete :types);
 use QBitcoin::Crypto qw(hash256);
 use QBitcoin::TXO;
+use QBitcoin::Coinbase;
 use QBitcoin::Peers;
 
 use Role::Tiny::With;
@@ -284,8 +285,12 @@ sub deserialize {
         return ""; # Ignore transactions with unknown inputs
     }
 
-    my $out  = create_outputs ($decoded->{out}, $hash);
-    my $up   = $decoded->{up} ? create_coinbase($decoded->{up},  $hash) : undef;
+    my $out = create_outputs($decoded->{out}, $hash);
+    my $up;
+    if ($decoded->{up}) {
+        $up = create_coinbase($decoded->{up},  $hash)
+            or return undef;
+    }
     my $self = $class->new(
         in            => $in,
         out           => $out,
@@ -295,7 +300,7 @@ sub deserialize {
         $up ? ( up => $up ) : (),
     );
     if (calculate_hash($self->serialize) ne $hash) {
-        Warning("Incorrect serialized transaction has different hash");
+        Warningf("Incorrect serialized transaction has different hash: %s: %s", $self->hash_str, $self->serialize);
         return undef;
     }
     $self->validate() == 0
@@ -387,7 +392,7 @@ sub calculate_hash {
 
 sub create_coinbase {
     my ($up, $hash) = @_;
-    # TODO: create value, open_scipt and hash by serialized raw data
+    # TODO: create value, open_script and hash by serialized raw data
     return QBitcoin::Coinbase->deserialize(%$up, tx_hash => $hash);
 }
 
@@ -397,8 +402,11 @@ sub validate_coinbase {
         Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_str, scalar @{$self->out});
         return -1;
     }
-    # TODO: Get and validate information about btc upgrade from $self->data
     # Each upgrade should correspond fixed and deterministic tx hash for qbitcoin
+    if (!$self->up) {
+        Warningf("Incorrect transaction %s, no coinbase information nor inputs", $self->hash_str);
+        return -1;
+    }
     $self->up->validate();
     $self->up->store();
     # TODO: match open script and value, empty tx data
@@ -444,7 +452,7 @@ sub validate {
         }
     }
     if ($input_value <= 0) {
-        Warning("Zero input in transaction %s", $self->hash_str);
+        Warningf("Zero input in transaction %s", $self->hash_str);
         return -1;
     }
     return 0;
@@ -593,16 +601,21 @@ sub new_coinbase {
         in            => [],
         out           => [ $txo ],
         up            => $coinbase,
+        fee           => $coinbase->value - $txo->value,
         received_time => time(),
     );
-    $self->hash = calculate_hash($self->serialize);
+    my $tx_data = $self->serialize;
+    $self->hash = calculate_hash($tx_data);
     if (my $cached = $class->get($self->hash)) {
         $self = $cached;
     }
     else {
-        $txo->save;
-        $self->receive();
+        QBitcoin::TXO->save_all($self->hash, $self->out);
+        $self->size = length($tx_data);
+        $self->receive(); # Add coinbase tx to mempool
         $coinbase->tx_hash = $self->hash;
+        Infof("Generated new coinbase transaction %s for btc output %s:%u",
+            $self->hash_str, $class->hash_str($coinbase->btc_tx_hash), $coinbase->btc_out_num);
     }
     return $self;
 }

@@ -11,6 +11,7 @@ sub deserialize {
     my $class = shift;
     my ($tx_data) = @_;
 
+    # TODO: return undef on deserialize error
     my $start_index = $tx_data->index;
     my ($version) = unpack("V", $tx_data->get(4)); # 1 or 2
     my $txin_count = $tx_data->get_varint();

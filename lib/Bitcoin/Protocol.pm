@@ -4,36 +4,32 @@ use strict;
 use feature 'state';
 
 use parent 'QBitcoin::Protocol::Common';
-use List::Util qw(max);
-use QBitcoin::Const qw(GENESIS_TIME);
+use QBitcoin::Const qw(GENESIS_TIME BTC_TESTNET QBT_SCRIPT_START QBT_SCRIPT_START_LEN);
 use QBitcoin::Config;
 use QBitcoin::Log;
-use QBitcoin::Crypto qw(hash256 checksum32);
-use QBitcoin::Script::OpCodes qw(:OPCODES);
 use QBitcoin::Produce;
 use QBitcoin::Coinbase;
 use QBitcoin::ORM::Transaction;
+use QBitcoin::ProtocolState qw(btc_synced);
 use Bitcoin::Serialized;
 use Bitcoin::Block;
 use Bitcoin::Transaction;
 
-use constant TESTNET => 1;
-use constant MAINNET => !TESTNET;
+use Role::Tiny::With;
+with 'Bitcoin::Protocol::ProcessBlock';
 
 use constant {
-    QBT_SCRIPT_START  => OP_RETURN . 'QBT',
     PROTOCOL_VERSION  => 70011,
     #PROTOCOL_FEATURES => 0x409,
     PROTOCOL_FEATURES => 0x1,
-    PORT_P2P          => TESTNET ? 18333 : 8333,
+    PORT_P2P          => BTC_TESTNET ? 18333 : 8333,
     # https://en.bitcoin.it/wiki/Protocol_documentation#Message_structure
-    MAGIC             => pack("V", TESTNET ? 0x0709110B : 0xD9B4BEF9),
+    MAGIC             => pack("V", BTC_TESTNET ? 0x0709110B : 0xD9B4BEF9),
 #    BTC_GENESIS       => scalar reverse pack("H*",
-#        TESTNET ?
+#        BTC_TESTNET ?
 #            "000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943" :
 #            "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"),
 };
-use constant QBT_SCRIPT_START_LEN => length(QBT_SCRIPT_START);
 
 use constant {
     MSG_TX    => 1,
@@ -44,27 +40,12 @@ use constant {
     REJECT_INVALID => 1,
 };
 
-my $HAVE_BLOCK0;
-
-sub varint {
-    my ($num) = @_;
-    return $num < 0xFD ? pack("C", $num) :
-        $num < 0xFFFF ? pack("Cv", 0xFD, $num) :
-        $num < 0xFFFFFFFF ? pack("CV", 0xFE, $num) :
-        pack("CQ<", 0xFF, $num);
-}
-
-sub varstr {
-    my ($str) = @_;
-    return varint(length($str)) . $str;
-}
-
 sub startup {
     my $self = shift;
     my $nonce = pack("vvvv", int(rand(0x10000)), int(rand(0x10000)), int(rand(0x10000)), int(rand(0x10000)));
     my ($last_block) = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1);
     my $height = $last_block ? $last_block->height : -1;
-    $HAVE_BLOCK0 = 1 if $last_block;
+    $self->have_block0(1) if $last_block;
     my $version = pack("VQ<Q<a26a26a8Cl<C", PROTOCOL_VERSION, PROTOCOL_FEATURES, time(),
         $self->pack_my_address, $self->pack_address, $nonce, 0, $height, 0);
     $self->send_message("version", $version);
@@ -88,7 +69,7 @@ sub abort {
     $self->send_message("reject", varstr($self->command) . pack("C", REJECT_INVALID) . varstr($reason // "general_error"));
 }
 
-sub request_blocks {
+sub request_btc_blocks {
     my $self = shift;
     my @blocks = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 10);
     my @locators = map { $_->hash } @blocks;
@@ -124,7 +105,7 @@ sub cmd_version {
     Infof("Remote version %u, features 0x%x", $version, $features);
     $self->send_message("verack", "");
     $self->greeted = 1;
-    $self->request_blocks();
+    $self->request_btc_blocks();
     return 0;
 }
 
@@ -198,11 +179,11 @@ sub cmd_headers {
         }
         else {
             my $db_transaction = QBitcoin::ORM::Transaction->new;
-            if ($self->process_block($block)) {
+            if ($self->process_btc_block($block)) {
                 $new_block = $block;
                 $block->scanned = $block->time >= GENESIS_TIME ? 0 : 1;
                 $block->create();
-                $HAVE_BLOCK0 = 1;
+                $self->have_block0(1);
                 $db_transaction->commit;
             }
             else {
@@ -216,15 +197,15 @@ sub cmd_headers {
         # All received block are known for us. Was it deep rollback?
         my $start_height = $known_block->height;
         my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*1900 } 1 .. 250 ], -sortby => "height DESC");
-        $self->send_message("getheaders",
+        $self->send_message("getheaders", pack("V", PROTOCOL_VERSION) .
             varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . "\x00" x 32);
     }
     elsif ($new_block) {
-        $self->request_blocks();
+        $self->request_btc_blocks();
     }
     elsif ($orphan_block) {
-        if ($HAVE_BLOCK0) {
-            $self->request_blocks();
+        if ($self->have_block0) {
+            $self->request_btc_blocks();
         }
         else {
             # Is it genesis block? Request it
@@ -252,6 +233,7 @@ sub request_transactions {
         if ($self->syncing) {
             Infof("BTC syncing done");
             $self->syncing(0);
+            btc_synced(1);
         }
         return 0;
     }
@@ -267,72 +249,6 @@ sub cmd_notfound {
     my $self = shift;
     # do nothing
     return 0;
-}
-
-sub process_block {
-    my $self = shift;
-    my ($block) = @_;
-
-    state $LAST_BLOCK;
-    state $CHAINWORK;
-    # https://bitcoin.stackexchange.com/questions/26869/what-is-chainwork
-    my $chainwork = $block->difficulty * 4295032833; # it's 0x0100010001, avoid perl warning about too large hex number
-    if ($block->prev_hash eq "\x00" x 32) {
-        $block->height = 0;
-        $CHAINWORK = $block->chainwork = $chainwork;
-    }
-    else {
-        my $prev_block;
-        $prev_block = $LAST_BLOCK if $LAST_BLOCK && $LAST_BLOCK->hash eq $block->prev_hash;
-        $prev_block //= Bitcoin::Block->find(hash => $block->prev_hash);
-        if ($prev_block) {
-            if (MAINNET) {
-                # check difficulty, it should not be less than max(last N blocks)/4 for mainnet
-                # it's only for prevent spam by many blocks with small difficulty
-                my $prev_difficulty = max map { $_->difficulty } $prev_block, Bitcoin::Block->find(hash => $prev_block->prev_hash);
-                if ($block->difficulty < $prev_difficulty / 4.001) {
-                    Warningf("Too low difficulty for block %s, ignore it", $block->hash_hex);
-                    return undef;
-                }
-            }
-            $block->chainwork = $prev_block->chainwork + $chainwork;
-            $CHAINWORK //= (map { $_->chainwork } Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1))[0];
-            if ($block->chainwork > $CHAINWORK) {
-                my $start_block = $prev_block;
-                my $new_height = 1;
-                while (!defined $start_block->height) {
-                    $start_block = Bitcoin::Block->find(hash => $start_block->prev_hash)
-                        or die "Bitcoin blockchain consistensy broken\n";
-                    $new_height++;
-                }
-                my $revert_height;
-                foreach my $revert_block (Bitcoin::Block->find(height => { '>' => $start_block->height }, -sortby => 'height DESC')) {
-                    if (!$revert_height) {
-                        $revert_height = $revert_block->height;
-                        Noticef("Revert blockchain height %u-%u", $start_block->height+1, $revert_height);
-                    }
-                    # TODO: rollback QBT blocks if $revert_block contains QBT coinbase
-                    $revert_block->update(height => undef);
-                }
-                $block->height = $start_block->height + $new_height--;
-                for (my $cur_block = $prev_block; !defined $cur_block->height;) {
-                    $cur_block->update(height => $start_block->height + $new_height--);
-                    $cur_block = Bitcoin::Block->find(hash => $cur_block->prev_hash)
-                        or die "Can't find prev block, check bitcoin blockchain consistensy\n";
-                }
-                $CHAINWORK = $block->chainwork;
-            }
-        }
-        else {
-            Warningf("Received orphan block %s, prev hash %s", $block->hash_hex, $block->prev_hash_hex);
-            if ($HAVE_BLOCK0 && !$self->syncing) {
-                $self->request_blocks();
-            }
-            return undef;
-        }
-    }
-    $LAST_BLOCK = $block;
-    return $block;
 }
 
 sub cmd_block {
@@ -357,14 +273,14 @@ sub cmd_block {
     }
     else {
         my $db_transaction = QBitcoin::ORM::Transaction->new;
-        if (!$self->process_block($block)) {
+        if (!$self->process_btc_block($block)) {
             $db_transaction->rollback;
             return 0;
         }
         $block->scanned = $block->time >= GENESIS_TIME ? 0 : 1;
         $block->create();
         $db_transaction->commit;
-        $HAVE_BLOCK0 = 1;
+        $self->have_block0(1);
     }
 
     if (!$block->scanned) {
@@ -378,7 +294,7 @@ sub cmd_block {
         $self->request_transactions();
     }
     else {
-        $self->request_blocks();
+        $self->request_btc_blocks();
     }
 
     return 0;
@@ -388,6 +304,7 @@ sub add_coinbase($$$) {
     my ($block, $tx_num, $out_num) = @_;
     my $tx = $block->transactions->[$tx_num];
     my $out = $tx->out->[$out_num];
+    Infof("Add coinbase: block %s tx %s value %u", $block->hash_hex, $tx->hash_str, $out->{value});
     my $coinbase = QBitcoin::Coinbase->new(
         btc_block_height => $block->height,
         btc_tx_num       => $tx_num,
@@ -421,15 +338,13 @@ sub process_transactions {
     for (my $i = 0; $i < $tx_num; $i++) {
         my $tx = $block->transactions->[$i];
         for (my $num = 0; $num < @{$tx->out}; $num++) {
+            if ($config->{produce}) {
+                # replace open_script to upgrade
+                QBitcoin::Produce->produce_coinbase($tx, $num);
+            }
             my $out = $tx->out->[$num];
             if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) eq QBT_SCRIPT_START) {
                 add_coinbase($block, $i, $num);
-            }
-            elsif ($config->{produce}) {
-                # Do not use rand() for get this upgrade deterministic and verifiable
-                if (unpack("Q", checksum32($tx->hash . $num)) < 0x10000 * 0x10000 / QBitcoin::Produce->UPGRADE_PROB) {
-                    add_coinbase($block, $i, $num);
-                }
             }
         }
     }

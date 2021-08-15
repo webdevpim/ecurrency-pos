@@ -13,6 +13,7 @@ use QBitcoin::Transaction;
 use QBitcoin::TXO;
 use QBitcoin::OpenScript;
 use QBitcoin::Script::OpCodes qw(:OPCODES);
+use QBitcoin::Crypto qw(checksum32);
 use QBitcoin::MyAddress qw(my_address);
 
 use constant {
@@ -20,6 +21,7 @@ use constant {
     MY_UTXO_PROB => 10 * BLOCK_INTERVAL, # probability 1/2 for generating 1 utxo per 10 blocks
     TX_FEE_PROB  =>  2 * BLOCK_INTERVAL, # probability 1/2 for generating 1 tx with fee >0 per 2 blocks
     TX_ZERO_PROB => 20 * BLOCK_INTERVAL, # probability 1/2 for generating 1 tx with 0 fee per 20 blocks
+    MY_UPGRADE   => 1000, # each 1000th bitcoin txo considering as upgrade my address
     UPGRADE_PROB => 1000, # each 1000th bitcoin txo considering as upgrade
     FEE_MY_TX    => 0.1,
 };
@@ -38,7 +40,7 @@ sub produce {
     my $period = ($time - $prev_run);
     $prev_run = $time;
 
-    if (QBitcoin::TXO->my_utxo() < MAX_MY_UTXO) {
+    if (QBitcoin::TXO->my_utxo() < MAX_MY_UTXO && !UPGRADE_POW) {
         my $prob = probability($period, MY_UTXO_PROB);
         _produce_my_utxo() if $prob > rand();
     }
@@ -50,6 +52,28 @@ sub produce {
         my $prob = probability($period, TX_ZERO_PROB);
         _produce_tx(0) if $prob > rand();
     }
+}
+
+sub produce_coinbase {
+    my $class = shift;
+    my ($tx, $num) = @_;
+
+    my $out = $tx->out->[$num];
+    # Do not use rand() for get this upgrade deterministic and verifiable
+    my $rnd = unpack("V", checksum32($tx->hash . $num));
+    if ($rnd < 0x10000 * 0x10000 / UPGRADE_PROB) {
+        $out->{open_script} = QBT_SCRIPT_START . OP_VERIFY;
+        Info("Produce coinbase with open txo");
+        return 1;
+    }
+    elsif (QBitcoin::TXO->my_utxo() < MAX_MY_UTXO &&
+           $rnd > 0x10000 * 0x10000 * ( 1 - 1 / MY_UPGRADE)) {
+        state $my_script = QBitcoin::OpenScript->script_for_address((my_address)[0]->address);
+        $out->{open_script} = QBT_SCRIPT_START . $my_script;
+        Info("Produce coinbase for my address");
+        return 1;
+    }
+    return undef;
 }
 
 sub _produce_my_utxo {
@@ -98,12 +122,8 @@ sub _produce_tx {
     $_->save foreach grep { !$_->is_cached } @txo;
     my $amount = sum map { $_->value } @txo;
     if (!@txo) {
-        # No txo - ok, produce coinbase
-        state $last_time = 0;
-        my $time = time();
-        my $age = int($time - GENESIS_TIME);
-        $last_time = $last_time < $age ? $age : $last_time+1;
-        $amount = $last_time;
+        Debugf("No free txo, produce transaction skipped");
+        return undef;
     }
     my $fee = int($amount * $fee_part);
     my $open_script = OP_VERIFY;
@@ -121,7 +141,7 @@ sub _produce_tx {
     $tx->hash = QBitcoin::Transaction::calculate_hash($tx->serialize);
     if (QBitcoin::Transaction->get_by_hash($tx->hash)) {
         Infof("Just produced transaction %s already exists", $tx->hash_str);
-        return;
+        return undef;
     }
     QBitcoin::TXO->save_all($tx->hash, $tx->out);
     $tx->size = length $tx->serialize;

@@ -81,7 +81,7 @@ sub choose_for_block {
             $spent{$in->{txo}->tx_in . $in->{txo}->num} = 1;
         }
         $mempool_out{$mempool[$i]->hash} = scalar @{$mempool[$i]->out};
-        $empty_tx++ if $mempool[$i]->fee == 0;
+        $empty_tx++ if $mempool[$i]->fee == 0 && @{$mempool[$i]->in};
         $size += $mempool[$i]->size;
         if ($empty_tx > MAX_EMPTY_TX_IN_BLOCK || $size > MAX_BLOCK_SIZE - BLOCK_HEADER_SIZE) {
             @mempool = splice(@mempool, 0, $i);
