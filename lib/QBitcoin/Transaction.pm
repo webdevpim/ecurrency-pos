@@ -580,8 +580,8 @@ sub coinbase_weight {
     if (!@{$self->in}) {
         my $coinbase = $self->up;
         # Early confirmation should have more weight than later
-        my $base_height = height_by_time($coinbase->btc_block_time);
-        my $virtual_height = height_by_time($coinbase->btc_block_time - COINBASE_WEIGHT_TIME); # MB negative, it's ok
+        my $base_height = height_by_time($coinbase->btc_confirm_time);
+        my $virtual_height = height_by_time($coinbase->btc_confirm_time - COINBASE_WEIGHT_TIME); # MB negative, it's ok
         $weight = $coinbase->value * ($base_height - $virtual_height);
         $weight *= ($base_height - $virtual_height) / ($block_height - $virtual_height);
     }

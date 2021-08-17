@@ -160,7 +160,6 @@ sub deserialize {
     return $class->new({
         btc_block_height => $btc_block->height,
         btc_block_hash   => $btc_block_hash,
-        btc_block_time   => $btc_block->time,
         btc_tx_num       => $args->{btc_tx_num},
         btc_out_num      => $args->{btc_out_num},
         btc_tx_data      => $btc_tx_data,
@@ -176,19 +175,23 @@ sub btc_block_hash {
     if (!defined $self->{btc_block_hash}) {
         my ($btc_block) = Bitcoin::Block->find(height => $self->btc_block_height);
         $self->{btc_block_hash} = $btc_block->hash;
-        $self->{btc_block_time} = $btc_block->time;
     }
     return $self->{btc_block_hash};
 }
 
-sub btc_block_time {
+sub btc_confirm_time {
     my $self = shift;
-    if (!defined $self->{btc_block_hash}) {
-        my ($btc_block) = Bitcoin::Block->find(height => $self->btc_block_height);
-        $self->{btc_block_hash} = $btc_block->hash;
-        $self->{btc_block_time} = $btc_block->time;
+    if (!defined $self->{btc_confirm_time}) {
+        my ($btc_block) = Bitcoin::Block->find(height => $self->btc_block_height + COINBASE_CONFIRM_BLOCKS);
+        return undef unless $btc_block;
+        $self->{btc_confirm_time} = $btc_block->time;
     }
-    return $self->{btc_block_time};
+    return $self->{btc_confirm_time};
+}
+
+sub min_tx_time {
+    my $self = shift;
+    return COINBASE_CONFIRM_TIME + ($self->btc_confirm_time // return undef);
 }
 
 1;
