@@ -104,9 +104,15 @@ sub del_from_block {
     my $self = shift;
     my ($block) = @_;
     delete $self->{blocks}->{$block->hash};
-    if ($self->block_height && !%{$self->{blocks}}) {
-        # Confirmed, not mempool
-        $self->free();
+    if (!%{$self->{blocks}}) {
+        if ($self->block_height) {
+            # Confirmed, not mempool
+            $self->free();
+        }
+        elsif ($self->fee < 0) {
+            # Stake
+            $self->free();
+        }
     }
 }
 
