@@ -303,9 +303,15 @@ sub cmd_tx {
     if ($self->block_pending_tx($tx)) {
         return -1;
     }
-    if (blockchain_synced() && mempool_synced() && $tx->fee >= 0) {
-        # announce to other peers
-        $tx->announce($self);
+    if ($tx->fee >= 0) {
+        if (blockchain_synced() && mempool_synced()) {
+            # announce to other peers
+            $tx->announce($self);
+        }
+    }
+    elsif (!$tx->in_blocks) {
+        Debugf("Ignore stake transactions %s not related to any known block", $tx->hash_str);
+        return 0;
     }
     $tx->process_pending($self);
     return 0;
