@@ -163,7 +163,14 @@ sub drop {
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
         $txo->spent_del($self);
-        $txo->add_my_utxo if $txo->is_my && !$txo->spent_list;
+        if ($txo->is_my && !$txo->spent_list) {
+            # add to my_utxo list only if it was confirmed in the best branch
+            my $class = ref $self;
+            my $tx_in = $class->get($txo->tx_in);
+            if (!$tx_in || $tx_in->block_height) {
+                $txo->add_my_utxo;
+            }
+        }
     }
     delete $TRANSACTION{$self->hash};
 }
@@ -282,7 +289,7 @@ sub deserialize {
     $self->validate() == 0
         or return undef;
 
-    # Exclude from my utxo spent unconfirmed, do not use them for validate blocks
+    # Exclude from my utxo spent unconfirmed, do not use them for stake transactions
     foreach my $in (map { $_->{txo} } @$in) {
         $in->del_my_utxo() if $in->is_my;
     }
