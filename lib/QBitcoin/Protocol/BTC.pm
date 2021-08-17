@@ -64,7 +64,7 @@ sub cmd_btcgetheader {
         $self->send_message("btcblockhdr", $block->serialize);
     }
     else {
-        Warningf("I have no btc block with hash %s requested by peer %s", unpack("H*", $hash), $self->ip);
+        Warningf("I have no btc block with hash %s requested by peer %s", unpack("H*", scalar reverse $hash), $self->ip);
     }
     return 0;
 }
@@ -80,7 +80,18 @@ sub cmd_btcblockhdr {
     }
     Debugf("Received btc block header: %s, prev_hash %s", $block->hash_hex, $block->prev_hash_hex);
     return 0 if Bitcoin::Block->find(hash => $block->hash);
-    $self->process_btc_block($block);
+    my $db_transaction = QBitcoin::ORM::Transaction->new;
+    if ($self->process_btc_block($block)) {
+        $block->scanned = $block->time >= GENESIS_TIME ? 0 : 1;
+        $block->create();
+        $self->have_block0(1);
+        $db_transaction->commit;
+    }
+    else {
+        $db_transaction->rollback;
+        $self->request_btc_blocks();
+    }
+
     return 0;
 }
 
@@ -198,7 +209,7 @@ sub cmd_btcheaders {
     }
     elsif ($orphan_block) {
         if ($self->have_block0) {
-            $self->request_btc_blocks($last_orphan_block->hash);
+            $self->request_btc_blocks();
         }
         else {
             # Is it genesis block? Request it
