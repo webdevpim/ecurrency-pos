@@ -73,7 +73,7 @@ sub main_loop {
         my $incorrect = 0;
         foreach my $block (reverse QBitcoin::Block->find(-sortby => "height DESC", -limit => 1)) {
             if ($incorrect) {
-                Errf("Delete incorrect block ancestor %s height %u", $block->hash_str, $block->height);
+                Errf("Delete incorrect block descendant %s height %u", $block->hash_str, $block->height);
                 $block->delete();
                 next;
             }

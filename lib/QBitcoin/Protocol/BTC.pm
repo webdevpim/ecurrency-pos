@@ -208,8 +208,9 @@ sub cmd_btcheaders {
     }
     elsif ($self->have_block0) {
         if (!btc_synced()) {
-            blockchain_synced() ? $self->request_mempool : $self->request_new_block;
+            Debugf("Set btc_synced to 1");
             btc_synced(1);
+            blockchain_synced() ? $self->request_mempool : $self->request_new_block();
         }
     }
     return 0;

@@ -191,6 +191,8 @@ sub cmd_block {
     $block->received_from = $self;
 
     if ($block->height && !$block->prev_block_load) {
+        Debugf("Received block %s has unknown ancestor %s, request it",
+            $block->hash_str, $block->hash_str($block->prev_hash));
         $self->send_message("sendblock", pack("V", $block->height-1));
         $PENDING_BLOCK_BLOCK{$block->prev_hash}->{$block->hash} = 1;
         add_pending_block($block);
@@ -388,6 +390,7 @@ sub request_new_block {
             $self->send_message("sendblock", pack("V", $height));
             if (($self->has_weight // -1) > $best_weight) { # otherwise remote may have no such block, no syncing
                 $self->syncing(1);
+                Debugf("Remote %s have block weight more than our, request block %u", $self->ip, $height);
             }
         }
     }
