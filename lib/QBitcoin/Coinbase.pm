@@ -53,9 +53,11 @@ sub store_published {
 
 sub get_new {
     my $class = shift;
+    my ($height) = @_;
 
+    my $time = time_by_height($height);
     my ($matched_block) = Bitcoin::Block->find(
-        time    => { '<' => time() - COINBASE_CONFIRM_TIME },
+        time    => { '<' => $time - COINBASE_CONFIRM_TIME },
         -sortby => 'height DESC',
         -limit  => 1,
     );

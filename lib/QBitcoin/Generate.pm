@@ -74,7 +74,7 @@ sub generate {
 
     my $stake_tx = make_stake_tx(0);
     my $size = $stake_tx ? $stake_tx->size : 0;
-    foreach my $coinbase (QBitcoin::Coinbase->get_new()) {
+    foreach my $coinbase (QBitcoin::Coinbase->get_new($height)) {
         # Create new coinbase transaction and add it to mempool (if it's not there)
         QBitcoin::Transaction->new_coinbase($coinbase);
     }
