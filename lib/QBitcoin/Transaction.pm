@@ -72,6 +72,8 @@ sub receive {
 
     foreach my $in (@{$self->in}) {
         $in->{txo}->spent_add($self);
+        # Exclude from my utxo spent unconfirmed, do not use them for stake transactions
+        $in->{txo}->del_my_utxo() if $self->fee >= 0 && $in->{txo}->is_my;
     }
 
     $TRANSACTION{$self->hash} = $self;
@@ -289,10 +291,6 @@ sub deserialize {
     $self->validate() == 0
         or return undef;
 
-    # Exclude from my utxo spent unconfirmed, do not use them for stake transactions
-    foreach my $in (map { $_->{txo} } @$in) {
-        $in->del_my_utxo() if $in->is_my;
-    }
     $self->fee = sum0(map { $_->{txo}->value } @$in) + ($self->coins_upgraded // 0) - sum0(map { $_->value } @$out);
 
     return $self;
