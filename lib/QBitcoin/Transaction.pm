@@ -413,10 +413,11 @@ sub validate_coinbase {
         return -1;
     }
     $self->up->validate();
-    if ($self->data ne '') {
-        Warningf("Incorrect transaction %s, coinbase can't contain data", $self->hash_str);
-        return -1;
-    }
+    # TODO: uncomment when $transaction->data will be implemented
+    # if ($self->data ne '') {
+    #     Warningf("Incorrect transaction %s, coinbase can't contain data", $self->hash_str);
+    #     return -1;
+    # }
     if ($self->up->open_script ne $self->out->[0]->open_script) {
         Warningf("Mismatch open_script for coinbase transaction %s", $self->hash_str);
         return -1 unless $config->{fake_coinbase};
