@@ -80,7 +80,10 @@ sub generate {
         Infof("Generated stake tx %s with input amount %u, consume %u fee", $stake_tx->hash_str,
             sum(map { $_->{txo}->value } @{$stake_tx->in}), -$stake_tx->fee);
         QBitcoin::TXO->save_all($stake_tx->hash, $stake_tx->out);
-        $stake_tx->receive();
+        $stake_tx->validate() == 0
+            or die "Incorrect generated stake transaction\n";
+        $stake_tx->receive() == 0
+            or die "Incorrect generated stake transaction\n";
         unshift @transactions, $stake_tx;
     }
     my $generated = QBitcoin::Block->new({
