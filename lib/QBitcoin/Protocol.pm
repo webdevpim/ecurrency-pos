@@ -345,7 +345,6 @@ sub request_new_block {
         my $best_weight = QBitcoin::Block->best_weight;
         my $best_height = QBitcoin::Block->blockchain_height // -1;
         $height //= $best_height+1;
-        $height = $best_height+1 if $height > $best_height+1;
         $height-- if $height > height_by_time(time());
         if (($self->has_weight // -1) > $best_weight ||
             (($self->has_weight // -1) == $best_weight && $height > $best_height)) {
