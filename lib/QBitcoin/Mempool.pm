@@ -22,9 +22,12 @@ sub want_tx {
 
 sub choose_for_block {
     my $class = shift;
-    my ($size) = @_;
-    my @mempool = sort { compare_tx($a, $b) } QBitcoin::Transaction->mempool_list()
-        or return ();
+    my ($size, $block_height) = @_;
+    my $block_time = time_by_height($block_height);
+    my @mempool = sort { compare_tx($a, $b) }
+        grep { defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
+            QBitcoin::Transaction->mempool_list()
+                or return ();
     Debugf("Mempool: %s", join(',', map { $_->hash_str } @mempool));
     if ($size == 0) {
         # We can include only transactions with zero fee into block without stake transaction

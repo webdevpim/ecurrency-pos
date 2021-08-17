@@ -78,6 +78,10 @@ sub receive {
     }
 
     $TRANSACTION{$self->hash} = $self;
+    if ($self->up) {
+        # This transaction is already validated
+        $self->up->store;
+    }
     return 0;
 }
 
@@ -408,7 +412,6 @@ sub validate_coinbase {
         return -1;
     }
     $self->up->validate();
-    $self->up->store();
     # TODO: match open script and value, empty tx data
     return 0;
 }
@@ -455,6 +458,14 @@ sub validate {
         Warningf("Zero input in transaction %s", $self->hash_str);
         return -1;
     }
+    return 0;
+}
+
+sub valid_for_block {
+    my $self = shift;
+    my ($block) = @_;
+    ($self->min_tx_time // return -1) <= time_by_height($block->height)
+        or return -1;
     return 0;
 }
 
@@ -618,6 +629,12 @@ sub new_coinbase {
             $self->hash_str, $class->hash_str($coinbase->btc_tx_hash), $coinbase->btc_out_num);
     }
     return $self;
+}
+
+sub min_tx_time {
+    my $self = shift;
+
+    return $self->up ? $self->up->min_tx_time : 0;
 }
 
 1;

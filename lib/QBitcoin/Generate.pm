@@ -78,7 +78,7 @@ sub generate {
         # Create new coinbase transaction and add it to mempool (if it's not there)
         QBitcoin::Transaction->new_coinbase($coinbase);
     }
-    my @transactions = QBitcoin::Mempool->choose_for_block($size);
+    my @transactions = QBitcoin::Mempool->choose_for_block($size, $height);
     if (my $fee = sum map { $_->fee } @transactions) {
         return unless $stake_tx;
         # Generate new stake_tx with correct output value

@@ -97,7 +97,7 @@ sub load_stored_coinbase {
 
 sub validate {
     my $self = shift;
-    # TODO: Check btc block confirmations and time
+    return 0;
 }
 
 sub serialize {
