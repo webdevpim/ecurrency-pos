@@ -5,6 +5,7 @@ use strict;
 use QBitcoin::Accessors qw(new mk_accessors);
 use QBitcoin::Log;
 use QBitcoin::Const;
+use QBitcoin::Config;
 use QBitcoin::ORM qw(:types dbh find for_log DEBUG_ORM);
 use QBitcoin::Crypto qw(hash256);
 use QBitcoin::ProtocolState qw(btc_synced);
@@ -154,8 +155,7 @@ sub deserialize {
     }
     if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) ne QBT_SCRIPT_START) {
         Warningf("Incorrect btc upgrade transaction %s output open_script", $transaction->hash_str);
-        # TODO: remove this "unless" after finish testing with produced TXO
-        return undef unless BTC_TESTNET;
+        return undef unless $config->{fake_coinbase};
     }
     return $class->new({
         btc_block_height => $btc_block->height,

@@ -8,6 +8,7 @@ use List::Util qw(sum0);
 use Scalar::Util qw(refaddr);
 use QBitcoin::Const;
 use QBitcoin::Log;
+use QBitcoin::Config;
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ORM qw(find create delete :types);
 use QBitcoin::Crypto qw(hash256);
@@ -412,7 +413,18 @@ sub validate_coinbase {
         return -1;
     }
     $self->up->validate();
-    # TODO: match open script and value, empty tx data
+    if ($self->data ne '') {
+        Warningf("Incorrect transaction %s, coinbase can't contain data", $self->hash_str);
+        return -1;
+    }
+    if ($self->up->open_script ne $self->out->[0]->open_script) {
+        Warningf("Mismatch open_script for coinbase transaction %s", $self->hash_str);
+        return -1 unless $config->{fake_coinbase};
+    }
+    if ($self->out->[0]->value != coinbase_value($self->up->value)) {
+        Warningf("Mismatch value for coinbase transaction %s", $self->hash_str);
+        return -1;
+    }
     return 0;
 }
 
@@ -599,13 +611,18 @@ sub coinbase_weight {
     return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
 }
 
+sub coinbase_value {
+    my ($value) = @_;
+    return int($value); # TODO: minus upgrade fee
+}
+
 # Create a transaction with already exising coinbase output
 sub new_coinbase {
     my $class = shift;
     my ($coinbase) = @_;
 
     my $txo = QBitcoin::TXO->new_txo({
-        value       => $coinbase->value, # TODO: minus upgrade fee
+        value       => coinbase_value($coinbase->value),
         open_script => $coinbase->open_script,
     });
     my $self = $class->new(
