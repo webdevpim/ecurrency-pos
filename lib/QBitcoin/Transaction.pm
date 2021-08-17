@@ -308,8 +308,6 @@ sub deserialize {
         Warningf("Incorrect serialized transaction has different hash: %s: %s", $self->hash_str, $self->serialize);
         return undef;
     }
-    $self->validate() == 0
-        or return undef;
 
     $self->fee = sum0(map { $_->{txo}->value } @$in) + $self->coins_upgraded - sum0(map { $_->value } @$out);
 
