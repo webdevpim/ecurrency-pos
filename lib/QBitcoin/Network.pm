@@ -68,9 +68,25 @@ sub main_loop {
         blockchain_synced(1);
     }
     # Load last INCORE_LEVELS blocks from database
-    foreach my $block (reverse QBitcoin::Block->find(-sortby => "height DESC", -limit => 1)) {
-        QBitcoin::Block->max_db_height($block->height) if $block->height > QBitcoin::Block->max_db_height;
-        $block->receive(1);
+    while (1) {
+        my $incorrect = 0;
+        foreach my $block (reverse QBitcoin::Block->find(-sortby => "height DESC", -limit => 1)) {
+            if ($incorrect) {
+                Errf("Delete incorrect block ancestor %s height %u", $block->hash_str, $block->height);
+                $block->delete();
+                next;
+            }
+            QBitcoin::Block->max_db_height($block->height);
+            if ($block->receive(1) != 0) {
+                Errf("Incorrect stored block %s height %u, delete", $block->hash_str, $block->height);
+                $incorrect = 1;
+                $block->delete();
+                QBitcoin::Block->max_db_height($block->height - 1);
+                next;
+            }
+            Debugf("Loaded block height %u", $block->height);
+        }
+        last if QBitcoin::Block->max_db_height >= 0 || !$incorrect;
     }
     # Load my UTXO
     if ($config->{generate}) {
