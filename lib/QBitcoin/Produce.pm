@@ -112,12 +112,18 @@ sub _produce_my_utxo {
 sub _produce_tx {
     my ($fee_part) = @_;
 
-    my @txo = QBitcoin::TXO->find(tx_out => undef, -limit => 100);
+    state $script;
+    if (!$script) {
+        ($script) = QBitcoin::OpenScript->find(data => OP_VERIFY);
+        if (!$script) {
+            Debugf("No free txo script, produce transaction skipped");
+            return undef;
+        }
+    }
+    my @txo = QBitcoin::TXO->find(tx_out => undef, open_script => $script->id, -limit => 100);
     # Exclude loaded txo to avoid double-spend
     # b/c its may be included as input into another mempool transaction
     @txo = grep { !$_->is_cached } @txo;
-    # Get only "open" txo
-    @txo = grep { $_->open_script eq OP_VERIFY } @txo;
     if (!@txo) {
         Debugf("No free txo, produce transaction skipped");
         return undef;
