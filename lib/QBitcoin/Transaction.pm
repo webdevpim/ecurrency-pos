@@ -419,6 +419,7 @@ sub validate_coinbase {
     if ($self->up->open_script ne $self->out->[0]->open_script) {
         Warningf("Mismatch open_script for coinbase transaction %s", $self->hash_str);
         return -1 unless $config->{fake_coinbase};
+        $self->up->open_script = $self->out->[0]->open_script;
     }
     if ($self->out->[0]->value != coinbase_value($self->up->value)) {
         Warningf("Mismatch value for coinbase transaction %s", $self->hash_str);
