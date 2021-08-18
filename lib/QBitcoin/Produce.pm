@@ -118,15 +118,15 @@ sub _produce_tx {
     @txo = grep { !$_->is_cached } @txo;
     # Get only "open" txo
     @txo = grep { $_->open_script eq OP_VERIFY } @txo;
+    if (!@txo) {
+        Debugf("No free txo, produce transaction skipped");
+        return undef;
+    }
 
     @txo = shuffle @txo;
     @txo = splice(@txo, 0, 2);
     $_->save foreach grep { !$_->is_cached } @txo;
     my $amount = sum map { $_->value } @txo;
-    if (!@txo) {
-        Debugf("No free txo, produce transaction skipped");
-        return undef;
-    }
     my $fee = int($amount * $fee_part);
     my $open_script = OP_VERIFY;
     my $out = QBitcoin::TXO->new_txo(
