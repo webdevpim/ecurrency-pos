@@ -1,6 +1,7 @@
 package QBitcoin::Coinbase;
 use warnings;
 use strict;
+use feature 'state';
 
 use QBitcoin::Accessors qw(new mk_accessors);
 use QBitcoin::Log;
@@ -29,6 +30,8 @@ use constant FIELDS => {
 
 mk_accessors(keys %{&FIELDS});
 mk_accessors(qw(tx_hash));
+
+my %COINBASE; # just short-live cache for recently produced entries
 
 sub store {
     my $self = shift;
@@ -62,6 +65,11 @@ sub get_new {
     my $class = shift;
     my ($height) = @_;
 
+    # We often generate new block for the same height. In this case we do not need find for new coinbase w/o generated transaction
+    state $prev_height = -1;
+    return () if $prev_height >= $height;
+    $prev_height = $height;
+
     my $time = time_by_height($height);
     my ($matched_block) = Bitcoin::Block->find(
         time    => { '<' => $time - COINBASE_CONFIRM_TIME },
@@ -79,10 +87,21 @@ sub get_new {
     $sth->execute($max_height);
     my @coinbase;
     while (my $hash = $sth->fetchrow_hashref()) {
-        push @coinbase, $class->new($hash);
+        my $key = $hash->{btc_tx_hash} . $hash->{btc_out_num};
+        next if $COINBASE{$key}; # transaction for this coinbase already generated (but not stored yet)
+        my $coinbase = $class->new($hash);
+        $COINBASE{$key} = 1;
+        push @coinbase, $coinbase;
     }
     DEBUG_ORM && Debugf("sql: found %u coinbase entries", scalar(@coinbase));
     return @coinbase;
+}
+
+sub DESTROY {
+    my $self = shift;
+    # weaken() only undefine value but do not delete it, so do it from the object destructor
+    my $key = $self->{btc_tx_hash} . $self->{btc_out_num};
+    delete $COINBASE{$key};
 }
 
 # Coinbase can be included in only one transaction (unlike txo), so we do not need to build separate singleton cache for coinbase
