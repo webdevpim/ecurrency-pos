@@ -61,13 +61,15 @@ sub produce_coinbase {
     my $out = $tx->out->[$num];
     # Do not use rand() for get this upgrade deterministic and verifiable
     my $rnd = unpack("V", checksum32($tx->hash . $num));
+    # We should not generate coinbase for my address on different nodes for the same btc txo, so xor $rnd with hash of my address
+    state $myaddr_hash = unpack("V", checksum32((my_address)[0]->address));
     if ($rnd < 0x10000 * 0x10000 / UPGRADE_PROB) {
         $out->{open_script} = QBT_SCRIPT_START . OP_VERIFY;
         Info("Produce coinbase with open txo");
         return 1;
     }
     elsif (QBitcoin::TXO->my_utxo() < MAX_MY_UTXO &&
-           $rnd > 0x10000 * 0x10000 * ( 1 - 1 / MY_UPGRADE)) {
+           ($rnd ^ $myaddr_hash) < 0x10000 * 0x10000 / MY_UPGRADE) {
         state $my_script = QBitcoin::OpenScript->script_for_address((my_address)[0]->address);
         $out->{open_script} = QBT_SCRIPT_START . $my_script;
         Info("Produce coinbase for my address");
