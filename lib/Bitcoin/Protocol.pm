@@ -308,7 +308,7 @@ sub add_coinbase($$$) {
         Warningf("Ignore coinbase block %s tx %s with zero amount", $block->hash_hex, $tx->hash_str);
         return;
     }
-    Infof("Add coinbase: block %s tx %s value %u", $block->hash_hex, $tx->hash_str, $out->{value});
+    Infof("Add coinbase: block %s tx %s value %lu", $block->hash_hex, $tx->hash_str, $out->{value});
     my $coinbase = QBitcoin::Coinbase->new(
         btc_block_height => $block->height,
         btc_tx_num       => $tx_num,
