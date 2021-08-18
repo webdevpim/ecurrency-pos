@@ -32,8 +32,15 @@ mk_accessors(qw(tx_hash));
 
 sub store {
     my $self = shift;
+    my $class = ref $self;
+    my ($coinbase) = $class->find(
+        btc_block_height => $self->btc_block_height,
+        btc_tx_num       => $self->btc_tx_num,
+        btc_out_num      => $self->btc_out_num,
+    );
+    return if $coinbase;
     my $script = QBitcoin::OpenScript->store($self->open_script);
-    my $sql = "REPLACE INTO `" . TABLE . "` (btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, btc_tx_data, merkle_path, value, open_script, tx_out) VALUES (?,?,?,?,?,?,?,?,NULL)";
+    my $sql = "INSERT INTO `" . TABLE . "` (btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, btc_tx_data, merkle_path, value, open_script, tx_out) VALUES (?,?,?,?,?,?,?,?,NULL)";
     DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%s,%s,%s,%lu,%u]", $sql, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, for_log($self->btc_tx_hash), for_log($self->btc_tx_data), for_log($self->merkle_path), $self->value, $script->id);
     my $res = dbh->do($sql, undef, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, $self->btc_tx_hash, $self->btc_tx_data, $self->merkle_path, $self->value, $script->id);
     $res == 1
