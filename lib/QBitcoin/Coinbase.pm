@@ -81,6 +81,7 @@ sub get_new {
     while (my $hash = $sth->fetchrow_hashref()) {
         push @coinbase, $class->new($hash);
     }
+    DEBUG_ORM && Debugf("sql: found %u coinbase entries", scalar(@coinbase));
     return @coinbase;
 }
 
@@ -191,6 +192,8 @@ sub btc_block_hash {
 sub btc_confirm_time {
     my $self = shift;
     if (!defined $self->{btc_confirm_time}) {
+        Debugf("Get btc_confirm_time for coinbase %s:%u",
+            unpack("H*", scalar reverse substr($self->btc_tx_hash, -4)), $self->btc_out_num);
         my ($btc_block) = Bitcoin::Block->find(height => $self->btc_block_height + COINBASE_CONFIRM_BLOCKS);
         return undef unless $btc_block;
         $self->{btc_confirm_time} = $btc_block->time;

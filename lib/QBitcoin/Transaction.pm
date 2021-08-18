@@ -634,6 +634,8 @@ sub new_coinbase {
     my $tx_data = $self->serialize;
     $self->hash = calculate_hash($tx_data);
     if (my $cached = $class->get($self->hash)) {
+        Debugf("Coinbase transaction %s for btc %s:%u already in mempool",
+            $self->hash_str, $class->hash_str($coinbase->btc_tx_hash), $coinbase->btc_out_num);
         $self = $cached;
     }
     else {
