@@ -252,13 +252,6 @@ sub receive {
         Debugf("%s block height %u hash %s, best branch altered, weight %Lu, %u transactions",
             $self->received_from ? "received" : "loaded", $self->height,
             $self->hash_str, $self->weight, scalar(@{$self->transactions}));
-        if ($self->height < $HEIGHT) {
-            foreach my $n ($self->height+1 .. $HEIGHT) {
-                $best_block[$n] = undef;
-            }
-            $HEIGHT = $self->height;
-            blockchain_synced(0) unless $config->{genesis};
-        }
     }
     else {
         Debugf("%s block height %u hash %s in the best branch, weight %Lu, %u transactions",
@@ -269,6 +262,14 @@ sub receive {
     if (blockchain_synced() && ($self->received_from || time() >= time_by_height($self->height))) {
         # Do not announce old blocks loaded from the local database or generated
         $self->announce_to_peers();
+    }
+
+    if (defined($HEIGHT) && $self->height < $HEIGHT) {
+        foreach my $n ($self->height+1 .. $HEIGHT) {
+            $best_block[$n] = undef;
+        }
+        $HEIGHT = $self->height;
+        blockchain_synced(0) unless $config->{genesis};
     }
 
     if ($self->height > ($HEIGHT // -1)) {
