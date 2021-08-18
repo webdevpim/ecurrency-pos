@@ -115,8 +115,8 @@ sub serialize {
     # value and open_script is matched transaction output and can be fetched from btc_tx_data and btc_out_num
     return {
         btc_block_hash => unpack("H*", $self->btc_block_hash),
-        btc_tx_num     => $self->btc_tx_num,
-        btc_out_num    => $self->btc_out_num,
+        btc_tx_num     => $self->btc_tx_num+0,
+        btc_out_num    => $self->btc_out_num+0,
         btc_tx_data    => unpack("H*", $self->btc_tx_data),
         merkle_path    => unpack("H*", $self->merkle_path),
     };
