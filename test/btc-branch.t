@@ -53,7 +53,7 @@ sub send_blocks {
         # Create new blockchain from scratch for each send_blocks() call
         dbh->do("DELETE FROM `" . Bitcoin::Block->TABLE . "`");
 
-        my $peer = Bitcoin::Protocol->new(state => STATE_CONNECTED);
+        my $peer = Bitcoin::Protocol->new(state => STATE_CONNECTED, ip => 'btc-test-node');
         foreach my $block_data (@$blocks) {
             my $block = Bitcoin::Block->new(
                 hash        => $block_data->[0],
@@ -65,7 +65,7 @@ sub send_blocks {
                 scanned     => 0,
                 merkle_root => "\x00" x 32,
             );
-            $peer->process_block($block)
+            $peer->process_btc_block($block)
                 && $block->create();
         }
         my ($best_block) = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1);
