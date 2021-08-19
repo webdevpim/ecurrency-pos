@@ -387,6 +387,10 @@ sub validate {
     if (!@{$self->in}) {
         return $self->validate_coinbase;
     }
+    if ($self->coins_upgraded) {
+        Warningf("Mixed input and coinbase in the transaction %s", $self->hash_str);
+        return -1;
+    }
     # Transaction must contains at least one output (can't spend all inputs as fee)
     if (!@{$self->out}) {
         Warningf("No outputs in transaction %s", $self->hash_str);
