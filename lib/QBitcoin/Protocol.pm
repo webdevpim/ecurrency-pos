@@ -163,8 +163,18 @@ sub cmd_block {
         $self->abort("bad_block_data");
         return -1;
     }
-    return 0 if QBitcoin::Block->block_pool($block->height, $block->hash);
-    return 0 if $PENDING_BLOCK{$block->hash};
+    if (QBitcoin::Block->block_pool($block->height, $block->hash)) {
+        Debugf("Received block %s already in block_pool, skip", $block->hash_str);
+        $self->syncing(0);
+        $self->request_new_block($block->height+1);
+        return 0;
+    }
+    if ($PENDING_BLOCK{$block->hash}) {
+        Debugf("Received block %s already pending, skip", $block->hash_str);
+        $self->syncing(0);
+        $self->request_new_block($block->height-1);
+        return 0;
+    }
 
     $block->received_from = $self;
 
