@@ -293,10 +293,8 @@ sub cmd_tx {
         # Ignore (skip) but do not drop connection, for example transaction already exists or has unknown input
         return 0;
     }
-    if ($tx->validate() != 0) {
-        Warningf("Incorrect transaction %s", $tx->hash_str);
-        return -1;
-    }
+    $tx->validate() == 0
+        or return -1;
     $tx->receive() == 0
         or return -1;
     Debugf("Received tx %s fee %i size %u", $tx->hash_str, $tx->fee, $tx->size);
