@@ -52,6 +52,10 @@ sub best_block {
     return $best_block[$block_height];
 }
 
+sub min_incore_height {
+    return $MIN_INCORE_HEIGHT;
+}
+
 sub to_cache {
     my $self = shift;
     $block_pool[$self->height]->{$self->hash} = $self;

@@ -16,7 +16,7 @@ use QBitcoin::Block;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
 
-$config->{verbose} = 1;
+#$config->{verbose} = 1;
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });
@@ -38,7 +38,7 @@ send_blocks([ 0, "a0", undef, 0, 50 ]);
 send_blocks(map [ $_, "a$_", "a" . ($_-1), 1, $_*100 ], 1 .. 20);
 $peer->cmd_ihave(pack("VQ<a32", 20, 20*120-70, "\xaa" x 32));
 send_blocks([ 5, "b5", "a4", 1, 450 ]);
-send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 6 .. 20);
+send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 6 .. 19);
 
 sub send_blocks {
     my @blocks = @_;
@@ -79,8 +79,12 @@ my $height = QBitcoin::Block->blockchain_height;
 my $weight = QBitcoin::Block->best_weight;
 my $block  = $height ? QBitcoin::Block->best_block($height) : undef;
 my $hash   = $block ? $block->hash : undef;
-is($height, 20,    "height");
-is($hash,   "b20", "hash");
-is($weight, 2330,  "weight");
+is($height, 19,    "height");
+is($hash,   "b19", "hash");
+is($weight, 2210,  "weight");
+
+send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], $height+1 .. 30);
+my $incore = QBitcoin::Block->min_incore_height;
+is($incore, QBitcoin::Block->blockchain_height-INCORE_LEVELS+1, "incore levels");
 
 done_testing();
