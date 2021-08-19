@@ -40,7 +40,6 @@ use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Block;
-use QBitcoin::Mempool;
 use QBitcoin::Transaction;
 
 use constant {
@@ -145,12 +144,13 @@ sub cmd_ihavetx {
         $self->abort("incorrect_params");
         return -1;
     }
-
-    my $hash = unpack("a32", $data);
     blockchain_synced()
         or return 0;
-    QBitcoin::Transaction->get_by_hash($hash)
-        or return 0;
+
+    my $hash = unpack("a32", $data);
+    if (QBitcoin::Transaction->get_by_hash($hash)) {
+        return 0;
+    }
     $self->request_tx($hash);
     return 0;
 }
@@ -442,7 +442,10 @@ sub cmd_ping {
 sub cmd_pong {
     my $self = shift;
     my ($data) = @_;
-    mempool_synced(1) if $data eq "emempool";
+    if ($data eq "emempool") {
+        mempool_synced(1);
+        Infof("Mempool is synced, %u transactions", scalar QBitcoin::Transaction->mempool_list());
+    }
     return 0;
 }
 
