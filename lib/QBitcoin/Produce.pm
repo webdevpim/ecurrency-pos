@@ -90,11 +90,11 @@ sub _produce_my_utxo {
         open_script => scalar(QBitcoin::OpenScript->script_for_address($my_address->address)),
     );
     my $tx = QBitcoin::Transaction->new(
-        in             => [],
-        out            => [ $out ],
-        fee            => 0,
-        coins_upgraded => $out->{value},
-        received_time  => $time,
+        in            => [],
+        out           => [ $out ],
+        fee           => 0,
+        coins_created => $out->{value},
+        received_time => $time,
     );
     $tx->sign_transaction();
     QBitcoin::TXO->save_all($tx->hash, $tx->out);
@@ -144,7 +144,7 @@ sub _produce_tx {
         out           => [ $out ],
         fee           => $fee,
         received_time => time(),
-        @txo ? () : ( coins_upgraded => $amount ),
+        @txo ? () : ( coins_created => $amount ),
     );
     $tx->hash = QBitcoin::Transaction::calculate_hash($tx->serialize);
     if (QBitcoin::Transaction->get_by_hash($tx->hash)) {

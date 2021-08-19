@@ -217,6 +217,7 @@ sub serialize {
         in  => [ map { serialize_input($_)  } @{$self->in}  ],
         out => [ map { serialize_output($_) } @{$self->out} ],
         $self->up ? ( up => serialize_coinbase($self->up) ) : (),
+        !UPGRADE_POW && $self->coins_created ? ( coins_created => $self->coins_created+0 ) : (),
     }) . "\n";
 }
 
@@ -303,21 +304,27 @@ sub deserialize {
         size          => length($tx_data),
         received_time => time(),
         $up ? ( up => $up ) : (),
+        !UPGRADE_POW && $decoded->{coins_created} ? ( coins_created => $decoded->{coins_created} ) : (),
     );
     if (calculate_hash($self->serialize) ne $hash) {
         Warningf("Incorrect serialized transaction has different hash: %s: %s", $self->hash_str, $self->serialize);
         return undef;
     }
 
-    $self->fee = sum0(map { $_->{txo}->value } @$in) + $self->coins_upgraded - sum0(map { $_->value } @$out);
+    $self->fee = sum0(map { $_->{txo}->value } @$in) + $self->coins_created - sum0(map { $_->value } @$out);
 
     return $self;
 }
 
-sub coins_upgraded {
+sub coins_created {
     my $self = shift;
 
-    return $self->up ? $self->up->value : 0;
+    if (UPGRADE_POW) {
+        return $self->up ? $self->up->value : 0;
+    }
+    else {
+        return $self->{coins_created};
+    }
 }
 
 sub create_outputs {
@@ -407,6 +414,7 @@ sub validate_coinbase {
     }
     # Each upgrade should correspond fixed and deterministic tx hash for qbitcoin
     if (!$self->up) {
+        # We should add some code here for validate coinbase in case of not UPGRADE_POW (premined or centrilized emission)
         Warningf("Incorrect transaction %s, no coinbase information nor inputs", $self->hash_str);
         return -1;
     }
@@ -433,7 +441,7 @@ sub validate {
     if (!@{$self->in}) {
         return $self->validate_coinbase;
     }
-    if ($self->coins_upgraded) {
+    if ($self->coins_created) {
         Warningf("Mixed input and coinbase in the transaction %s", $self->hash_str);
         return -1;
     }
@@ -529,6 +537,9 @@ sub on_load {
         $self = $TRANSACTION{$self->hash};
     }
     else {
+        if (!UPGRADE_POW && !@{$self->in}) {
+            $self->{coins_created} = sum0(map { $_->value } @{$self->out}) - $self->fee;
+        }
         if ($self->hash ne calculate_hash($self->serialize)) {
             Errf("Serialized transaction: %s", $self->serialize);
             die "Incorrect hash for loaded transaction " . $self->hash_str . " != " . unpack("H*", substr(calculate_hash($self->serialize), 0, 4)) . "\n";
