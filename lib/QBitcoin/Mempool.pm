@@ -59,7 +59,7 @@ sub choose_for_block {
             # TODO: build transaction dependencies and process mempool tx-chains as single transaction-group with cululative size and fee
             # i.e. if A depends on B then in sort mempool assume weight for A as (A+B); then if include A then include "B;A" (and skip B)
             if (!exists $mempool_out{$txo->tx_in}) {
-                # If the transaction is not cached than it's already stored onto database, so it definitely in the best branch
+                # If the transaction is not cached then it's already stored onto database, so it definitely in the best branch
                 if (my $tx_in = QBitcoin::Transaction->get($txo->tx_in)) {
                     if (!$tx_in->block_height) {
                         $skip = 1;

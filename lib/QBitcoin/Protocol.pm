@@ -303,11 +303,22 @@ sub cmd_tx {
         # Ignore (skip) but do not drop connection, for example transaction already exists or has unknown input
         return 0;
     }
+    if ($self->process_tx($tx) == -1) {
+        $self->abort("bad_tx_data");
+        return -1;
+    }
+    return 0;
+}
+
+sub process_tx {
+    my $self = shift;
+    my ($tx) = @_;
+
     $tx->validate() == 0
         or return -1;
     $tx->receive() == 0
         or return -1;
-    Debugf("Received tx %s fee %i size %u", $tx->hash_str, $tx->fee, $tx->size);
+    Debugf("Process tx %s fee %i size %u", $tx->hash_str, $tx->fee, $tx->size);
     if ($self->block_pending_tx($tx)) {
         return -1;
     }
@@ -319,7 +330,7 @@ sub cmd_tx {
     }
     elsif (!$tx->in_blocks) {
         Debugf("Ignore stake transactions %s not related to any known block", $tx->hash_str);
-        return 0;
+        $tx->drop();
     }
     $tx->process_pending($self);
     return 0;

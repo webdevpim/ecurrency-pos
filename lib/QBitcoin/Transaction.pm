@@ -90,7 +90,10 @@ sub process_pending {
             if (!%{$PENDING_TX_INPUT{$hash}}) {
                 delete $PENDING_TX_INPUT{$hash};
                 Debugf("Process transaction %s pending for %s", $self->hash_str($hash), $self->hash_str);
-                $peer->process_tx($$tx_data_p);
+                my $class = ref $self;
+                if (my $tx = $class->deserialize($$tx_data_p, $self)) {
+                    $peer->process_tx($tx);
+                }
             }
         }
     }
@@ -251,8 +254,14 @@ sub deserialize {
         $up = $decoded->{up};
     }
     my $hash = calculate_hash($tx_data);
-    return "" if $PENDING_TX_INPUT{$hash};
-    return "" if $class->get_by_hash($hash);
+    if ($PENDING_TX_INPUT{$hash}) {
+        Debugf("Transaction %s already pending", $class->hash_str($hash));
+        return "";
+    }
+    if ($class->get_by_hash($hash)) {
+        Debugf("Transaction %s already known", $class->hash_str($hash));
+        return "";
+    }
     my ($in, $unknown) = $class->load_inputs([ map { deserialize_input($_) } @{$decoded->{in}} ], $hash, $peer);
     if (!$in) {
         return undef;
