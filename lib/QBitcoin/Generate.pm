@@ -95,6 +95,7 @@ sub generate {
     $generated->merkle_root = $generated->calculate_merkle_root();
     my $data = $generated->serialize;
     $generated->hash = $generated->calculate_hash();
+    $generated->add_tx($_) foreach @transactions;
     QBitcoin::Generate::Control->generated_height($height);
     Debugf("Generated block %s height %u weight %u, %u transactions",
         $generated->hash_str, $height, $generated->weight, scalar(@transactions));
