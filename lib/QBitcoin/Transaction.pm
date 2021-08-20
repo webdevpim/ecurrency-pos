@@ -110,7 +110,7 @@ sub del_from_block {
     my ($block) = @_;
     delete $self->{blocks}->{$block->hash};
     if (!%{$self->{blocks}}) {
-        if ($self->block_height) {
+        if (defined($self->block_height)) {
             # Confirmed, not mempool
             $self->free();
         }
@@ -128,7 +128,7 @@ sub in_blocks {
 
 sub mempool_list {
     my $class = shift;
-    return grep { !$_->block_height && $_->fee >= 0 } values %TRANSACTION;
+    return grep { !defined($_->block_height) && $_->fee >= 0 } values %TRANSACTION;
 }
 
 # This method calls when the confirmed transaction stored into the database and is not needed in memory anymore
@@ -136,7 +136,7 @@ sub mempool_list {
 sub free {
     my $self = shift;
     return if $self->in_blocks;
-    if ($self->block_height && !$self->id) {
+    if (defined($self->block_height) && !$self->id) {
         die "Attempt to free not stored transaction " . $self->hash_str . " confirmed in block " . $self->block_height . "\n";
     }
     foreach my $in (@{$self->in}) {
@@ -149,7 +149,7 @@ sub free {
 sub drop {
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my $self = shift;
-    if ($self->block_height) {
+    if (defined($self->block_height)) {
         Errf("Attempt to drop confirmed transaction %s, block height %u", $self->hash_str, $self->block_height);
         die "Can't drop confirmed transaction " . $self->hash_str . "\n";
     }
@@ -172,7 +172,7 @@ sub drop {
             # add to my_utxo list only if it was confirmed in the best branch
             my $class = ref $self;
             my $tx_in = $class->get($txo->tx_in);
-            if (!$tx_in || $tx_in->block_height) {
+            if (!$tx_in || defined($tx_in->block_height)) {
                 $txo->add_my_utxo;
             }
         }
@@ -536,7 +536,7 @@ sub stake_weight {
         my $class = ref $self;
         foreach my $in (map { $_->{txo} } @{$self->in}) {
             if (my $tx = $class->get_by_hash($in->tx_in)) {
-                if (!$tx->block_height) {
+                if (!defined($tx->block_height)) {
                     Warningf("Can't get stake_weight for %s with unconfirmed input %s:%u",
                         $self->hash_str, $in->tx_in_str, $in->num);
                     return undef;
