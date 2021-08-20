@@ -166,7 +166,7 @@ sub cmd_block {
     if (QBitcoin::Block->block_pool($block->height, $block->hash)) {
         Debugf("Received block %s already in block_pool, skip", $block->hash_str);
         $self->syncing(0);
-        $self->request_new_block($block->height+1);
+        $self->request_new_block();
         return 0;
     }
     if ($PENDING_BLOCK{$block->hash}) {
@@ -174,6 +174,14 @@ sub cmd_block {
         $self->syncing(0);
         $self->request_new_block($block->height-1);
         return 0;
+    }
+    if ($block->height < (QBitcoin::Block->blockchain_height // -1)) {
+        if (QBitcoin::Block->find(hash => $block->hash)) {
+            Debugf("Received block %s already known, skip", $block->hash_str);
+            $self->syncing(0);
+            $self->request_new_block();
+            return 0;
+        }
     }
 
     $block->received_from = $self;
