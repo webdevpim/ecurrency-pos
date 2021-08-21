@@ -108,7 +108,7 @@ sub request_mempool {
 sub abort {
     my $self = shift;
     my ($reason) = @_;
-    $self->send_message("reject", pack("Ca*", $self->command) . pack("C", REJECT_INVALID) . pack("Ca*", $reason // "general_error"));
+    $self->send_message("reject", pack("C/a*", $self->command) . pack("C", REJECT_INVALID) . pack("C/a*", $reason // "general_error"));
 }
 
 sub announce_block {
