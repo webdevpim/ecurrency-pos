@@ -37,7 +37,6 @@ use parent 'QBitcoin::Protocol::Common';
 use Tie::IxHash;
 use QBitcoin::Const;
 use QBitcoin::Log;
-use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Block;
 use QBitcoin::Transaction;
@@ -458,6 +457,7 @@ sub cmd_eomempool {
         return -1;
     }
     $self->send_message("ping", pack("a8", "emempool"));
+    $self->ping_sent = time();
     return 0;
 }
 
@@ -475,6 +475,7 @@ sub cmd_pong {
         mempool_synced(1);
         Infof("Mempool is synced, %u transactions", scalar QBitcoin::Transaction->mempool_list());
     }
+    $self->ping_sent = undef;
     return 0;
 }
 

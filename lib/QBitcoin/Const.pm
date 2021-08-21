@@ -19,6 +19,7 @@ use constant QBITCOIN_CONST => {
     PORT_API              => 9556,
     SERVICE_NAME          => "qbitcoin",
     SELECT_TIMEOUT        => 10, # sec
+    PEER_RECV_TIMEOUT     => 60, # sec, ping period and timeout for waiting for pong
     BIND_ADDR             => '*',
     LISTEN_QUEUE          => 5,
     PEER_RECONNECT_TIME   => 10,

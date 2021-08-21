@@ -27,6 +27,8 @@ use constant ATTR => qw(
     has_weight
     syncing
     command
+    last_recv_time
+    ping_sent
 );
 
 mk_accessors(ATTR);
@@ -66,6 +68,7 @@ sub disconnect {
     $self->recvbuf = "";
     $self->has_weight = undef;
     $self->syncing = undef;
+    $self->ping_sent = undef;
     QBitcoin::Peers->del_peer($self) if $self->direction eq DIR_IN;
     return 0;
 }
@@ -101,6 +104,7 @@ sub receive {
         }
         my $func = "cmd_" . $command;
         if ($self->can($func)) {
+            $self->last_recv_time = time();
             Debugf("Received [%s] from peer %s", $command, $self->ip);
             if ($command ne "version" && !$self->greeted) {
                 Errf("command [%s] before greeting from peer %s", $command, $self->ip);

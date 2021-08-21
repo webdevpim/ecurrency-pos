@@ -55,6 +55,7 @@ sub connect_to {
     $peer->socket = $socket;
     $peer->socket_fileno = fileno($socket);
     $peer->state = STATE_CONNECTING;
+    $peer->last_recv_time = time();
     connect($socket, $paddr);
     Debugf("Connecting to %s", $peer_host);
 }
@@ -152,6 +153,7 @@ sub main_loop {
             Errf("select error: %s", $!);
             last;
         }
+        my $time = time();
         if ($listen_socket && vec($rin, fileno($listen_socket), 1) == 1) {
             my $peerinfo = accept(my $new_socket, $listen_socket);
             my ($remote_port, $peer_addr) = unpack_sockaddr_in($peerinfo);
@@ -165,17 +167,18 @@ sub main_loop {
                 my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($new_socket));
                 my $my_ip = inet_ntoa($my_addr);
                 my $peer = QBitcoin::Protocol->new(
-                    socket     => $new_socket,
-                    state      => STATE_CONNECTED,
-                    state_time => time(),
-                    host       => $peer_ip,
-                    ip         => $peer_ip,
-                    port       => $remote_port,
-                    addr       => "\x00"x10 . "\xff\xff" . $peer_addr,
-                    my_ip      => $my_ip,
-                    my_port    => $my_port,
-                    my_addr    => "\x00"x10 . "\xff\xff" . $my_addr,
-                    direction  => DIR_IN,
+                    socket         => $new_socket,
+                    state          => STATE_CONNECTED,
+                    state_time     => $time,
+                    host           => $peer_ip,
+                    ip             => $peer_ip,
+                    port           => $remote_port,
+                    addr           => "\x00"x10 . "\xff\xff" . $peer_addr,
+                    my_ip          => $my_ip,
+                    my_port        => $my_port,
+                    my_addr        => "\x00"x10 . "\xff\xff" . $my_addr,
+                    direction      => DIR_IN,
+                    last_recv_time => $time,
                 );
                 QBitcoin::Peers->add_peer($peer);
                 $peer->startup();
@@ -188,6 +191,7 @@ sub main_loop {
                 $peer->disconnect();
                 next;
             }
+
             if (vec($rin, $peer->socket_fileno, 1) == 1) {
                 my $n = sysread($peer->socket, my $data, READ_BUFFER_SIZE);
                 if (!defined $n) {
@@ -256,6 +260,19 @@ sub main_loop {
                     next;
                 }
             }
+
+            if ($peer->last_recv_time + PEER_RECV_TIMEOUT < $time) {
+                if (!$peer->ping_sent) {
+                    $peer->send_message("ping", pack("Q", $time));
+                    $peer->ping_sent = $time;
+                }
+                elsif ($peer->ping_sent + PEER_RECV_TIMEOUT < $time) {
+                    Noticef("Peer %s timeout, closing connection", $peer->ip);
+                    $peer->disconnect();
+                    next;
+                }
+            }
+
         }
     }
     return 0;

@@ -424,6 +424,7 @@ sub cmd_ping {
 sub cmd_pong {
     my $self = shift;
     my ($data) = @_;
+    $self->ping_sent = undef;
     return 0;
 }
 
