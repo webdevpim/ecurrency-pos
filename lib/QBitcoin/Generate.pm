@@ -67,7 +67,8 @@ sub generate {
     my ($height) = @_;
     my $prev_block;
     if ($height > 0) {
-        $prev_block = QBitcoin::Block->best_block($height-1);
+        $prev_block = QBitcoin::Block->best_block($height-1)
+            or die "No prev block height " . ($height-1) . " for generate";
     }
 
     my $stake_tx = make_stake_tx(0);
