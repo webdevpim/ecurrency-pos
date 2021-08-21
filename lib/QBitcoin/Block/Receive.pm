@@ -99,7 +99,7 @@ sub receive {
     }
 
     $self->to_cache;
-    if ($self->prev_block) {
+    if ($self->prev_block_load) {
         $self->prev_block->next_block //= $self;
     }
 
@@ -116,11 +116,14 @@ sub receive {
     # Find first common block between current best branch and the candidate
     my $class = ref $self;
     my $new_best;
-    for ($new_best = $self; $new_best->height; $new_best = $new_best->prev_block) {
+    for ($new_best = $self; $new_best->height > 0; $new_best = $new_best->prev_block) {
         # "root" best_block for this new branch must be already loaded
         my $best_block = $class->best_block($new_best->height-1);
         last if $best_block && $best_block->hash eq $new_best->prev_hash;
         $new_best->prev_block->next_block = $new_best;
+    }
+    if (defined($HEIGHT) && $new_best->height == 0) {
+        die "Error receiving alternative branch";
     }
     # $new_best is first block in new branch after fork, i.e $new_nest->prev_block is in the current best branch
     if ($new_best->height < ($HEIGHT // -1)) {
@@ -130,8 +133,8 @@ sub receive {
 
     # reset all txo in the current best branch (started from the fork block) as unspent;
     # then set output in all txo in new branch and check it against possible double-spend
-    for (my $b = $class->best_block($HEIGHT // $new_best->height); $b && $b->height >= $new_best->height; $b = $b->prev_block) {
-        $b->prev_block->next_block = $b;
+    for (my $b = $class->best_block($HEIGHT // $new_best->height); $b && $b->height >= $new_best->height; $b = $b->prev_block_load) {
+        $b->prev_block_load->next_block = $b;
         Debugf("Remove block %s height %u from the best branch", $b->hash_str, $b->height);
         foreach my $tx (reverse @{$b->transactions}) {
             $tx->unconfirm();
@@ -397,13 +400,22 @@ sub prev_block {
     }
     return $self->{prev_block} if exists $self->{prev_block}; # undef means we have no such block
     return undef unless $self->height; # genesis block has no ancestors
+    if (my $prev_block = $block_pool[$self->height-1]->{$self->prev_hash}) {
+        $self->{prev_block} = $prev_block;
+    }
+    return $self->{prev_block};
+}
+
+sub prev_block_load {
+    my $self = shift;
+    return $self->{prev_block} if exists $self->{prev_block}; # undef means we have no such block
+    return undef unless $self->height; # genesis block has no ancestors
+    return $self->{prev_block} if $self->prev_block; # exists in block_pool
     my $class = ref($self);
-    if (!($self->{prev_block} = $block_pool[$self->height-1]->{$self->prev_hash})) {
-        if (my $prev_block = $class->find(hash => $self->prev_hash)) {
-            $prev_block->to_cache;
-            $best_block[$prev_block->height] = $prev_block;
-            $self->{prev_block} = $prev_block;
-        }
+    if (my $prev_block = $class->find(hash => $self->prev_hash)) {
+        $prev_block->to_cache;
+        $best_block[$prev_block->height] = $prev_block;
+        $self->{prev_block} = $prev_block;
     }
     return $self->{prev_block};
 }

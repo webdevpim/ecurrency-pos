@@ -186,7 +186,7 @@ sub cmd_block {
 
     $block->received_from = $self;
 
-    if ($block->height && !$block->prev_block) {
+    if ($block->height && !$block->prev_block_load) {
         $self->send_message("sendblock", pack("V", $block->height-1));
         $PENDING_BLOCK_BLOCK{$block->prev_hash}->{$block->hash} = 1;
         add_pending_block($block);
