@@ -331,8 +331,8 @@ sub cleanup_old_blocks {
         }
         keys(%{$block_pool[$free_height]}) <= 1 && keys(%{$block_pool[$free_height+1]}) <= 1
             or last;
-        if ($best_block[$free_height]) {
-            # we have only best block on this level with single descendant, drop it and cleanup the level
+        if ($best_block[$free_height] && ($best_block[$free_height+1] || !%{$block_pool[$free_height+1]})) {
+            # we have only best block on this level without descendants in alternate branches, drop it and cleanup the level
             free_block($best_block[$free_height]);
             if ($prev_block[$free_height+1]) {
                 foreach my $descendant (values %{$prev_block[$free_height+1]->{$best_block[$free_height]->hash}}) {
