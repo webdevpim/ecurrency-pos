@@ -91,7 +91,7 @@ sub process_pending {
                 delete $PENDING_TX_INPUT{$hash};
                 Debugf("Process transaction %s pending for %s", $self->hash_str($hash), $self->hash_str);
                 my $class = ref $self;
-                if (my $tx = $class->deserialize($$tx_data_p, $self)) {
+                if (my $tx = $class->deserialize($$tx_data_p, $peer)) {
                     $peer->process_tx($tx);
                 }
             }
