@@ -22,15 +22,17 @@ sub want_tx {
 
 sub choose_for_block {
     my $class = shift;
-    my ($stake_tx) = @_;
-    my @mempool = sort { compare_tx($a, $b) } QBitcoin::Transaction->mempool_list()
-        or return ();
+    my ($size, $block_height) = @_;
+    my $block_time = time_by_height($block_height);
+    my @mempool = sort { compare_tx($a, $b) }
+        grep { defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
+            QBitcoin::Transaction->mempool_list()
+                or return ();
     Debugf("Mempool: %s", join(',', map { $_->hash_str } @mempool));
-    if (!$stake_tx) {
+    if ($size == 0) {
         # We can include only transactions with zero fee into block without stake transaction
         @mempool = grep { $_->fee == 0 } @mempool;
     }
-    my $size = $stake_tx ? $stake_tx->size : 0;
     my $empty_tx = 0;
     # It's not possible that input was spent in stake transaction
     # b/c we do not use inputs existing in any mempool transaction for stake tx
@@ -82,7 +84,7 @@ sub choose_for_block {
             $spent{$in->{txo}->tx_in . $in->{txo}->num} = 1;
         }
         $mempool_out{$mempool[$i]->hash} = scalar @{$mempool[$i]->out};
-        $empty_tx++ if $mempool[$i]->fee == 0;
+        $empty_tx++ if $mempool[$i]->fee == 0 && @{$mempool[$i]->in};
         $size += $mempool[$i]->size;
         if ($empty_tx > MAX_EMPTY_TX_IN_BLOCK || $size > MAX_BLOCK_SIZE - BLOCK_HEADER_SIZE) {
             @mempool = splice(@mempool, 0, $i);
@@ -93,8 +95,11 @@ sub choose_for_block {
 }
 
 sub compare_tx {
-    return $b->fee*$a->size <=> $a->fee*$b->size ||
-        $a->received_time <=> $b->received_time ||
+    # coinbase first
+    return
+        ( @{$a->in} ? 1 : 0 ) <=> ( @{$b->in} ? 1 : 0 ) || # coinbase first
+        $b->fee * $a->size    <=> $a->fee * $b->size    ||
+        $a->received_time     <=> $b->received_time     ||
         $a->hash cmp $b->hash;
 }
 

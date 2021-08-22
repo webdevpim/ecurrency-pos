@@ -30,7 +30,7 @@ $block_module->mock('calculate_hash', sub { $block_hash });
 
 my $transaction_module = Test::MockModule->new('QBitcoin::Transaction');
 $transaction_module->mock('validate_coinbase', sub { 0 });
-$transaction_module->mock('coins_upgraded', sub { $_[0]->{coins_upgraded} //= @{$_[0]->in} ? 0 : sum0(map { $_->value } @{$_[0]->out}) });
+$transaction_module->mock('coins_created', sub { $_[0]->{coins_created} //= @{$_[0]->in} ? 0 : sum0(map { $_->value } @{$_[0]->out}) });
 
 my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED, ip => '127.0.0.1');
 
@@ -44,9 +44,9 @@ sub make_tx {
     state $value = 10;
     state $tx_num = 1;
     my $tx = QBitcoin::Transaction->new(
-        out            => [ QBitcoin::TXO->new_txo( value => $value, open_script => "txo_$tx_num" ) ],
-        in             => [],
-        coins_upgraded => $value,
+        out           => [ QBitcoin::TXO->new_txo( value => $value, open_script => "txo_$tx_num" ) ],
+        in            => [],
+        coins_created => $value,
     );
     $value += 10;
     $tx_num++;

@@ -2,6 +2,9 @@ package Bitcoin::Serialized;
 use warnings;
 use strict;
 
+use Exporter qw(import);
+our @EXPORT = qw(varint varstr);
+
 # Object with [ $data, $index ] to avoid rewrite long data during deserialize
 
 sub new {
@@ -17,7 +20,7 @@ sub index :lvalue {
     $_[0]->[1];
 }
 
-sub length {
+sub length :method {
     length($_[0]->[0]) - $_[0]->[1];
 }
 
@@ -28,6 +31,14 @@ sub get {
     return $res;
 }
 
+sub varint {
+    my ($num) = @_;
+    return $num < 0xFD ? pack("C", $num) :
+        $num < 0xFFFF ? pack("Cv", 0xFD, $num) :
+        $num < 0xFFFFFFFF ? pack("CV", 0xFE, $num) :
+        pack("CQ<", 0xFF, $num);
+}
+
 sub get_varint {
     my $self = shift;
     my $first = unpack("C", $self->get(1));
@@ -36,6 +47,11 @@ sub get_varint {
         $first == 0xFD ? unpack("v", $self->get(2)) :
         $first == 0xFE ? unpack("V", $self->get(4)) :
         unpack("Q<", $self->get(8));
+}
+
+sub varstr {
+    my ($str) = @_;
+    return varint(length($str)) . $str;
 }
 
 sub get_string {

@@ -5,12 +5,13 @@ use strict;
 use QBitcoin::Accessors qw(mk_accessors new);
 use QBitcoin::Crypto qw(hash256);
 
-mk_accessors(qw(hash in out));
+mk_accessors(qw(hash in out data));
 
 sub deserialize {
     my $class = shift;
     my ($tx_data) = @_;
 
+    # TODO: return undef on deserialize error
     my $start_index = $tx_data->index;
     my ($version) = unpack("V", $tx_data->get(4)); # 1 or 2
     my $txin_count = $tx_data->get_varint();
@@ -55,11 +56,12 @@ sub deserialize {
     my $lock_time = unpack("V", $tx_data->get(4));
     my $end_index = $tx_data->index;
     $tx_data->index = $start_index; # rewind
-    my $hash = hash256($tx_data->get($end_index - $start_index));
+    my $tx_raw_data = $tx_data->get($end_index - $start_index);
     return $class->new(
         in   => \@tx_in,
         out  => \@tx_out,
-        hash => $hash,
+        data => $tx_raw_data,
+        hash => hash256($tx_raw_data),
     );
 }
 

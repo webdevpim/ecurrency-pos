@@ -8,6 +8,7 @@ use lib ("$Bin/../lib", "$Bin/lib");
 
 use Test::More;
 use Test::MockModule;
+use List::Util qw(sum0);
 use QBitcoin::Test::ORM;
 use QBitcoin::Const;
 use QBitcoin::Config;
@@ -25,6 +26,10 @@ my $block_module = Test::MockModule->new('QBitcoin::Block');
 $block_module->mock('self_weight', \&mock_self_weight);
 my $block_hash;
 $block_module->mock('calculate_hash', sub { $block_hash });
+
+my $transaction_module = Test::MockModule->new('QBitcoin::Transaction');
+$transaction_module->mock('validate_coinbase', sub { 0 });
+$transaction_module->mock('coins_created', sub { $_[0]->{coins_created} //= @{$_[0]->in} ? 0 : sum0(map { $_->value } @{$_[0]->out}) });
 
 sub mock_self_weight {
     my $self = shift;
@@ -49,9 +54,9 @@ sub send_blocks {
         my @tx;
         foreach (1 .. $tx_num) {
             my $tx = QBitcoin::Transaction->new(
-                out            => [ QBitcoin::TXO->new_txo( value => $value, open_script => "txo_$tx_num" ) ],
-                in             => [],
-                coins_upgraded => $value,
+                out           => [ QBitcoin::TXO->new_txo( value => $value, open_script => "txo_$tx_num" ) ],
+                in            => [],
+                coins_created => $value,
             );
             $value += 10;
             my $tx_data = $tx->serialize;

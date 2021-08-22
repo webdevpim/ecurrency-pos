@@ -56,6 +56,12 @@ sub deserialize {
     return $block;
 }
 
+sub serialize {
+    my $self = shift;
+    return pack("Va32a32VVV",
+        $self->version, $self->prev_hash, $self->merkle_root, $self->time, $self->bits, $self->nonce);
+}
+
 sub difficulty {
     my $self = shift;
     # https://bitcoin.stackexchange.com/questions/5838/how-is-difficulty-calculated

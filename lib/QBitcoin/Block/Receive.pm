@@ -75,7 +75,7 @@ sub receive {
 
     return 0 if $block_pool[$self->height]->{$self->hash};
     if (my $err = $self->validate()) {
-        Warningf("Incorrect block from %s: %s", $self->received_from ? $self->received_from->ip : "me", $err);
+        Warningf("Incorrect block %s from %s: %s", $self->hash_str, $self->received_from ? $self->received_from->ip : "me", $err);
         # Incorrect block
         # NB! Incorrect hash is not this case, hash must be checked earlier
         # Drop descendants, it's not possible to receive correct block with the same hash
@@ -107,8 +107,9 @@ sub receive {
     if ($HEIGHT && ($self->weight < $best_block[$HEIGHT]->weight ||
         ($self->weight == $best_block[$HEIGHT]->weight && $self->branch_height <= $HEIGHT))) {
         my $has_weight = $self->received_from ? ($self->received_from->has_weight // -1) : -1;
-        Debugf("Received block height %u from %s has too low weight for us: %Lu < %Lu",
-            $self->height, $self->received_from ? $self->received_from->ip : "me", $self->weight, $best_block[$HEIGHT]->weight);
+        Debugf("Received block %s height %u from %s has too low weight for us: %Lu < %Lu",
+            $self->hash_str, $self->height, $self->received_from ? $self->received_from->ip : "me",
+            $self->weight, $best_block[$HEIGHT]->weight);
         return 0;
     }
 

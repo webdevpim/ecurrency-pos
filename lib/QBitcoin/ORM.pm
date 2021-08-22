@@ -21,7 +21,7 @@ use constant DEBUG_ORM => 1;
 use constant BIN_UNHEX => 0; # does not work for sqlite
 
 use parent 'Exporter';
-our @EXPORT_OK = qw(dbh find create replace update delete IGNORE DEBUG_ORM);
+our @EXPORT_OK = qw(dbh find create replace update delete IGNORE DEBUG_ORM for_log);
 push @EXPORT_OK, keys %{&DB_TYPES};
 our %EXPORT_TAGS = ( types => [ keys %{&DB_TYPES} ] );
 

@@ -12,18 +12,19 @@ use Bitcoin::Protocol;
 sub main {
     my ( $help, @peer_hosts, @btc_hosts );
     unless (GetOptions(
-        'help|h|?'    => \$help,
-        'peer|p=s'    => \@peer_hosts,
-        'btcnode|B=s' => \@btc_hosts,
-        'verbose|v'   => \$config->{verbose},
-        'bind|b=s'    => \$config->{bind_addr},
-        'port|P=s'    => \$config->{port},
-        'genesis|G'   => \$config->{genesis},
-        'generate|g'  => \$config->{generate},
-        'produce'     => \$config->{produce},
-        'database=s'  => \$config->{database},
-        'dbi=s'       => \$config->{dbi},
-        'log=s'       => \$config->{log},
+        'help|h|?'      => \$help,
+        'peer|p=s'      => \@peer_hosts,
+        'btcnode|B=s'   => \@btc_hosts,
+        'verbose|v'     => \$config->{verbose},
+        'bind|b=s'      => \$config->{bind_addr},
+        'port|P=s'      => \$config->{port},
+        'genesis|G'     => \$config->{genesis},
+        'generate|g'    => \$config->{generate},
+        'fake-coinbase' => \$config->{fake_coinbase},
+        'produce'       => \$config->{produce},
+        'database=s'    => \$config->{database},
+        'dbi=s'         => \$config->{dbi},
+        'log=s'         => \$config->{log},
     )) {
         select STDERR;
         usage();
@@ -43,7 +44,9 @@ sub usage {
     print "   -h, -? --help               - print this help message and exit,\n";
     print "   -v, --verbose               - output logs to stdout,\n";
     print "   -p, --peer <host[:port]>    - connect to peer <host> and <port> (default port " . PORT_P2P . "),\n";
-    print "   -B, --btcnode <host[:port]> - connect to btc node <host>:<port> (default port " . Bitcoin::Protocol->PORT_P2P . "),\n";
+    if (UPGRADE_POW) {
+        print "   -B, --btcnode <host[:port]> - connect to btc node <host>:<port> (default port " . Bitcoin::Protocol->PORT_P2P . "),\n";
+    }
     print "   -b, --bind <addr[:port]>    - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT_P2P . "),\n";
     print "   -g, --generate              - generate blocks (private key must be stored in the database),\n";
     print "   -G, --genesis               - run as genesis node, do not need to synchronize with other nodes for authoritative answers,\n";

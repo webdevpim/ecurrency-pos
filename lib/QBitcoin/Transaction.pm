@@ -8,10 +8,12 @@ use List::Util qw(sum0);
 use Scalar::Util qw(refaddr);
 use QBitcoin::Const;
 use QBitcoin::Log;
+use QBitcoin::Config;
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ORM qw(find create delete :types);
 use QBitcoin::Crypto qw(hash256);
 use QBitcoin::TXO;
+use QBitcoin::Coinbase;
 use QBitcoin::Peers;
 
 use Role::Tiny::With;
@@ -28,10 +30,10 @@ use constant FIELDS => {
 use constant TABLE => 'transaction';
 
 use constant ATTR => qw(
-    coins_upgraded
     received_time
     in
     out
+    up
     blocks
 );
 
@@ -77,6 +79,10 @@ sub receive {
     }
 
     $TRANSACTION{$self->hash} = $self;
+    if ($self->up) {
+        # This transaction is already validated
+        $self->up->store;
+    }
     return 0;
 }
 
@@ -192,6 +198,9 @@ sub store {
     foreach my $txo (@{$self->out}) {
         $txo->store($self);
     }
+    if (my $coinbase = $self->up) {
+        $coinbase->store_published($self);
+    }
     # TODO: store tx data (smartcontract)
 }
 
@@ -207,7 +216,8 @@ sub serialize {
     return $JSON->encode({
         in  => [ map { serialize_input($_)  } @{$self->in}  ],
         out => [ map { serialize_output($_) } @{$self->out} ],
-        $self->coins_upgraded ? ( up  => { value => $self->coins_upgraded+0 } ) : (),
+        $self->up ? ( up => serialize_coinbase($self->up) ) : (),
+        !UPGRADE_POW && $self->coins_created ? ( coins_created => $self->coins_created+0 ) : (),
     }) . "\n";
 }
 
@@ -237,6 +247,11 @@ sub serialize_output {
     };
 }
 
+sub serialize_coinbase {
+    my $coinbase = shift;
+    return $coinbase->serialize;
+}
+
 sub deserialize {
     my $class = shift;
     my ($tx_data, $peer) = @_;
@@ -244,14 +259,6 @@ sub deserialize {
     if (!$decoded || ref($decoded) ne 'HASH' || ref($decoded->{in}) ne 'ARRAY' || ref($decoded->{out}) ne 'ARRAY') {
         Warningf("Incorrect transaction data: %s", $@);
         return undef;
-    }
-    my $up;
-    if (exists $decoded->{up}) {
-        unless (ref($decoded->{up}) eq 'HASH' && $decoded->{up}->{value} && !ref($decoded->{up}->{value}) && $decoded->{up}->{value} =~ /^[1-9][0-9]*\z/) {
-            Warning("Incorrect transaction data");
-            return undef;
-        }
-        $up = $decoded->{up};
     }
     my $hash = calculate_hash($tx_data);
     if ($PENDING_TX_INPUT{$hash}) {
@@ -284,25 +291,40 @@ sub deserialize {
         return ""; # Ignore transactions with unknown inputs
     }
 
-    my $out  = create_outputs($decoded->{out}, $hash);
+    my $out = create_outputs($decoded->{out}, $hash);
+    my $up;
+    if ($decoded->{up}) {
+        $up = create_coinbase($decoded->{up},  $hash)
+            or return undef;
+    }
     my $self = $class->new(
         in            => $in,
         out           => $out,
         hash          => $hash,
         size          => length($tx_data),
         received_time => time(),
-        $up ? ( coins_upgraded => $up->{value}+0 ) : (),
+        $up ? ( up => $up ) : (),
+        !UPGRADE_POW && $decoded->{coins_created} ? ( coins_created => $decoded->{coins_created} ) : (),
     );
     if (calculate_hash($self->serialize) ne $hash) {
-        Warning("Incorrect serialized transaction has different hash");
+        Warningf("Incorrect serialized transaction has different hash: %s: %s", $self->hash_str, $self->serialize);
         return undef;
     }
-    $self->validate() == 0
-        or return undef;
 
-    $self->fee = sum0(map { $_->{txo}->value } @$in) + ($self->coins_upgraded // 0) - sum0(map { $_->value } @$out);
+    $self->fee = sum0(map { $_->{txo}->value } @$in) + $self->coins_created - sum0(map { $_->value } @$out);
 
     return $self;
+}
+
+sub coins_created {
+    my $self = shift;
+
+    if (UPGRADE_POW) {
+        return $self->up ? $self->up->value : 0;
+    }
+    else {
+        return $self->{coins_created};
+    }
 }
 
 sub create_outputs {
@@ -378,16 +400,39 @@ sub calculate_hash {
     return hash256($tx_data);
 }
 
+sub create_coinbase {
+    my ($up, $hash) = @_;
+    # TODO: create value, open_script and hash by serialized raw data
+    return QBitcoin::Coinbase->deserialize(%$up, tx_hash => $hash);
+}
+
 sub validate_coinbase {
     my $self = shift;
     if (@{$self->out} != 1) {
         Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_str, scalar @{$self->out});
         return -1;
     }
-    # TODO: Get and validate information about btc upgrade from $self->data
     # Each upgrade should correspond fixed and deterministic tx hash for qbitcoin
-    my $coins = $self->out->[0]->value;
-    $self->coins_upgraded //= $coins; # for calculate fee
+    if (!$self->up) {
+        # We should add some code here for validate coinbase in case of not UPGRADE_POW (premined or centrilized emission)
+        Warningf("Incorrect transaction %s, no coinbase information nor inputs", $self->hash_str);
+        return -1;
+    }
+    $self->up->validate();
+    # TODO: uncomment when $transaction->data will be implemented
+    # if ($self->data ne '') {
+    #     Warningf("Incorrect transaction %s, coinbase can't contain data", $self->hash_str);
+    #     return -1;
+    # }
+    if ($self->up->open_script ne $self->out->[0]->open_script) {
+        Warningf("Mismatch open_script for coinbase transaction %s", $self->hash_str);
+        return -1 unless $config->{fake_coinbase};
+        $self->up->open_script = $self->out->[0]->open_script;
+    }
+    if ($self->out->[0]->value != coinbase_value($self->up->value)) {
+        Warningf("Mismatch value for coinbase transaction %s", $self->hash_str);
+        return -1;
+    }
     return 0;
 }
 
@@ -396,7 +441,7 @@ sub validate {
     if (!@{$self->in}) {
         return $self->validate_coinbase;
     }
-    if ($self->coins_upgraded) {
+    if ($self->coins_created) {
         Warningf("Mixed input and coinbase in the transaction %s", $self->hash_str);
         return -1;
     }
@@ -430,9 +475,17 @@ sub validate {
         }
     }
     if ($input_value <= 0) {
-        Warning("Zero input in transaction %s", $self->hash_str);
+        Warningf("Zero input in transaction %s", $self->hash_str);
         return -1;
     }
+    return 0;
+}
+
+sub valid_for_block {
+    my $self = shift;
+    my ($block) = @_;
+    ($self->min_tx_time // return -1) <= time_by_height($block->height)
+        or return -1;
     return 0;
 }
 
@@ -459,13 +512,11 @@ sub pre_load {
                 close_script => $txo->close_script,
             };
         }
+        my $upgrade = QBitcoin::Coinbase->load_stored_coinbase($attr->{id}, $attr->{hash});
         $attr->{in}  = \@inputs;
         $attr->{out} = \@outputs;
+        $attr->{up}  = $upgrade if $upgrade;
         $attr->{received_time} = time_by_height($attr->{block_height}); # for possible unconfirm the transaction
-        # TODO: load coinbase (coins upgrade) info from separate table
-        if (!@inputs) {
-            $attr->{coins_upgraded} = sum0(map { $_->value } @outputs) + $attr->{fee};
-        }
     }
     return $attr;
 }
@@ -486,6 +537,9 @@ sub on_load {
         $self = $TRANSACTION{$self->hash};
     }
     else {
+        if (!UPGRADE_POW && !@{$self->in}) {
+            $self->{coins_created} = sum0(map { $_->value } @{$self->out}) - $self->fee;
+        }
         if ($self->hash ne calculate_hash($self->serialize)) {
             Errf("Serialized transaction: %s", $self->serialize);
             die "Incorrect hash for loaded transaction " . $self->hash_str . " != " . unpack("H*", substr(calculate_hash($self->serialize), 0, 4)) . "\n";
@@ -551,6 +605,65 @@ sub stake_weight {
         }
     }
     return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
+}
+
+sub coinbase_weight {
+    my $self = shift;
+    my ($block_height) = @_;
+    my $weight = 0;
+    if (my $coinbase = $self->up) {
+        # Early confirmation should have more weight than later
+        my $base_height = height_by_time($coinbase->btc_confirm_time);
+        my $virtual_height = height_by_time($coinbase->btc_confirm_time - COINBASE_WEIGHT_TIME); # MB negative, it's ok
+        $weight = $coinbase->value * ($base_height - $virtual_height);
+        $weight *= ($base_height - $virtual_height) / ($block_height - $virtual_height);
+    }
+    return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
+}
+
+sub coinbase_value {
+    my ($value) = @_;
+    return int($value); # TODO: minus upgrade fee
+}
+
+# Create a transaction with already exising coinbase output
+sub new_coinbase {
+    my $class = shift;
+    my ($coinbase) = @_;
+
+    my $txo = QBitcoin::TXO->new_txo({
+        value       => coinbase_value($coinbase->value),
+        open_script => $coinbase->open_script,
+    });
+    my $self = $class->new(
+        in            => [],
+        out           => [ $txo ],
+        up            => $coinbase,
+        fee           => $coinbase->value - $txo->value,
+        received_time => time(),
+    );
+    my $tx_data = $self->serialize;
+    $self->hash = calculate_hash($tx_data);
+    if (my $cached = $class->get($self->hash)) {
+        Debugf("Coinbase transaction %s for btc %s:%u already in mempool",
+            $self->hash_str, $class->hash_str($coinbase->btc_tx_hash), $coinbase->btc_out_num);
+        $self = $cached;
+    }
+    else {
+        QBitcoin::TXO->save_all($self->hash, $self->out);
+        $self->size = length($tx_data);
+        $self->receive(); # Add coinbase tx to mempool
+        $coinbase->tx_hash = $self->hash;
+        Infof("Generated new coinbase transaction %s for btc output %s:%u",
+            $self->hash_str, $class->hash_str($coinbase->btc_tx_hash), $coinbase->btc_out_num);
+    }
+    return $self;
+}
+
+sub min_tx_time {
+    my $self = shift;
+
+    return $self->up ? $self->up->min_tx_time : 0;
 }
 
 1;

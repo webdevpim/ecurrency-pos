@@ -37,7 +37,7 @@ sub Log {
     my ($prio, $line) = @_;
 
     defined($line) or die "Log line undefined";
-    @_ == 2 or die "Extra params for Log";
+    @_ == 2 or die "Extra params for Log: [$line]";
     Logf($prio, '%s', $line);
 }
 
