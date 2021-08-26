@@ -127,6 +127,29 @@ sub load_stored_coinbase {
 
 sub validate {
     my $self = shift;
+    my ($btc_block) = Bitcoin::Block->find(hash => $self->btc_block_hash);
+    if (!$btc_block) {
+        # unset btc_synced() if last btc block older than COINBASE_CONFIRM_TIME
+        # otherwise assume this is not correct coinbase
+        ($btc_block) = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1);
+        if (!$btc_block || $btc_block->time < time() - COINBASE_CONFIRM_TIME) {
+            # TODO: request btc blocks
+            btc_synced(0);
+            # TODO: set this tx as pending
+            Warningf("BTC blockchain not synced, can't validate coinbase");
+            return -1;
+        }
+        Warningf("Incorrect coinbase transaction based on unexistent btc block %s", unpack("H*", $self->btc_block_hash));
+        return -1;
+    }
+    # Check merkle path (but ignore mismatch for produced upgrades)
+    if (!$btc_block->check_merkle_path($self->btc_tx_hash, $self->btc_tx_num, $self->merkle_path)) {
+        Warningf("Merkle path check failed for btc upgrade transaction %s in block %s",
+            unpack("H*", scalar reverse $self->btc_tx_hash), $btc_block->hash_hex);
+        return -1;
+    }
+    $self->{btc_block_height} //= $btc_block->height;
+
     return 0;
 }
 
@@ -147,30 +170,9 @@ sub deserialize {
     my $args = @_ == 1 ? $_[0] : { @_ };
     # TODO: validate $args
     my $btc_block_hash = pack("H*", $args->{btc_block_hash});
-    my ($btc_block) = Bitcoin::Block->find(hash => $btc_block_hash);
-    if (!$btc_block) {
-        # unset btc_synced() if last btc block older than COINBASE_CONFIRM_TIME
-        # otherwise assume this is not correct coinbase
-        ($btc_block) = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1);
-        if (!$btc_block || $btc_block->time < time() - COINBASE_CONFIRM_TIME) {
-            # TODO: request btc blocks
-            btc_synced(0);
-            # TODO: set this tx as pending
-            Warningf("BTC blockchain not synced, can't validate coinbase");
-            return undef;
-        }
-        Warningf("Incorrect coinbase transaction based on unexistent btc block %s", unpack("H*", $btc_block_hash));
-        return undef;
-    }
     my $btc_tx_data = pack("H*", $args->{btc_tx_data});
     my $btc_tx_hash = hash256($btc_tx_data);
     my $merkle_path = pack("H*", $args->{merkle_path});
-    # Check merkle path (but ignore mismatch for produced upgrades)
-    if (!$btc_block->check_merkle_path($btc_tx_hash, $args->{btc_tx_num}, $merkle_path)) {
-        Warningf("Merkle path check failed for btc upgrade transaction %s in block %s",
-            unpack("H*", scalar reverse $btc_tx_hash), $btc_block->hash_hex);
-        return undef;
-    }
     # Deserialize btc transaction for get upgrade data (value, open_script)
     my $transaction = Bitcoin::Transaction->deserialize(Bitcoin::Serialized->new($btc_tx_data));
     if (!$transaction) {
@@ -187,23 +189,24 @@ sub deserialize {
         return undef unless $config->{fake_coinbase};
     }
     return $class->new({
-        btc_block_height => $btc_block->height,
-        btc_block_hash   => $btc_block_hash,
-        btc_tx_num       => $args->{btc_tx_num},
-        btc_out_num      => $args->{btc_out_num},
-        btc_tx_data      => $btc_tx_data,
-        btc_tx_hash      => $btc_tx_hash,
-        merkle_path      => $merkle_path,
-        value            => $out->{value},
-        open_script      => substr($out->{open_script}, QBT_SCRIPT_START_LEN),
+        btc_block_hash => $btc_block_hash,
+        btc_tx_num     => $args->{btc_tx_num},
+        btc_out_num    => $args->{btc_out_num},
+        btc_tx_data    => $btc_tx_data,
+        btc_tx_hash    => $btc_tx_hash,
+        merkle_path    => $merkle_path,
+        value          => $out->{value},
+        open_script    => substr($out->{open_script}, QBT_SCRIPT_START_LEN),
     });
 }
 
+# for serialize loaded blocks
 sub btc_block_hash {
     my $self = shift;
     if (!defined $self->{btc_block_hash}) {
-        my ($btc_block) = Bitcoin::Block->find(height => $self->btc_block_height);
-        $self->{btc_block_hash} = $btc_block->hash;
+        defined($self->{btc_block_height}) or die "BTC block unknown for coinbase\n";
+        my ($btc_block) = Bitcoin::Block->find(height => $self->{btc_block_height});
+        $self->{btc_block_hash} = $btc_block->hash if $btc_block;
     }
     return $self->{btc_block_hash};
 }

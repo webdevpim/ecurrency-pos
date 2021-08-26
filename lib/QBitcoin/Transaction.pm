@@ -418,7 +418,8 @@ sub validate_coinbase {
         Warningf("Incorrect transaction %s, no coinbase information nor inputs", $self->hash_str);
         return -1;
     }
-    $self->up->validate();
+    $self->up->validate() == 0
+        or return -1;
     # TODO: uncomment when $transaction->data will be implemented
     # if ($self->data ne '') {
     #     Warningf("Incorrect transaction %s, coinbase can't contain data", $self->hash_str);
