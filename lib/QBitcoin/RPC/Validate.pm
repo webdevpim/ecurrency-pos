@@ -10,6 +10,7 @@ my %SPEC = (
     blockhash => qr/^[0-9a-f]{64}\z/,
     txid      => qr/^[0-9a-f]{64}\z/,
     command   => qr/^[a-z]{2,64}\z/,
+    verbosity => qr/^[12]\z/,
     address   => qr/^QBT[1-9A-HJ-NP-Za-km-z]{25,34}\z/, # TODO: clarify this regex
 );
 

@@ -153,6 +153,19 @@ sub validate {
     return 0;
 }
 
+sub as_hashref {
+    my $self = shift;
+    return {
+        btc_block_hash => unpack("H*", $self->btc_block_hash),
+        btc_tx_num     => $self->btc_tx_num+0,
+        btc_out_num    => $self->btc_out_num+0,
+        btc_tx_data    => unpack("H*", $self->btc_tx_data),
+        merkle_path    => unpack("H*", $self->merkle_path),
+        value          => $self->value / DENOMINATOR,
+        open_script    => unpack("H*", $self->open_script),
+    };
+}
+
 sub serialize {
     my $self = shift;
     # value and open_script is matched transaction output and can be fetched from btc_tx_data and btc_out_num

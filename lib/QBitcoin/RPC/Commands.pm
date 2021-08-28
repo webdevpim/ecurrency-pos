@@ -210,4 +210,84 @@ sub cmd_getblockcount {
     return $self->response_ok(QBitcoin::Block->blockchain_height);
 }
 
+$PARAMS{getblock} = "blockhash verbosity?";
+$HELP{getblock} = qq(
+If verbosity is 1, returns an Object with information about block <hash>.
+If verbosity is 2, returns an Object with information about block <hash> and information about each transaction.
+
+Arguments:
+1. blockhash    (string, required) The block hash
+2. verbosity    (numeric, optional, default=1) 1 for a json object, and 2 for json object with transaction data
+
+Result (for verbosity = 1):
+{                                 (json object)
+  "hash" : "hex",                 (string) the block hash (same as provided)
+  "confirmations" : n,            (numeric) The number of confirmations, or -1 if the block is not on the main chain
+  "size" : n,                     (numeric) The block size
+  "weight" : n,                   (numeric) The block weight
+  "height" : n,                   (numeric) The block height or index
+  "merkleroot" : "hex",           (string) The merkle root
+  "tx" : [                        (json array) The transaction ids
+    "hex",                        (string) The transaction id
+    ...
+  ],
+  "time" : xxx,                   (numeric) The block time expressed in UNIX epoch time
+  "nTx" : n,                      (numeric) The number of transactions in the block
+  "previousblockhash" : "hex",    (string) The hash of the previous block
+  "nextblockhash" : "hex"         (string) The hash of the next block
+}
+
+Result (for verbosity = 2):
+{             (json object)
+  ...,        Same output as verbosity = 1
+  "tx" : [    (json array)
+    {         (json object)
+      ...     The transactions in the format of the getrawtransaction RPC. Different from verbosity = 1 "tx" result
+    },
+    ...
+  ]
+}
+
+Examples:
+> qbitcoin-cli getblock "00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblock", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT()}/
+);
+sub cmd_getblock {
+    my $self = shift;
+    my $hash = pack("H*", $self->args->[0]);
+    my $verbosity = $self->args->[1] // 1;
+
+    my $best_height = QBitcoin::Block->blockchain_height;
+    my $block = QBitcoin::Block->find(hash => $hash);
+    if (!$block) {
+        for (my $height = QBitcoin::Block->min_incore_height; $height <= $best_height; $height++) {
+            last if $block = QBitcoin::Block->block_pool($height, $hash);
+        }
+        $block
+            or $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
+    }
+    my $best_block = QBitcoin::Block->best_block($best_height);
+    my $next_block = QBitcoin::Block->best_block($block->height + 1) // QBitcoin::Block->find(height => $block->height + 1);
+
+    my $res = {
+        hash              => unpack("H*", $block->hash),
+        height            => $block->height,
+        time              => time_by_height($block->height),
+        confirmations     => $best_height - $block->height + 1,
+        previousblockhash => unpack("H*", $block->prev_hash),
+        nextblockhash     => $next_block ? unpack("H*", $next_block->hash) : undef,
+        merkleroot        => unpack("H*", $block->merkle_root),
+        weight            => $block->weight,
+        confirm_weight    => $best_block->weight - $block->weight,
+    };
+    if ($verbosity == 1) {
+        $res->{tx} = [ map { unpack("H*", $_->hash) } @{$block->transactions} ];
+    }
+    else {
+        $res->{tx} = [ map { $_->as_hashref } @{$block->transactions} ];
+    }
+
+    return $self->response_ok($res);
+}
+
 1;
