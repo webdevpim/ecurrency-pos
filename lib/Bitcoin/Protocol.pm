@@ -172,7 +172,7 @@ sub cmd_headers {
             $self->abort("bad_block_header");
             return -1;
         }
-        Debugf("Received block header: %s, prev_hash %s", $block->hash_hex, $block->prev_hash_hex);
+        Debugf("Received btc block header: %s, prev_hash %s", $block->hash_hex, $block->prev_hash_hex);
         my $existing = Bitcoin::Block->find(hash => $block->hash);
         if ($existing) {
             $known_block = $existing;
