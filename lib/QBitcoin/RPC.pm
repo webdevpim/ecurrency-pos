@@ -82,7 +82,13 @@ sub receive {
     my $length = $http_request->headers->content_length;
     return 0 if defined($length) && length($http_request->content) < $length;
     $self->recvbuf = "";
-    return $self->process_rpc($http_request);
+    my $res = eval { $self->process_rpc($http_request) };
+    if ($@) {
+        Errf("process_rpc exception: %s", "$@");
+        $self->response_error("Internal error", ERR_INTERNAL_ERROR);
+        return -1;
+    }
+    return $res;
 }
 
 sub send {
