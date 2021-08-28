@@ -11,6 +11,9 @@ use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::Peers;
 
+use Role::Tiny::With;
+with 'QBitcoin::RPC::Commands';
+
 # Error codes: https://github.com/bitcoin/bitcoin/blob/v0.21.1/src/rpc/protocol.h#L23-L87
 use constant {
     ERR_INVALID_REQUEST => -32600,
@@ -168,12 +171,6 @@ sub process_rpc {
     }
     Debugf("RPC request %s from %s", $body->{method}, $self->ip);
     return $self->$func(@{$self->{params}});
-}
-
-sub cmd_ping {
-    my $self = shift;
-    my @params = @_;
-    $self->response_ok;
 }
 
 1;
