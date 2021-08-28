@@ -290,4 +290,28 @@ sub cmd_getblock {
     return $self->response_ok($res);
 }
 
+$PARAMS{getblockhash} = "height";
+$HELP{getblockhash} = qq(
+Returns hash of block in best-block-chain at height provided.
+
+Arguments:
+1. height    (numeric, required) The height index
+
+Result:
+"hex"    (string) The block hash
+
+Examples:
+> bitcoin-cli getblockhash 1000
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockhash", "params": [1000]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT()}/
+);
+sub cmd_getblockhash {
+    my $self = shift;
+    my $height = $self->args->[0];
+    my $block = QBitcoin::Block->best_block($height) // QBitcoin::Block->find(height => $height);
+    if (!$block) {
+        $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
+    }
+    return $self->response_ok(unpack("H*", $block->hash));
+}
+
 1;
