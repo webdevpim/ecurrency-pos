@@ -7,23 +7,14 @@ use Time::HiRes;
 use HTTP::Request;
 use HTTP::Response;
 use QBitcoin::Const;
+use QBitcoin::RPC::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::Peers;
 
 use Role::Tiny::With;
+with 'QBitcoin::RPC::Validate';
 with 'QBitcoin::RPC::Commands';
-
-# Error codes: https://github.com/bitcoin/bitcoin/blob/v0.21.1/src/rpc/protocol.h#L23-L87
-use constant {
-    ERR_INVALID_REQUEST => -32600,
-    ERR_UNKNOWN_METHOD  => -32601,
-    ERR_INVALID_PARAMS  => -32602,
-    ERR_INTERNAL_ERROR  => -32603,
-    ERR_PARSE_ERROR     => -32700,
-
-    ERR_MISC            => -1,
-};
 
 use constant ATTR => qw(
     ip
@@ -40,6 +31,7 @@ use constant ATTR => qw(
 );
 
 mk_accessors(ATTR);
+mk_accessors(qw( cmd args ));
 
 my $JSON = JSON::XS->new;
 
@@ -89,7 +81,8 @@ sub receive {
     my $http_request = HTTP::Request->parse($self->recvbuf);
     my $length = $http_request->headers->content_length;
     return 0 if defined($length) && length($http_request->content) < $length;
-    $self->process_rpc($http_request);
+    $self->recvbuf = "";
+    return $self->process_rpc($http_request);
 }
 
 sub send {
@@ -119,11 +112,11 @@ sub send {
     return 0;
 }
 
-sub return_error {
+sub response_error {
     my $self = shift;
-    my ($message, $code) = @_;
+    my ($message, $code, $result) = @_;
     my $http_code = $code == ERR_INTERNAL_ERROR ? 500 : ERR_UNKNOWN_METHOD ? 404 : 400;
-    return $self->http_response($http_code, $message, { error => { code => $code, message => $message }, result => undef });
+    return $self->http_response($http_code, $message, { error => { code => $code, message => $message }, result => $result });
 }
 
 sub response_ok {
@@ -143,7 +136,7 @@ sub http_response {
     );
     my $response = HTTP::Response->new($code, $message, $headers, $body);
     $response->protocol("HTTP/1.1");
-    $self->send($response->as_string);
+    return $self->send($response->as_string);
 }
 
 sub process_rpc {
@@ -151,26 +144,43 @@ sub process_rpc {
     my ($http_request) = @_;
     if (lc($http_request->headers->content_type) ne "application/json") {
         Warningf("Incorrect content-type: [%s]", $http_request->headers->content_type // "");
-        return $self->return_error("Incorrect content-type", ERR_INVALID_REQUEST);
+        return $self->response_error("Incorrect content-type", ERR_INVALID_REQUEST);
     }
     my $body = eval { $JSON->decode($http_request->decoded_content) };
     if (!$body) {
         Warningf("Can't decode json request: [%s]", $http_request->decoded_content // "");
-        return $self->return_error("Incorrect request body", ERR_INVALID_REQUEST);
+        return $self->response_error("Incorrect request body", ERR_INVALID_REQUEST);
     }
     # {"jsonrpc":"2.0","id":1,"method":"getblockchaininfo","params":[]}';
     if (!$body->{jsonrpc} || !$body->{method} || !$body->{params} ||
         ref($body->{method}) || ref($body->{params}) ne 'ARRAY') {
         Warningf("Incorrect rpc request: [%s]", $http_request->decoded_content);
-        return $self->return_error("Incorrect request", ERR_INVALID_REQUEST);
+        return $self->response_error("Incorrect request", ERR_INVALID_REQUEST);
     }
     my $func = "cmd_" . $body->{method};
     if (!$self->can($func)) {
         Warningf("Incorrect rpc method [%s]", $body->{method});
-        return $self->return_error("Unknown method", ERR_UNKNOWN_METHOD);
+        return $self->response_error("Unknown method", ERR_UNKNOWN_METHOD);
     }
     Debugf("RPC request %s from %s", $body->{method}, $self->ip);
+    $self->args = $body->{params};
+    $self->cmd  = $body->{method};
+    $self->validate_args == 0
+        or return -1;
     return $self->$func(@{$self->{params}});
+}
+
+sub validate_args {
+    my $self = shift;
+    if (defined(my $spec = $self->params($self->cmd))) {
+        if ($self->validate($spec) != 0) {
+            return -1;
+        }
+    }
+    else {
+        Warningf("No params specification for RPC command [%s]", $self->cmd);
+    }
+    return 0;
 }
 
 1;
