@@ -193,4 +193,21 @@ sub cmd_getblockheader {
     });
 }
 
+$PARAMS{getblockcount} = "";
+$HELP{getblockcount} = qq(
+Returns the height of the most-work fully-validated chain.
+The genesis block has height 0.
+
+Result:
+n    (numeric) The current block count
+
+Examples:
+> qbitcoin-cli getblockcount
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockcount", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT()}/
+);
+sub cmd_getblockcount {
+    my $self = shift;
+    return $self->response_ok(QBitcoin::Block->blockchain_height);
+}
+
 1;
