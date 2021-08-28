@@ -67,12 +67,17 @@ sub process_btc_block {
                     $revert_block->update(height => undef);
                 }
                 $block->height = $start_block->height + $new_height--;
+                my @new_blocks;
                 for (my $cur_block = $prev_block; !defined $cur_block->height;) {
                     $cur_block->update(height => $start_block->height + $new_height--);
+                    push @new_blocks, $cur_block;
                     $cur_block = Bitcoin::Block->find(hash => $cur_block->prev_hash)
                         or die "Can't find prev block, check bitcoin blockchain consistensy\n";
                 }
                 $CHAINWORK = $block->chainwork;
+                foreach my $new_block (reverse @new_blocks) {
+                    $self->announce_btc_block_to_peers($new_block);
+                }
             }
         }
         else {
@@ -83,8 +88,10 @@ sub process_btc_block {
             return undef;
         }
     }
-    $LAST_BLOCK = $block;
-    $self->announce_btc_block_to_peers($block);
+    if (defined $block->height) {
+        $LAST_BLOCK = $block;
+        $self->announce_btc_block_to_peers($block);
+    }
     return $block;
 }
 
