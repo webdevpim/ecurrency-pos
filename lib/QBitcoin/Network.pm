@@ -64,6 +64,8 @@ sub main_loop {
     my $class = shift;
     my ($peer_hosts, $btc_nodes) = @_;
 
+    local $SIG{PIPE} = 'IGNORE'; # prevent exceptions on write to socket which was closed by remote
+
     if ($config->{genesis}) {
         mempool_synced(1);
         blockchain_synced(1);
