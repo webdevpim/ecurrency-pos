@@ -4,7 +4,9 @@ use strict;
 
 use Role::Tiny;
 use QBitcoin::Const;
+use QBitcoin::ORM qw(dbh);
 use QBitcoin::Block;
+use QBitcoin::Coinbase;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use Bitcoin::Block;
 
@@ -33,7 +35,6 @@ sub cmd_getblockchaininfo {
         weight               => $best_block ? $best_block->weight+0   : -1,
         initialblockdownload => blockchain_synced() ? FALSE : TRUE,
         # size_on_disk         => # TODO
-        # total_coins          => # TODO
     };
     if (UPGRADE_POW) {
         my ($btc_block) = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1);
@@ -49,6 +50,8 @@ sub cmd_getblockchaininfo {
         $response->{btc_synced}  = btc_synced() ? TRUE : FALSE,
         $response->{btc_headers} = $btc_block   ? $btc_block->height+0   : 0,
         $response->{btc_scanned} = $btc_scanned ? $btc_scanned->height+0 : 0,
+        my ($coinbase) = dbh->selectrow_array("SELECT SUM(value) FROM `" . QBitcoin::Coinbase->TABLE . "` WHERE tx_out IS NOT NULL");
+        $response->{total_coins} = $coinbase ? $coinbase / DENOMINATOR : 0;
     }
     $self->response_ok($response);
 }

@@ -14,6 +14,7 @@ use constant QBITCOIN_CONST => {
     INCORE_LEVELS           => 6,
     MIN_FEE                 => 0.00000001, # 1 satoshi
     MAX_VALUE               => 21000000 * 100000000, # 21M
+    DENOMINATOR             => 100000000,
     COMPACT_MEMORY          => 1,
     MAX_COMMAND_LENGTH      => 256,
     READ_BUFFER_SIZE        => 16*1024*1024, # Must be more than MAX_BLOCK_SIZE
