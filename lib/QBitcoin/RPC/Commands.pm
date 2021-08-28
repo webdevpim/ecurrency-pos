@@ -56,4 +56,14 @@ sub cmd_getblockchaininfo {
     $self->response_ok($response);
 }
 
+sub cmd_getbestblockhash {
+    my $self = shift;
+    my @params = @_;
+    my $best_block;
+    if (defined(my $height = QBitcoin::Block->blockchain_height)) {
+        $best_block = QBitcoin::Block->best_block($height);
+    }
+    $self->response_ok($best_block ? unpack("H*", $best_block->hash) : undef);
+}
+
 1;
