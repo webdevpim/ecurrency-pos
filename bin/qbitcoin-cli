@@ -54,7 +54,12 @@ sub call_rpc {
     });
     my $result = eval { $JSON->decode($response->{content}) };
     if (exists $result->{result}) {
-        print $JSON->pretty->canonical->encode($result->{result}) if defined $result->{result};
+        if (ref($result->{result})) {
+            print $JSON->pretty->canonical->encode($result->{result});
+        }
+        elsif (defined $result->{result}) {
+            print $result->{result} . "\n";
+        }
     }
     elsif ($result->{error}) {
         print STDERR "$result->{error}->{message}\n";
