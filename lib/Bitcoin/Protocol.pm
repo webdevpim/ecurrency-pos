@@ -193,17 +193,7 @@ sub cmd_headers {
         }
         my $tx_num = $data->get_varint(); # always 0
     }
-    if ($known_block) {
-        # All received block are known for us. Was it deep rollback?
-        my $start_height = $known_block->height;
-        my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*1900 } 1 .. 250 ], -sortby => "height DESC");
-        $self->send_message("getheaders", pack("V", PROTOCOL_VERSION) .
-            varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . "\x00" x 32);
-    }
-    elsif ($new_block) {
-        $self->request_btc_blocks();
-    }
-    elsif ($orphan_block) {
+    if ($orphan_block) {
         if ($self->have_block0) {
             $self->request_btc_blocks();
         }
@@ -213,6 +203,16 @@ sub cmd_headers {
             $self->send_message("getdata",
                 pack("CVa32", 1, MSG_BLOCK, $self->can('BTC_GENESIS') ? $self->BTC_GENESIS : $orphan_block->prev_hash));
         }
+    }
+    elsif ($new_block) {
+        $self->request_btc_blocks();
+    }
+    elsif ($known_block && $num == 2000) {
+        # All received block are known for us. Was it deep rollback?
+        my $start_height = $known_block->height;
+        my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*1900 } 1 .. 250 ], -sortby => "height DESC");
+        $self->send_message("getheaders", pack("V", PROTOCOL_VERSION) .
+            varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . "\x00" x 32);
     }
     else {
         $self->request_transactions();

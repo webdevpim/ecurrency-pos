@@ -18,6 +18,7 @@ use Role::Tiny::With;
 with 'Bitcoin::Protocol::ProcessBlock';
 
 use constant PROTOCOL_VERSION => 1;
+use constant MAX_BTC_HEADERS  => 2000;
 
 sub announce_btc_block {
     my $self = shift;
@@ -139,7 +140,7 @@ sub cmd_btcgethdrs {
             last;
         }
     }
-    my @blocks = Bitcoin::Block->find(height => { '>=' => $height }, -sortby => 'height ASC', -limit => 2000);
+    my @blocks = Bitcoin::Block->find(height => { '>=' => $height }, -sortby => 'height ASC', -limit => MAX_BTC_HEADERS);
     $self->send_message("btcheaders", varint(scalar(@blocks)) . join('', map { $_->serialize } @blocks));
     return 0;
 }
@@ -197,17 +198,7 @@ sub cmd_btcheaders {
         }
         # my $tx_num = $data->get_varint(); # always 0
     }
-    if ($known_block) {
-        # All received block are known for us. Was it deep rollback?
-        my $start_height = $known_block->height;
-        my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*1900 } 1 .. 250 ], -sortby => "height DESC");
-        $self->send_message("btcgethdrs", pack("V", PROTOCOL_VERSION) .
-            varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . "\x00" x 32);
-    }
-    elsif ($new_block) {
-        $self->request_btc_blocks();
-    }
-    elsif ($orphan_block) {
+    if ($orphan_block) {
         if ($self->have_block0) {
             $self->request_btc_blocks();
         }
@@ -216,6 +207,16 @@ sub cmd_btcheaders {
             Debugf("Request genesis block %s", $orphan_block->prev_hash_hex);
             $self->send_message("btcgetheader", pack("a32", $orphan_block->prev_hash));
         }
+    }
+    elsif ($new_block) {
+        $self->request_btc_blocks();
+    }
+    elsif ($known_block && $num == MAX_BTC_HEADERS) {
+        # All received block are known for us. Was it deep rollback?
+        my $start_height = $known_block->height;
+        my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*1900 } 1 .. 250 ], -sortby => "height DESC");
+        $self->send_message("btcgethdrs", pack("V", PROTOCOL_VERSION) .
+            varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . "\x00" x 32);
     }
     elsif ($self->have_block0) {
         if (!btc_synced()) {
