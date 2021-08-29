@@ -425,7 +425,13 @@ sub cmd_getrawtransaction {
 
 # listreceivedbyaddress
 # getreceivedbyaddress
-# listunspent
+# listunspentbyaddress
 # listtransactions
+
+# listmyaddresses
+# getbalance
+# listunspent
+# importprivkey
+# dumpprivkey
 
 1;
