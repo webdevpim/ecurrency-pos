@@ -8,6 +8,7 @@ use QBitcoin::RPC::Const;
 use QBitcoin::ORM qw(dbh);
 use QBitcoin::Block;
 use QBitcoin::Coinbase;
+use QBitcoin::Transaction;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use Bitcoin::Block;
 
@@ -304,9 +305,127 @@ sub cmd_getblockhash {
     my $height = $self->args->[0];
     my $block = QBitcoin::Block->best_block($height) // QBitcoin::Block->find(height => $height);
     if (!$block) {
-        $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
+        return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
     }
     return $self->response_ok(unpack("H*", $block->hash));
 }
+
+$PARAMS{getrawtransaction} = "txid verbose?";
+$HELP{getrawtransaction} = qq(
+Return the raw transaction data.
+
+If verbose is 'true', returns an Object with information about 'txid'.
+If verbose is 'false' or omitted, returns a string that is serialized, hex-encoded data for 'txid'.
+
+Arguments:
+1. txid         (string, required) The transaction id
+2. verbose      (boolean, optional, default=true) If false, return a string, otherwise return a json object
+
+Result (if verbose is set false):
+"str"    (string) The serialized, hex-encoded data for 'txid'
+
+Result (if verbose is not set or is set to true):
+{                                    (json object)
+  "hash" : "hex",                    (string) The transaction hash (differs from txid for witness transactions)
+  "size" : n,                        (numeric) The serialized transaction size
+  "vin" : [                          (json array)
+    {                                (json object)
+      "txid" : "hex",                (string) The transaction id
+      "vout" : n,                    (numeric) The output number
+      "scriptSig" : {                (json object) The script
+        "hex" : "hex"                (string) hex
+      },
+    },
+    ...
+  ],
+  "vout" : [                         (json array)
+    {                                (json object)
+      "value" : n,                   (numeric) The value in BTC
+      "n" : n,                       (numeric) index
+      "scriptPubKey" : {             (json object)
+        "hex" : "str",               (string) the hex
+        "reqSigs" : n,               (numeric) The required sigs
+        "type" : "str",              (string) The type, eg 'pubkeyhash'
+        "addresses" : [              (json array)
+          "str",                     (string) bitcoin address
+          ...
+        ]
+      }
+    },
+    ...
+  ],
+  "blockhash" : "hex",               (string) the block hash
+  "confirmations" : n,               (numeric) The confirmations
+  "blocktime" : xxx,                 (numeric) The block time expressed in UNIX epoch time
+  "time" : n                         (numeric) Same as "blocktime"
+}
+
+Examples:
+> qbitcoin-cli getrawtransaction "mytxid"
+> qbitcoin-cli getrawtransaction "mytxid" true
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getrawtransaction", "params": ["mytxid", true]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_getrawtransaction {
+    my $self = shift;
+    my $hash = pack("H*", $self->args->[0]);
+    my $verbose = $self->args->[1] // TRUE;
+    my $tx = QBitcoin::Transaction->get_by_hash($hash);
+    if (!$tx) {
+        return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "No such mempool or blockchain transaction");
+    }
+    if (!$verbose) {
+        return $self->response_ok(unpack("H*", $tx->serialize));
+    }
+
+    my $res = $tx->as_hashref;
+    if (defined $tx->block_height) {
+        my $best_height = QBitcoin::Block->blockchain_height;
+        $res->{confirmations} = $best_height - $tx->block_height;
+        $res->{blocktime} = time_by_height($tx->block_height);
+        my $block = QBitcoin::Block->best_block($tx->block_height) // QBitcoin::Block->find(height => $tx->block_height);
+        if ($block) {
+            my $best_block = QBitcoin::Block->best_block($best_height);
+            $res->{confirm_weight} = $best_block->weight - $block->weight;
+            $res->{blockhash} = unpack("H*", $block->hash);
+        }
+    }
+    else {
+        $res->{confirmations} = -1;
+        $res->{confirm_weight} = -1;
+    }
+    return $self->response_ok($res);
+}
+
+# getmempoolinfo
+# getrawmempool
+# getmemoryinfo
+# getrpcinfo
+# stop
+# uptime
+
+# addnode
+# clearbanned
+# disconnectnode
+# getaddednodeinfo
+# getconnectioncount
+# getnetworkinfo
+# getpeerinfo
+# listbanned
+# setban
+
+# createrawtransaction
+# sendrawtransaction
+# signrawtransactionwithkey
+# decoderawtransaction
+
+# signmessagewithprivkey
+# validateaddress
+# verifymessage
+# getaddressinfo
+
+# listreceivedbyaddress
+# getreceivedbyaddress
+# listunspent
+# listtransactions
 
 1;
