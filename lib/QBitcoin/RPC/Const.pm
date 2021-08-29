@@ -16,7 +16,14 @@ use constant ERR_CODES => {
 
 use constant ERR_CODES;
 
+use JSON::XS;
+use constant {
+    FALSE => JSON::XS::false,
+    TRUE  => JSON::XS::true,
+};
+
 use Exporter qw(import);
 our @EXPORT = keys %{&ERR_CODES};
+push @EXPORT, qw(FALSE TRUE);
 
 1;

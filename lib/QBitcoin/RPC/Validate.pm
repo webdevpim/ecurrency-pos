@@ -4,6 +4,8 @@ use strict;
 
 use Role::Tiny;
 use QBitcoin::RPC::Const;
+use QBitcoin::Config;
+use QBitcoin::Address;
 
 my %SPEC = (
     height    => qr/^(?:0|[1-9][0-9]{0,9})\z/,
@@ -11,7 +13,8 @@ my %SPEC = (
     txid      => qr/^[0-9a-f]{64}\z/,
     command   => qr/^[a-z]{2,64}\z/,
     verbosity => qr/^[12]\z/,
-    address   => qr/^QBT[1-9A-HJ-NP-Za-km-z]{25,34}\z/, # TODO: clarify this regex
+    verbose   => \&validate_boolean,
+    address   => \&validate_address,
 );
 
 sub validate {
@@ -36,10 +39,22 @@ sub validate {
         my $spec_arg = $arg_name;
         $spec_arg =~ s/\?$//;
         $spec_arg =~ s@.*/@@;
-        if (my $re = $SPEC{$spec_arg}) {
-            $arg_name =~ s@[:?/].*@@;
-            $arg =~ $re
-                or return $self->incorrect_params("Incorrect parameter '$arg_name'", \@spec);
+        $arg_name =~ s@[:?/].*@@;
+        if (my $rule = $SPEC{$spec_arg}) {
+            if (ref($rule) eq 'Regexp') {
+                $arg =~ $rule
+                    or return $self->incorrect_params("Incorrect parameter '$arg_name'", \@spec);
+            }
+            elsif (ref($rule) eq 'CODE') {
+                $rule->($args->[$i]) # arg may be modified by validation function
+                    or return $self->incorrect_params("Incorrect parameter '$arg_name'", \@spec);
+            }
+            else {
+                Warningf("Unknown type of validation rule for [%s]", $spec_arg);
+            }
+        }
+        else {
+            Warningf("No validation rule for [%s]", $spec_arg);
         }
     }
     for (my $i = @$args; $i < @spec; $i++) {
@@ -52,6 +67,24 @@ sub validate {
         }
     }
     return 0;
+}
+
+sub validate_boolean {
+    my $value = $_[0];
+    return 1 if ref($value) eq ref(FALSE);
+    if (ref($value) eq "SCALAR") {
+        $_[0] = $$value eq "1" ? TRUE : $$value eq "0" ? FALSE : return 0;
+        return 1;
+    }
+    return 0 if ref($value);
+    return 0 unless $value =~ /^(?:0|1|true|false)\z/;
+    $value = 0 if $value eq "false";
+    $_[0] = $value ? TRUE : FALSE;
+    return 1;
+}
+
+sub validate_address {
+    $_[0] =~ $config->{testnet} ? QBitcoin::Address->ADDRESS_TESTNET_RE : QBitcoin::Address->ADDRESS_RE;
 }
 
 sub incorrect_params {

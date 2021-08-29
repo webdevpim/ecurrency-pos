@@ -11,11 +11,6 @@ use QBitcoin::Coinbase;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use Bitcoin::Block;
 
-use constant {
-    FALSE => \0,
-    TRUE  => \1,
-};
-
 my %PARAMS;
 my %HELP;
 
@@ -174,7 +169,7 @@ sub cmd_getblockheader {
             last if $block = QBitcoin::Block->block_pool($height, $hash);
         }
         $block
-            or $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
+            or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
     }
     my $best_block = QBitcoin::Block->best_block($best_height);
     my $next_block = QBitcoin::Block->best_block($block->height + 1) // QBitcoin::Block->find(height => $block->height + 1);
@@ -183,7 +178,7 @@ sub cmd_getblockheader {
         hash              => unpack("H*", $block->hash),
         height            => $block->height,
         time              => time_by_height($block->height),
-        confirmations     => $best_height - $block->height + 1,
+        confirmations     => $best_height - $block->height,
         nTx               => scalar(@{$block->transactions}),
         previousblockhash => unpack("H*", $block->prev_hash),
         nextblockhash     => $next_block ? unpack("H*", $next_block->hash) : undef,
@@ -264,7 +259,7 @@ sub cmd_getblock {
             last if $block = QBitcoin::Block->block_pool($height, $hash);
         }
         $block
-            or $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
+            or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
     }
     my $best_block = QBitcoin::Block->best_block($best_height);
     my $next_block = QBitcoin::Block->best_block($block->height + 1) // QBitcoin::Block->find(height => $block->height + 1);
@@ -273,7 +268,7 @@ sub cmd_getblock {
         hash              => unpack("H*", $block->hash),
         height            => $block->height,
         time              => time_by_height($block->height),
-        confirmations     => $best_height - $block->height + 1,
+        confirmations     => $best_height - $block->height,
         previousblockhash => unpack("H*", $block->prev_hash),
         nextblockhash     => $next_block ? unpack("H*", $next_block->hash) : undef,
         merkleroot        => unpack("H*", $block->merkle_root),
