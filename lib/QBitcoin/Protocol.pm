@@ -59,6 +59,8 @@ tie(%PENDING_BLOCK, 'Tie::IxHash'); # Ordered by age
 my %PENDING_TX_BLOCK;
 my %PENDING_BLOCK_BLOCK;
 
+sub type() { "QBitcoin" }
+
 sub startup {
     my $self = shift;
     my $version = pack("VQ<Q<a26", PROTOCOL_VERSION, PROTOCOL_FEATURES, time(), $self->pack_my_address);

@@ -1,0 +1,75 @@
+#! /usr/bin/env perl
+use warnings;
+use strict;
+
+use Getopt::Long qw(:config bundling no_ignore_case no_auto_abbrev require_order);
+use HTTP::Tiny;
+use JSON::XS;
+use QBitcoin::Const;
+use QBitcoin::Config;
+
+my $JSON = JSON::XS->new;
+
+sub main {
+    my ( $help );
+    unless (GetOptions(
+        'help|h|?'   => \$help,
+        'rpc|J=s'    => \$config->{rpc_addr},
+        'rpc-port=s' => \$config->{rpc_port},
+    )) {
+        select STDERR;
+        usage();
+        return 1;
+    }
+    if ($help || !@ARGV) {
+        usage();
+        return 0;
+    }
+    my $command = shift @ARGV;
+    call_rpc($command, @ARGV);
+}
+
+sub usage {
+    print "QBitcoin Core RPC Client version " . VERSION . "\n";
+    print "Usage:  qbitcoin-cli [options] <command> [<params>]\n";
+    print "Options:\n";
+    print "   -h, -? --help           - print this help message and exit,\n";
+    print "   -J, --rpc <addr[:port]> - request JSON RPC API on <address> and <port> (default " . RPC_ADDR . ":" . RPC_PORT . "),\n";
+}
+
+sub call_rpc {
+    my ($method, @params) = @_;
+    my ($address, $port) = split(/:/, $config->{rpc_addr} // RPC_ADDR);
+    $port //= $config->{rpc_port} // getservbyname(SERVICE_NAME, 'tcp') // RPC_PORT;
+    my $url = "http://$address:$port";
+    my $ua = HTTP::Tiny->new;
+    my $response = $ua->post($url, {
+        headers => { 'Content-Type' => 'application/json' },
+        content => $JSON->encode({
+            jsonrpc => 2.0,
+            id      => 1,
+            method  => $method,
+            params  => \@params,
+        }),
+    });
+    my $result = eval { $JSON->decode($response->{content}) };
+    if (!$result || $result->{error}) {
+        select STDERR;
+        if (ref($result) eq 'HASH' && ref($result->{error}) eq 'HASH' && defined($result->{error}->{message})) {
+            print "$result->{error}->{message}\n" if $result->{error}->{message};
+        }
+        else {
+            print "$response->{status} $response->{reason}\n";
+        }
+    }
+    if (ref($result) eq 'HASH' && defined $result->{result}) {
+        if (ref($result->{result})) {
+            print $JSON->pretty->canonical->encode($result->{result});
+        }
+        else {
+            print $result->{result} . "\n";
+        }
+    }
+}
+
+exit main();

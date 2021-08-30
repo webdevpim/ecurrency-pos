@@ -12,31 +12,46 @@ use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Protocol;
 use QBitcoin::Generate;
 use QBitcoin::Produce;
+use QBitcoin::RPC;
+use Bitcoin::Protocol;
 
-sub listen_socket {
+sub bind_addr {
     my $class = shift;
 
-    my ($listen_addr, $listen_port) = split(/:/, $config->{bind_addr} // BIND_ADDR);
-    $listen_port //= $config->{port} // getservbyname(SERVICE_NAME, 'tcp') // PORT_P2P;
-    my $bind_addr = sockaddr_in($listen_port, inet_aton($listen_addr eq '*' ? "0.0.0.0" : $listen_addr));
+    my ($address, $port) = split(/:/, $config->{bind_addr} // BIND_ADDR);
+    $port //= $config->{port} // getservbyname(SERVICE_NAME, 'tcp') // PORT;
+    return listen_socket($address, $port);
+}
+
+sub bind_rpc_addr {
+    my $class = shift;
+
+    my ($address, $port) = split(/:/, $config->{rpc_addr} // RPC_ADDR);
+    $port //= $config->{rpc_port} // getservbyname(SERVICE_NAME, 'tcp') // RPC_PORT;
+    return listen_socket($address, $port);
+}
+
+sub listen_socket {
+    my ($address, $port) = @_;
+    my $bind_addr = sockaddr_in($port, inet_aton($address eq '*' ? "0.0.0.0" : $address));
     my $proto = getprotobyname('tcp');
-    socket(my $listen_socket, PF_INET, SOCK_STREAM, $proto)
+    socket(my $socket, PF_INET, SOCK_STREAM, $proto)
         or die "Error creating socket: $!\n";
-    setsockopt($listen_socket, SOL_SOCKET, SO_REUSEADDR, 1)
+    setsockopt($socket, SOL_SOCKET, SO_REUSEADDR, 1)
         or die "setsockopt error: $!\n";
-    bind($listen_socket, $bind_addr)
-        or die "bind error: $!\n";
-    listen($listen_socket, LISTEN_QUEUE)
+    bind($socket, $bind_addr)
+        or die "bind $address:$port error: $!\n";
+    listen($socket, LISTEN_QUEUE)
         or die "Error listen: $!\n";
-    Infof("Accepting connections on %s:%s", $listen_addr, $listen_port);
-    return $listen_socket;
+    Infof("Accepting connections on %s:%s", $address, $port);
+    return $socket;
 }
 
 sub connect_to {
     my $peer = shift;
     my ($peer_host) = $peer->host;
     my ($addr, $port) = split(/:/, $peer_host);
-    $port //= getservbyname(SERVICE_NAME, 'tcp') // $peer->PORT_P2P;
+    $port //= getservbyname(SERVICE_NAME, 'tcp') // $peer->PORT;
     my $iaddr = inet_aton($addr)
         or die "Unknown host: $addr\n";
     my $paddr = sockaddr_in($port, $iaddr);
@@ -96,7 +111,8 @@ sub main_loop {
         QBitcoin::Generate->load_utxo();
     }
 
-    my $listen_socket = $class->listen_socket;
+    my $listen_socket = $class->bind_addr;
+    my $listen_rpc    = $class->bind_rpc_addr;
     foreach my $peer_host (@$peer_hosts) {
         my $peer = QBitcoin::Protocol->new(
             state_time => time(),
@@ -137,6 +153,7 @@ sub main_loop {
         }
         $rin = $win = $ein = '';
         vec($rin, fileno($listen_socket), 1) = 1 if $listen_socket;
+        vec($rin, fileno($listen_rpc),    1) = 1 if $listen_rpc;
         foreach my $peer (QBitcoin::Peers->peers) {
             if (!$peer->socket && $peer->state eq STATE_DISCONNECTED && $peer->direction eq DIR_OUT) {
                 if (time() - $peer->state_time >= PEER_RECONNECT_TIME) {
@@ -144,6 +161,17 @@ sub main_loop {
                 }
             }
             $peer->socket or next;
+            if ($peer->can('timeout')) {
+                my $peer_timeout = $peer->timeout;
+                if ($peer_timeout) {
+                    $timeout = $peer_timeout if $timeout > $peer_timeout;
+                }
+                else {
+                    Noticef("%s peer %s timeout", $peer->type, $peer->ip);
+                    $peer->disconnect();
+                    next;
+                }
+            }
             vec($rin, $peer->socket_fileno, 1) = 1 if length($peer->recvbuf) < READ_BUFFER_SIZE && $peer->state ne STATE_CONNECTING;
             vec($win, $peer->socket_fileno, 1) = 1 if $peer->sendbuf || $peer->state eq STATE_CONNECTING;
         }
@@ -186,10 +214,30 @@ sub main_loop {
                 $peer->startup();
             }
         }
+        if ($listen_rpc && vec($rin, fileno($listen_rpc), 1) == 1) {
+            my $peerinfo = accept(my $new_socket, $listen_rpc);
+            my ($remote_port, $peer_addr) = unpack_sockaddr_in($peerinfo);
+            my $peer_ip = inet_ntoa($peer_addr);
+            Debugf("Incoming RPC connection from %s", $peer_ip);
+            my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($new_socket));
+            my $my_ip = inet_ntoa($my_addr);
+            my $peer = QBitcoin::RPC->new(
+                socket         => $new_socket,
+                state          => STATE_CONNECTED,
+                state_time     => $time,
+                host           => $peer_ip,
+                ip             => $peer_ip,
+                port           => $remote_port,
+                addr           => "\x00"x10 . "\xff\xff" . $peer_addr,
+            );
+            QBitcoin::Peers->add_peer($peer);
+            $peer->startup();
+        }
+
         foreach my $peer (QBitcoin::Peers->peers) {
             $peer->socket or next;
             if (vec($ein, $peer->socket_fileno, 1) == 1) {
-                Warningf("Peer %s disconnected", $peer->ip);
+                Warningf("Peer %s disconnected", $peer->ip) unless $peer->type eq "RPC";
                 $peer->disconnect();
                 next;
             }
@@ -251,8 +299,12 @@ sub main_loop {
                     $peer->disconnect();
                     next;
                 }
-                if ($n > 0) {
+                elsif ($n > 0) {
                     $peer->sendbuf = $n == length($peer->sendbuf) ? "" : substr($peer->sendbuf, $n);
+                    if (!$peer->sendbuf && $peer->type eq "RPC") {
+                        $peer->disconnect();
+                        next;
+                    }
                 }
             }
             if ($peer->recvbuf) {
@@ -263,7 +315,7 @@ sub main_loop {
                 }
             }
 
-            if ($peer->last_recv_time + PEER_RECV_TIMEOUT < $time) {
+            if ($peer->can('ping_sent') && $peer->last_recv_time + PEER_RECV_TIMEOUT < $time) {
                 if (!$peer->ping_sent) {
                     $peer->send_message("ping", pack("Q", $time));
                     $peer->ping_sent = $time;
@@ -274,7 +326,6 @@ sub main_loop {
                     next;
                 }
             }
-
         }
     }
     return 0;

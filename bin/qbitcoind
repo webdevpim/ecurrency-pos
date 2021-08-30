@@ -18,6 +18,8 @@ sub main {
         'verbose|v'     => \$config->{verbose},
         'bind|b=s'      => \$config->{bind_addr},
         'port|P=s'      => \$config->{port},
+        'rpc|J=s'       => \$config->{rpc_addr},
+        'rpc-port=s'    => \$config->{rpc_port},
         'genesis|G'     => \$config->{genesis},
         'generate|g'    => \$config->{generate},
         'fake-coinbase' => \$config->{fake_coinbase},
@@ -43,11 +45,12 @@ sub usage {
     print "Options:\n";
     print "   -h, -? --help               - print this help message and exit,\n";
     print "   -v, --verbose               - output logs to stdout,\n";
-    print "   -p, --peer <host[:port]>    - connect to peer <host> and <port> (default port " . PORT_P2P . "),\n";
+    print "   -p, --peer <host[:port]>    - connect to peer <host> and <port> (default port " . PORT . "),\n";
     if (UPGRADE_POW) {
-        print "   -B, --btcnode <host[:port]> - connect to btc node <host>:<port> (default port " . Bitcoin::Protocol->PORT_P2P . "),\n";
+        print "   -B, --btcnode <host[:port]> - connect to btc node <host>:<port> (default port " . Bitcoin::Protocol->PORT . "),\n";
     }
-    print "   -b, --bind <addr[:port]>    - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT_P2P . "),\n";
+    print "   -b, --bind <addr[:port]>    - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT . "),\n";
+    print "   -J, --rpc <addr[:port]>     - respond to JSON RPC API on <address> and <port> (default " . RPC_ADDR . ":" . RPC_PORT . "),\n";
     print "   -g, --generate              - generate blocks (private key must be stored in the database),\n";
     print "   -G, --genesis               - run as genesis node, do not need to synchronize with other nodes for authoritative answers,\n";
     print "   --log <file>                - write log to <file>, 'syslog' for syslog (default).\n";

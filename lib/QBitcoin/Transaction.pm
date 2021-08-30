@@ -221,6 +221,29 @@ sub serialize {
     }) . "\n";
 }
 
+# For JSON RPC output
+sub as_hashref {
+    my $self = shift;
+    return {
+        hash => unpack("H*", $self->hash),
+        fee  => $self->fee / DENOMINATOR,
+        size => length($self->serialize),
+        in   => [ map { input_as_hashref($_)  } @{$self->in}  ],
+        out  => [ map { output_as_hashref($_) } @{$self->out} ],
+        $self->up ? ( up => $self->up->as_hashref ) : (),
+        !UPGRADE_POW && $self->coins_created ? ( coins_created => $self->coins_created / DENOMINATOR ) : (),
+    };
+}
+
+sub input_as_hashref {
+    my $in = shift;
+    return {
+        tx_out       => unpack("H*", $in->{txo}->tx_in),
+        num          => $in->{txo}->num+0,
+        close_script => unpack("H*", $in->{close_script} // die "Undefined close_script during serialize_input"),
+    };
+}
+
 sub serialize_input {
     my $in = shift;
     return {
@@ -243,6 +266,14 @@ sub serialize_output {
     my $out = shift;
 	return {
         value       => $out->value+0,
+        open_script => unpack("H*", $out->open_script),
+    };
+}
+
+sub output_as_hashref {
+    my $out = shift;
+    return {
+        value       => $out->value / DENOMINATOR,
         open_script => unpack("H*", $out->open_script),
     };
 }
