@@ -6,16 +6,18 @@ use Getopt::Long qw(:config bundling no_ignore_case no_auto_abbrev require_order
 use HTTP::Tiny;
 use JSON::XS;
 use QBitcoin::Const;
-use QBitcoin::Config;
+use QBitcoin::Config qw($config read_config);
 
 my $JSON = JSON::XS->new;
 
 sub main {
-    my ( $help );
+    my ( $help, $conffile );
+    my %opts;
     unless (GetOptions(
         'help|h|?'   => \$help,
-        'rpc|J=s'    => \$config->{rpc_addr},
-        'rpc-port=s' => \$config->{rpc_port},
+        'config|f=s' => \$conffile,
+        'rpc|J=s'    => \$opts{rpc_addr},
+        'rpc-port=s' => \$opts{rpc_port},
     )) {
         select STDERR;
         usage();
@@ -25,6 +27,8 @@ sub main {
         usage();
         return 0;
     }
+    read_config($conffile);
+    $config->set($_ => $opts{$_}) foreach grep { defined $opts{$_} } keys %opts;
     my $command = shift @ARGV;
     call_rpc($command, @ARGV);
 }
@@ -34,6 +38,7 @@ sub usage {
     print "Usage:  qbitcoin-cli [options] <command> [<params>]\n";
     print "Options:\n";
     print "   -h, -? --help           - print this help message and exit,\n";
+    print "   -f, --config <file>     - config file, 'key = value' format (default " . CONFIG_DIR . "/" . CONFIG_NAME . "),\n";
     print "   -J, --rpc <addr[:port]> - request JSON RPC API on <address> and <port> (default " . RPC_ADDR . ":" . RPC_PORT . "),\n";
 }
 

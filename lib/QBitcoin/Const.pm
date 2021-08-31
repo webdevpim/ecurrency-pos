@@ -44,6 +44,8 @@ use constant QBITCOIN_CONST => {
     BTC_TESTNET             => 1,
     QBT_SCRIPT_START        => QBT_SCRIPT_START,
     QBT_SCRIPT_START_LEN    => length(QBT_SCRIPT_START),
+    CONFIG_DIR              => "/etc",
+    CONFIG_NAME             => "qbitcoin.conf",
 };
 
 use constant STATE_CONST => {

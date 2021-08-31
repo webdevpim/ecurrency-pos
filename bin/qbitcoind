@@ -5,28 +5,31 @@ use strict;
 use Getopt::Long qw(:config bundling no_ignore_case no_auto_abbrev require_order);
 use QBitcoin::Const;
 use QBitcoin::Log;
-use QBitcoin::Config;
+use QBitcoin::Config qw($config read_config);
 use QBitcoin::Network;
 use Bitcoin::Protocol;
 
 sub main {
-    my ( $help, @peer_hosts, @btc_hosts );
+    my ( $help, @peer_hosts, @btc_hosts, $conffile );
+
+    my %opts;
     unless (GetOptions(
         'help|h|?'      => \$help,
         'peer|p=s'      => \@peer_hosts,
         'btcnode|B=s'   => \@btc_hosts,
-        'verbose|v'     => \$config->{verbose},
-        'bind|b=s'      => \$config->{bind_addr},
-        'port|P=s'      => \$config->{port},
-        'rpc|J=s'       => \$config->{rpc_addr},
-        'rpc-port=s'    => \$config->{rpc_port},
-        'genesis|G'     => \$config->{genesis},
-        'generate|g'    => \$config->{generate},
-        'fake-coinbase' => \$config->{fake_coinbase},
-        'produce'       => \$config->{produce},
-        'database=s'    => \$config->{database},
-        'dbi=s'         => \$config->{dbi},
-        'log=s'         => \$config->{log},
+        'verbose|v'     => \$opts{verbose},
+        'bind|b=s'      => \$opts{bind_addr},
+        'port|P=s'      => \$opts{port},
+        'rpc|J=s'       => \$opts{rpc_addr},
+        'rpc-port=s'    => \$opts{rpc_port},
+        'genesis|G'     => \$opts{genesis},
+        'generate|g'    => \$opts{generate},
+        'fake-coinbase' => \$opts{fake_coinbase},
+        'produce'       => \$opts{produce},
+        'database=s'    => \$opts{database},
+        'dbi=s'         => \$opts{dbi},
+        'log=s'         => \$opts{log},
+        'config|f=s'    => \$conffile,
     )) {
         select STDERR;
         usage();
@@ -36,7 +39,15 @@ sub main {
         usage();
         return 0;
     }
-    return QBitcoin::Network->main_loop(\@peer_hosts, \@btc_hosts);
+
+    read_config($conffile);
+
+    # command-line options override config values
+    $config->set($_ => $opts{$_}) foreach grep { defined $opts{$_} } keys %opts;
+    $config->set(peer    => @peer_hosts) if @peer_hosts;
+    $config->set(btcnode => @btc_hosts)  if @btc_hosts;
+
+    return QBitcoin::Network->main_loop();
 }
 
 sub usage {
@@ -45,6 +56,7 @@ sub usage {
     print "Options:\n";
     print "   -h, -? --help               - print this help message and exit,\n";
     print "   -v, --verbose               - output logs to stdout,\n";
+    print "   -f, --config <file>         - config file, 'key = value' format (default " . CONFIG_DIR . "/" . CONFIG_NAME . "),\n";
     print "   -p, --peer <host[:port]>    - connect to peer <host> and <port> (default port " . PORT . "),\n";
     if (UPGRADE_POW) {
         print "   -B, --btcnode <host[:port]> - connect to btc node <host>:<port> (default port " . Bitcoin::Protocol->PORT . "),\n";

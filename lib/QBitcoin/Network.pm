@@ -113,7 +113,7 @@ sub main_loop {
 
     my $listen_socket = $class->bind_addr;
     my $listen_rpc    = $class->bind_rpc_addr;
-    foreach my $peer_host (@$peer_hosts) {
+    foreach my $peer_host ($config->get_all('peer')) {
         my $peer = QBitcoin::Protocol->new(
             state_time => time(),
             host       => $peer_host,
@@ -122,7 +122,7 @@ sub main_loop {
         connect_to($peer);
         QBitcoin::Peers->add_peer($peer);
     }
-    foreach my $peer_host (@$btc_nodes) {
+    foreach my $peer_host ($config->get_all('btcnode')) {
         my $peer = Bitcoin::Protocol->new(
             state_time => time(),
             host       => $peer_host,
