@@ -18,7 +18,7 @@ use Bitcoin::Protocol;
 sub bind_addr {
     my $class = shift;
 
-    my ($address, $port) = split(/:/, $config->{bind_addr} // BIND_ADDR);
+    my ($address, $port) = split(/:/, $config->{bind} // BIND_ADDR);
     $port //= $config->{port} // getservbyname(SERVICE_NAME, 'tcp') // PORT;
     return listen_socket($address, $port);
 }
@@ -26,7 +26,7 @@ sub bind_addr {
 sub bind_rpc_addr {
     my $class = shift;
 
-    my ($address, $port) = split(/:/, $config->{rpc_addr} // RPC_ADDR);
+    my ($address, $port) = split(/:/, $config->{rpc} // RPC_ADDR);
     $port //= $config->{rpc_port} // getservbyname(SERVICE_NAME, 'tcp') // RPC_PORT;
     return listen_socket($address, $port);
 }

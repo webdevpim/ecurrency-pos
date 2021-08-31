@@ -40,6 +40,7 @@ sub read_config {
         my ($key, $value) = $line =~ /^([a-z][-_0-9a-z.:]*)\s*=\s*(.*\S)\s*$/i
             or die "Incorrect config line $linenum:\n$orig_line\n";
         $value = $1 if $value =~ /^"(.*)"$/ || $value =~ /^'(.*)'$/;
+        $key =~ tr/-/_/; # just for more convenient $config->{my_key} syntax instead of $config->{"my-key"}
         $config->add($key => $value);
     }
     close($conf_fh);

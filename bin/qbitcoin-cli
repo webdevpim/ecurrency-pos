@@ -16,7 +16,7 @@ sub main {
     unless (GetOptions(
         'help|h|?'   => \$help,
         'config|f=s' => \$conffile,
-        'rpc|J=s'    => \$opts{rpc_addr},
+        'rpc|J=s'    => \$opts{rpc},
         'rpc-port=s' => \$opts{rpc_port},
     )) {
         select STDERR;
@@ -44,7 +44,7 @@ sub usage {
 
 sub call_rpc {
     my ($method, @params) = @_;
-    my ($address, $port) = split(/:/, $config->{rpc_addr} // RPC_ADDR);
+    my ($address, $port) = split(/:/, $config->{rpc} // RPC_ADDR);
     $port //= $config->{rpc_port} // getservbyname(SERVICE_NAME, 'tcp') // RPC_PORT;
     my $url = "http://$address:$port";
     my $ua = HTTP::Tiny->new;
