@@ -3,6 +3,7 @@ use warnings;
 use strict;
 
 use Getopt::Long qw(:config bundling no_ignore_case no_auto_abbrev require_order);
+use POSIX;
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Config qw($config read_config);
@@ -19,6 +20,7 @@ sub main {
         'btcnode|B=s'   => \@btc_hosts,
         'verbose|v'     => \$opts{verbose},
         'bind|b=s'      => \$opts{bind},
+        'daemonize|D'   => \$opts{daemonize},
         'port|P=s'      => \$opts{port},
         'rpc|J=s'       => \$opts{rpc},
         'rpc-port=s'    => \$opts{rpc_port},
@@ -47,7 +49,31 @@ sub main {
     $config->set(peer    => @peer_hosts) if @peer_hosts;
     $config->set(btcnode => @btc_hosts)  if @btc_hosts;
 
+    if ($config->{daemonize}) {
+        if ($opts{verbose}) {
+            print STDERR "Options -D (daemonize) and -v (verbose) are mutually exclusive\n";
+            return 1;
+        }
+        $config->set(verbose => 0);
+        daemonize();
+    }
+
     return QBitcoin::Network->main_loop();
+}
+
+sub daemonize {
+    POSIX::setsid()
+        or die "setsid: $!";
+    my $pid = fork() // die $!;
+    exit(0) if $pid;
+    chdir "/";
+    # umask 0;
+    foreach my $fd (0 .. (POSIX::sysconf(&POSIX::_SC_OPEN_MAX) || 1024)) {
+        POSIX::close $fd;
+    }
+    open(STDIN,  "<",  "/dev/null");
+    open(STDOUT, ">",  "/dev/null");
+    open(STDERR, ">&", \*STDOUT);
 }
 
 sub usage {
