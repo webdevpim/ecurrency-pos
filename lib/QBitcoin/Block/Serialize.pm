@@ -6,6 +6,7 @@ use Role::Tiny;
 
 # TODO: Change these stubs to effective serialize methods (to packed binary data)
 use QBitcoin::Crypto qw(hash256);
+use QBitcoin::Log;
 use JSON::XS;
 
 my $JSON = JSON::XS->new;
