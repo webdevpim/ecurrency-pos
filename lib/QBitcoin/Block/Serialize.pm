@@ -15,7 +15,7 @@ sub serialize {
         pack("VQ<", $self->height, $self->weight) .
         ( $self->prev_hash // ZERO_HASH ) .
         $self->merkle_root .
-        pack("a16", $self->received_from ? $self->received_from->id : "") .
+        pack("a16", $self->received_from ? $self->received_from->peer_id : "") .
         pack("v", scalar(@{$self->transactions})) .
         join('', @{$self->tx_hashes});
 }

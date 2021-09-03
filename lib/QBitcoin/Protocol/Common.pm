@@ -2,6 +2,7 @@ package QBitcoin::Protocol::Common;
 use warnings;
 use strict;
 
+use Socket;
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
@@ -32,6 +33,8 @@ use constant ATTR => qw(
 );
 
 mk_accessors(ATTR);
+
+use constant IPV6_V4_PREFIX => "\x00" x 10 . "\xff" x 2;
 
 sub new {
     my $class = shift;
@@ -153,6 +156,11 @@ sub send_message {
     my ($cmd, $data) = @_;
     Debugf("Send [%s] to peer %s", $cmd, $self->ip);
     return $self->send(pack("a4a12Va4", $self->MAGIC, $cmd, length($data), checksum32($data)) . $data);
+}
+
+sub peer_id {
+    my $self = shift;
+    return $self->{peer_id} //= IPV6_V4_PREFIX . inet_aton($self->{ip});
 }
 
 1;
