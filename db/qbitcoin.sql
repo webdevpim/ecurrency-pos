@@ -66,7 +66,7 @@ CREATE TABLE `btc_block` (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS `btc_height` ON `btc_block` (height);
 CREATE UNIQUE INDEX IF NOT EXISTS `btc_hash`   ON `btc_block` (hash);
-CREATE        INDEX IF NOT EXISTS `scanned`    ON `btc_block` (scanned);
+CREATE        INDEX IF NOT EXISTS `scanned`    ON `btc_block` (scanned, height);
 
 CREATE TABLE `coinbase` (
   btc_block_height int unsigned DEFAULT NULL,
