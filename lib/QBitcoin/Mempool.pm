@@ -34,6 +34,7 @@ sub choose_for_block {
         @mempool = grep { $_->fee == 0 } @mempool;
     }
     my $empty_tx = 0;
+    my $tx_in_block = $size ? 1 : 0;
     # It's not possible that input was spent in stake transaction
     # b/c we do not use inputs existing in any mempool transaction for stake tx
     my %spent;
@@ -86,7 +87,8 @@ sub choose_for_block {
         $mempool_out{$mempool[$i]->hash} = scalar @{$mempool[$i]->out};
         $empty_tx++ if $mempool[$i]->fee == 0 && @{$mempool[$i]->in};
         $size += $mempool[$i]->size;
-        if ($empty_tx > MAX_EMPTY_TX_IN_BLOCK || $size > MAX_BLOCK_SIZE - BLOCK_HEADER_SIZE) {
+        $tx_in_block++;
+        if ($empty_tx > MAX_EMPTY_TX_IN_BLOCK || $size > MAX_BLOCK_SIZE - BLOCK_HEADER_SIZE || $tx_in_block >= MAX_TX_IN_BLOCK) {
             @mempool = splice(@mempool, 0, $i);
             last;
         }
