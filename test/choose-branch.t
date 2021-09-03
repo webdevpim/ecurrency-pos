@@ -8,19 +8,41 @@ use lib "$Bin/../lib";
 
 use Test::More;
 use Test::MockModule;
+use JSON::XS;
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Protocol;
 use QBitcoin::Block;
+use Bitcoin::Serialized;
 
 #$config->{verbose} = 1;
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });
 
+sub mock_block_serialize {
+    my $self = shift;
+    varstr(encode_json({
+        height       => $self->height+0,
+        weight       => $self->weight+0,
+        hash         => $self->hash,
+        prev_hash    => $self->prev_hash,
+        transactions => $self->tx_hashes,
+        merkle_root  => $self->merkle_root,
+    }));
+}
+
+sub mock_block_deserialize {
+    my $class = shift;
+    my ($data) = @_;
+    $class->new(decode_json($data->get_string));
+}
+
 my $block_module = Test::MockModule->new('QBitcoin::Block');
 $block_module->mock('self_weight', \&mock_self_weight);
 $block_module->mock('find', sub {});
+$block_module->mock('serialize', \&mock_block_serialize);
+$block_module->mock('deserialize', \&mock_block_deserialize);
 my $block_hash;
 $block_module->mock('calculate_hash', sub { $block_hash });
 
