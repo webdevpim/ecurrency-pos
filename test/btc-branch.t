@@ -57,13 +57,13 @@ sub send_blocks {
         foreach my $block_data (@$blocks) {
             my $block = Bitcoin::Block->new(
                 hash        => $block_data->[0],
-                prev_hash   => $block_data->[1] // "\x00" x 32,
+                prev_hash   => $block_data->[1] // ZERO_HASH,
                 bits        => int((29 << 24) + 0xffff / $block_data->[2] + 0.5),
                 time        => time(),
                 nonce       => 0,
                 version     => 2,
                 scanned     => 0,
-                merkle_root => "\x00" x 32,
+                merkle_root => ZERO_HASH,
             );
             $peer->process_btc_block($block)
                 && $block->create();

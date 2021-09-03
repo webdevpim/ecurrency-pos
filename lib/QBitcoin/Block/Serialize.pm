@@ -5,6 +5,7 @@ use strict;
 use Role::Tiny;
 
 # TODO: Change these stubs to effective serialize methods (to packed binary data)
+use QBitcoin::Const;
 use QBitcoin::Crypto qw(hash256);
 use QBitcoin::Log;
 use JSON::XS;
@@ -42,12 +43,13 @@ sub deserialize {
         tx_hashes   => [ map { pack("H*", $_) } @{$decoded->{transactions}} ],
     });
     $block->hash = $block->calculate_hash();
+    $block->prev_hash = undef if $block->prev_hash eq ZERO_HASH;
     return $block;
 }
 
 sub calculate_hash {
     my $self = shift;
-    my $data = ($self->prev_hash // "\x00" x 32) . $self->merkle_root .
+    my $data = ($self->prev_hash // ZERO_HASH) . $self->merkle_root .
         pack("VQ<", $self->height, $self->weight);
     return hash256($data);
 }

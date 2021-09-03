@@ -30,7 +30,7 @@ $btc_tx_data .= pack("V", 0); # lock_time
 
 my $data_obj = Bitcoin::Serialized->new($btc_tx_data);
 my $btc_tx = Bitcoin::Transaction->deserialize($data_obj);
-my $prev_hash = "\x00" x 32;
+my $prev_hash = ZERO_HASH;
 my $time = time();
 my @btc_block;
 for (my $height = 1; $height <= 7; $height++) {

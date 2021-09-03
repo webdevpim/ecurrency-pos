@@ -4,7 +4,7 @@ use strict;
 use feature 'state';
 
 use parent 'QBitcoin::Protocol::Common';
-use QBitcoin::Const qw(GENESIS_TIME BTC_TESTNET QBT_SCRIPT_START QBT_SCRIPT_START_LEN);
+use QBitcoin::Const qw(GENESIS_TIME BTC_TESTNET QBT_SCRIPT_START QBT_SCRIPT_START_LEN ZERO_HASH);
 use QBitcoin::Config;
 use QBitcoin::Log;
 use QBitcoin::Produce;
@@ -81,7 +81,7 @@ sub request_btc_blocks {
             $self->send_message("getdata", pack("CVa32", 1, MSG_BLOCK, $self->BTC_GENESIS));
             return;
         }
-        @locators = "\x00" x 32;
+        @locators = (ZERO_HASH);
     }
     elsif ($blocks[-1]->height > 0) {
         my $step = 4;
@@ -96,7 +96,7 @@ sub request_btc_blocks {
         push @height, 0;
         push @locators, map { $_->hash } Bitcoin::Block->find(-sortby => 'height DESC', height => \@height);
     }
-    $self->send_message("getheaders", pack("V", PROTOCOL_VERSION) . varint(scalar(@locators)) . join("", @locators) . "\x00" x 32);
+    $self->send_message("getheaders", pack("V", PROTOCOL_VERSION) . varint(scalar(@locators)) . join("", @locators) . ZERO_HASH);
 }
 
 sub cmd_version {
@@ -214,7 +214,7 @@ sub cmd_headers {
         my $start_height = $known_block->height;
         my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*1900 } 1 .. 250 ], -sortby => "height DESC");
         $self->send_message("getheaders", pack("V", PROTOCOL_VERSION) .
-            varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . "\x00" x 32);
+            varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . ZERO_HASH);
     }
     else {
         $self->request_transactions();
