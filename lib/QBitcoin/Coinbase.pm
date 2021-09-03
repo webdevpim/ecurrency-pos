@@ -169,32 +169,31 @@ sub as_hashref {
 sub serialize {
     my $self = shift;
     # value and open_script is matched transaction output and can be fetched from btc_tx_data and btc_out_num
-    return {
-        btc_block_hash => unpack("H*", $self->btc_block_hash),
-        btc_tx_num     => $self->btc_tx_num+0,
-        btc_out_num    => $self->btc_out_num+0,
-        btc_tx_data    => unpack("H*", $self->btc_tx_data),
-        merkle_path    => unpack("H*", $self->merkle_path),
-    };
+    return $self->btc_block_hash .
+        (varint($self->btc_tx_num)  // return undef) .
+        (varint($self->btc_out_num) // return undef) .
+        (varstr($self->btc_tx_data) // return undef) .
+        (varstr($self->merkle_path) // return undef);
 }
 
 sub deserialize {
     my $class = shift;
-    my $args = @_ == 1 ? $_[0] : { @_ };
-    # TODO: validate $args
-    my $btc_block_hash = pack("H*", $args->{btc_block_hash});
-    my $btc_tx_data = pack("H*", $args->{btc_tx_data});
-    my $btc_tx_hash = hash256($btc_tx_data);
-    my $merkle_path = pack("H*", $args->{merkle_path});
+    my ($data) = @_;
+    my $btc_block_hash = $data->get(32)   // return undef;
+    my $btc_tx_num  = $data->get_varint() // return undef;
+    my $btc_out_num = $data->get_varint() // return undef;
+    my $btc_tx_data = $data->get_string() // return undef;
+    my $merkle_path = $data->get_string() // return undef;
     # Deserialize btc transaction for get upgrade data (value, open_script)
-    my $transaction = Bitcoin::Transaction->deserialize(Bitcoin::Serialized->new($btc_tx_data));
-    if (!$transaction) {
-        Warningf("Incorrect btc upgrade transaction data %s", unpack("H*", scalar reverse $btc_tx_hash));
+    my $btc_tx_data_obj = Bitcoin::Serialized->new($btc_tx_data);
+    my $transaction = Bitcoin::Transaction->deserialize($btc_tx_data_obj);
+    if (!$transaction || $btc_tx_data_obj->length) {
+        Warningf("Incorrect btc upgrade transaction data");
         return undef;
     }
-    my $out = $transaction->out->[$args->{btc_out_num}];
+    my $out = $transaction->out->[$btc_out_num];
     if (!$out) {
-        Warningf("Incorrect btc upgrade transaction data %s, no output %u", $transaction->hash_str, $args->{btc_out_num});
+        Warningf("Incorrect btc upgrade transaction data %s, no output %u", $transaction->hash_str, $btc_out_num);
         return undef;
     }
     if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) ne QBT_SCRIPT_START) {
@@ -203,10 +202,10 @@ sub deserialize {
     }
     return $class->new({
         btc_block_hash => $btc_block_hash,
-        btc_tx_num     => $args->{btc_tx_num},
-        btc_out_num    => $args->{btc_out_num},
+        btc_tx_num     => $btc_tx_num,
+        btc_out_num    => $btc_out_num,
         btc_tx_data    => $btc_tx_data,
-        btc_tx_hash    => $btc_tx_hash,
+        btc_tx_hash    => $transaction->hash,
         merkle_path    => $merkle_path,
         value          => $out->{value},
         open_script    => substr($out->{open_script}, QBT_SCRIPT_START_LEN),

@@ -15,6 +15,7 @@ use QBitcoin::Crypto qw(hash256);
 use QBitcoin::TXO;
 use QBitcoin::Coinbase;
 use QBitcoin::Peers;
+use Bitcoin::Serialized;
 
 use Role::Tiny::With;
 with 'QBitcoin::Transaction::Signature';
@@ -43,7 +44,7 @@ my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
 
 my %TRANSACTION;      # in-memory cache transaction objects by tx_hash
 my %PENDING_INPUT_TX; # 2-level hash $pending_hash => $hash; value 1
-my %PENDING_TX_INPUT; # 2-level hash $hash => $pendinfg_hash; value - pointer to serialized transaction data
+my %PENDING_TX_INPUT; # 2-level hash $hash => $pending_hash; value - pointer to serialized transaction data
 tie(%PENDING_TX_INPUT, 'Tie::IxHash'); # Ordered by age, to remove oldest
 
 END {
@@ -97,7 +98,8 @@ sub process_pending {
                 delete $PENDING_TX_INPUT{$hash};
                 Debugf("Process transaction %s pending for %s", $self->hash_str($hash), $self->hash_str);
                 my $class = ref $self;
-                if (my $tx = $class->deserialize($$tx_data_p, $peer)) {
+                my $data = Bitcoin::Serialized->new($$tx_data_p);
+                if (my $tx = $class->deserialize($data, $peer)) {
                     $peer->process_tx($tx);
                 }
             }
@@ -212,13 +214,18 @@ sub hash_str {
 
 sub serialize {
     my $self = shift;
-    # TODO: pack as binary data
-    return $JSON->encode({
-        in  => [ map { serialize_input($_)  } @{$self->in}  ],
-        out => [ map { serialize_output($_) } @{$self->out} ],
-        $self->up ? ( up => serialize_coinbase($self->up) ) : (),
-        !UPGRADE_POW && $self->coins_created ? ( coins_created => $self->coins_created+0 ) : (),
-    }) . "\n";
+
+    my $data = varint(scalar @{$self->in});
+    $data .= serialize_input($_) foreach @{$self->in};
+    $data .= varint(scalar @{$self->out});
+    $data .= serialize_output($_) foreach @{$self->out};
+    if (!@{$self->in}) {
+        $data .= UPGRADE_POW ? serialize_coinbase($self->up) : pack("Q<", $self->coins_created);
+    }
+    elsif (UPGRADE_POW ? $self->up : $self->coins_created) {
+        die "Incorrect transaction (both input and coinbase), can't serialize " . $self->hash_str . "\n";
+    }
+    return $data;
 }
 
 # For JSON RPC output
@@ -246,27 +253,29 @@ sub input_as_hashref {
 
 sub serialize_input {
     my $in = shift;
-    return {
-        tx_out       => unpack("H*", $in->{txo}->tx_in),
-        num          => $in->{txo}->num+0,
-        close_script => unpack("H*", $in->{close_script} // die "Undefined close_script during serialize_input"),
-    };
+    my $close_script = $in->{close_script} // die "Undefined close_script during serialize_input";
+    return $in->{txo}->tx_in . varint($in->{txo}->num) . varstr($close_script);
 }
 
 sub deserialize_input {
-    my $in = shift;
+    my $data = shift;
     return {
-        tx_out       => pack("H*", $in->{tx_out}),
-        num          => $in->{num},
-        close_script => pack("H*", $in->{close_script}),
-    }
+        tx_out       => ( $data->get(32) // return undef ),
+        num          => ( $data->get_varint() // return undef ),
+        close_script => ( $data->get_string() // return undef ),
+    };
 }
 
 sub serialize_output {
     my $out = shift;
-	return {
-        value       => $out->value+0,
-        open_script => unpack("H*", $out->open_script),
+    return pack("Q<", $out->value) . varstr($out->open_script);
+}
+
+sub deserialize_output {
+    my $data = shift;
+    return {
+        value       => unpack("Q<", $data->get(8) // return undef),
+        open_script => ( $data->get_string() // return undef ),
     };
 }
 
@@ -283,14 +292,24 @@ sub serialize_coinbase {
     return $coinbase->serialize;
 }
 
+sub deserialize_coinbase {
+    my $data = shift;
+    return QBitcoin::Coinbase->deserialize($data);
+}
+
 sub deserialize {
     my $class = shift;
-    my ($tx_data, $peer) = @_;
-    my $decoded = eval { $JSON->decode($tx_data) };
-    if (!$decoded || ref($decoded) ne 'HASH' || ref($decoded->{in}) ne 'ARRAY' || ref($decoded->{out}) ne 'ARRAY') {
-        Warningf("Incorrect transaction data: %s", $@);
-        return undef;
+    my ($data, $peer) = @_;
+    my $start_index = $data->index;
+    my @input  = map { deserialize_input($data)  // return undef } 1 .. ($data->get_varint // return undef);
+    my @output = map { deserialize_output($data) // return undef } 1 .. ($data->get_varint // return undef);
+    my $up;
+    if (!@input) {
+        $up = UPGRADE_POW ? (deserialize_coinbase($data) // return undef) : unpack("Q<", $data->get(8) // return undef);
     }
+    my $end_index = $data->index;
+    $data->index = $start_index;
+    my $tx_data = $data->get($end_index - $start_index);
     my $hash = calculate_hash($tx_data);
     if ($PENDING_TX_INPUT{$hash}) {
         Debugf("Transaction %s already pending", $class->hash_str($hash));
@@ -300,7 +319,7 @@ sub deserialize {
         Debugf("Transaction %s already known", $class->hash_str($hash));
         return "";
     }
-    my ($in, $unknown) = $class->load_inputs([ map { deserialize_input($_) } @{$decoded->{in}} ], $hash, $peer);
+    my ($in, $unknown) = $class->load_inputs(\@input, $hash, $peer);
     if (!$in) {
         return undef;
     }
@@ -322,27 +341,22 @@ sub deserialize {
         return ""; # Ignore transactions with unknown inputs
     }
 
-    my $out = create_outputs($decoded->{out}, $hash);
-    my $up;
-    if ($decoded->{up}) {
-        $up = create_coinbase($decoded->{up},  $hash)
-            or return undef;
-    }
     my $self = $class->new(
         in            => $in,
-        out           => $out,
+        out           => create_outputs(\@output, $hash),
+        $up ? UPGRADE_POW ? ( up => $up ) : ( coins_created => $up ) : (),
         hash          => $hash,
-        size          => length($tx_data),
+        size          => $end_index - $start_index,
         received_time => time(),
-        $up ? ( up => $up ) : (),
-        !UPGRADE_POW && $decoded->{coins_created} ? ( coins_created => $decoded->{coins_created} ) : (),
     );
-    if (calculate_hash($self->serialize) ne $hash) {
-        Warningf("Incorrect serialized transaction has different hash: %s: %s", $self->hash_str, $self->serialize);
+
+    my $calculated_hash = calculate_hash($self->serialize);
+    if ($calculated_hash ne $hash) {
+        Warningf("Incorrect serialized transaction has different hash: %s: %s", $self->hash_str, $self->hash_str($calculated_hash));
         return undef;
     }
 
-    $self->fee = sum0(map { $_->{txo}->value } @$in) + $self->coins_created - sum0(map { $_->value } @$out);
+    $self->fee = sum0(map { $_->{txo}->value } @$in) + $self->coins_created - sum0(map { $_->{value} } @output);
 
     return $self;
 }
@@ -364,7 +378,7 @@ sub create_outputs {
     foreach my $out (@$outputs) {
         my $txo = QBitcoin::TXO->new_txo({
             value       => $out->{value},
-            open_script => pack("H*", $out->{open_script}),
+            open_script => $out->{open_script},
         });
         push @txo, $txo;
     }
@@ -429,12 +443,6 @@ sub _cmp_inputs {
 sub calculate_hash {
     my ($tx_data) = @_;
     return hash256($tx_data);
-}
-
-sub create_coinbase {
-    my ($up, $hash) = @_;
-    # TODO: create value, open_script and hash by serialized raw data
-    return QBitcoin::Coinbase->deserialize(%$up, tx_hash => $hash);
 }
 
 sub validate_coinbase {
@@ -572,11 +580,11 @@ sub on_load {
         if (!UPGRADE_POW && !@{$self->in}) {
             $self->{coins_created} = sum0(map { $_->value } @{$self->out}) - $self->fee;
         }
-        if ($self->hash ne calculate_hash($self->serialize)) {
-            Errf("Serialized transaction: %s", $self->serialize);
-            die "Incorrect hash for loaded transaction " . $self->hash_str . " != " . unpack("H*", substr(calculate_hash($self->serialize), 0, 4)) . "\n";
+        my $hash = calculate_hash($self->serialize);
+        if ($self->hash ne $hash) {
+            die "Incorrect hash for loaded transaction " . $self->hash_str . " != " . $self->hash_str($hash) . "\n";
         }
-        $TRANSACTION{$self->hash} = $self;
+        $TRANSACTION{$hash} = $self;
 
         foreach my $in (@{$self->in}) {
             $in->{txo}->spent_add($self);

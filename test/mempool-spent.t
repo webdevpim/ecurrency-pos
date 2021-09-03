@@ -23,6 +23,8 @@ $txo_module->mock('check_script', sub { 0 });
 my $transaction_module = Test::MockModule->new('QBitcoin::Transaction');
 $transaction_module->mock('validate_coinbase', sub { 0 });
 $transaction_module->mock('coins_created', sub { $_[0]->{coins_created} //= @{$_[0]->in} ? 0 : sum0(map { $_->value } @{$_[0]->out}) });
+$transaction_module->mock('serialize_coinbase', sub { "\x00" });
+$transaction_module->mock('deserialize_coinbase', sub { unpack("C", shift->get(1)) });
 
 my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED, ip => '127.0.0.1');
 
@@ -32,8 +34,8 @@ sub make_tx {
     state $tx_num = 1;
     my $out_value = @in ? sum(map { $_->value } @in) : $value;
     my $tx = QBitcoin::Transaction->new(
-        out            => [ QBitcoin::TXO->new_txo( value => $out_value, open_script => "open_$tx_num" ) ],
-        in             => [ map +{ txo => $_, close_script => "close_$tx_num" }, @in ],
+        out => [ QBitcoin::TXO->new_txo( value => $out_value, open_script => "open_$tx_num" ) ],
+        in  => [ map +{ txo => $_, close_script => "close_$tx_num" }, @in ],
         @in ? () : ( coins_created => $out_value ),
     );
     $value += 10;
