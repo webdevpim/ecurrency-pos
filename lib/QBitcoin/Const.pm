@@ -32,6 +32,7 @@ use constant QBITCOIN_CONST => {
     GENESIS_HASH            => pack('H*', GENESIS_BLOCK_HASH),
     GENESIS_HASH_HEX        => GENESIS_BLOCK_HASH,
     MAX_BLOCK_SIZE          => 8*1024*1024,
+    MAX_TX_IN_BLOCK         => 65535,
     BLOCK_HEADER_SIZE       => 200, # TODO: calculate precise value
     MAX_TX_SIZE             => 2*1024*1024,
     MAX_PENDING_BLOCKS      => 128,
@@ -46,6 +47,7 @@ use constant QBITCOIN_CONST => {
     QBT_SCRIPT_START_LEN    => length(QBT_SCRIPT_START),
     CONFIG_DIR              => "/etc",
     CONFIG_NAME             => "qbitcoin.conf",
+    ZERO_HASH               => "\x00" x 32,
 };
 
 use constant STATE_CONST => {

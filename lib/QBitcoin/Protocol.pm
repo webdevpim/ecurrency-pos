@@ -40,6 +40,7 @@ use QBitcoin::Log;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use QBitcoin::Block;
 use QBitcoin::Transaction;
+use Bitcoin::Serialized;
 
 use Role::Tiny::With;
 with 'QBitcoin::Protocol::BTC' if UPGRADE_POW;
@@ -164,8 +165,10 @@ sub cmd_ihavetx {
 sub cmd_block {
     my $self = shift;
     my ($block_data) = @_;
-    my $block = QBitcoin::Block->deserialize($block_data);
-    if (!$block) {
+    my $data = Bitcoin::Serialized->new($block_data);
+    my $block = QBitcoin::Block->deserialize($data);
+    if (!$block || $data->length) {
+        Warningf("Bad block data length %u from peer %s", length($block_data), $self->ip);
         $self->abort("bad_block_data");
         return -1;
     }
@@ -310,8 +313,9 @@ sub _block_load_transactions {
 sub cmd_tx {
     my $self = shift;
     my ($tx_data) = @_;
-    my $tx = QBitcoin::Transaction->deserialize($tx_data, $self);
-    if (!defined $tx) {
+    my $data = Bitcoin::Serialized->new($tx_data);
+    my $tx = QBitcoin::Transaction->deserialize($data, $self);
+    if (!defined $tx || $data->length) {
         $self->abort("bad_tx_data");
         return -1;
     }

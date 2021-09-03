@@ -4,6 +4,7 @@ use strict;
 
 # https://en.bitcoinwiki.org/wiki/Merkle_tree
 
+use QBitcoin::Const;
 use QBitcoin::Crypto qw(hash256);
 use Role::Tiny;
 
@@ -25,7 +26,7 @@ sub _merkle_root {
 sub calculate_merkle_root {
     my $self = shift;
     @{$self->transactions}
-        or return "\x00" x 32;
+        or return ZERO_HASH;
     my @hashes = map { $_->hash } @{$self->transactions};
     my $level = 0;
     my $level_size = 1; # 2**$level

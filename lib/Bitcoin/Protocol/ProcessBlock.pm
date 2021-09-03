@@ -29,7 +29,7 @@ sub process_btc_block {
     state $CHAINWORK;
     # https://bitcoin.stackexchange.com/questions/26869/what-is-chainwork
     my $chainwork = $block->difficulty * 4295032833; # it's 0x0100010001, avoid perl warning about too large hex number
-    if ($block->prev_hash eq "\x00" x 32) {
+    if ($block->prev_hash eq ZERO_HASH) {
         $block->height = 0;
         $CHAINWORK = $block->chainwork = $chainwork;
     }
