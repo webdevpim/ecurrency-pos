@@ -330,9 +330,17 @@ sub process_transactions {
     my ($block, $tx_data) = @_;
 
     my $tx_num = $tx_data->get_varint();
+    if (!defined($tx_num)) {
+        Warningf("Incorrect input from btc peer %s", $self->ip);
+        return -1;
+    }
     my @transactions;
     for (my $i = 0; $i < $tx_num; $i++) {
         my $tx = Bitcoin::Transaction->deserialize($tx_data);
+        if (!defined($tx)) {
+            Warningf("Incorrect input from btc peer %s", $self->ip);
+            return -1;
+        }
         Debugf("process transaction: %s", $tx->hash_hex);
         push @transactions, $tx;
     }
