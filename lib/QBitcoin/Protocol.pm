@@ -168,6 +168,7 @@ sub cmd_block {
     my $data = Bitcoin::Serialized->new($block_data);
     my $block = QBitcoin::Block->deserialize($data);
     if (!$block || $data->length) {
+        Warningf("Bad block data length %u from peer %s", length($block_data), $self->ip);
         $self->abort("bad_block_data");
         return -1;
     }
