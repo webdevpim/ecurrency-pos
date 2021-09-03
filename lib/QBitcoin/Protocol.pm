@@ -165,8 +165,9 @@ sub cmd_ihavetx {
 sub cmd_block {
     my $self = shift;
     my ($block_data) = @_;
-    my $block = QBitcoin::Block->deserialize($block_data);
-    if (!$block) {
+    my $data = Bitcoin::Serialized->new($block_data);
+    my $block = QBitcoin::Block->deserialize($data);
+    if (!$block || $data->length) {
         $self->abort("bad_block_data");
         return -1;
     }

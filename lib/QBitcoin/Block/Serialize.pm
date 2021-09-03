@@ -4,43 +4,32 @@ use strict;
 
 use Role::Tiny;
 
-# TODO: Change these stubs to effective serialize methods (to packed binary data)
 use QBitcoin::Const;
 use QBitcoin::Crypto qw(hash256);
-use QBitcoin::Log;
-use JSON::XS;
-
-my $JSON = JSON::XS->new;
+use Bitcoin::Serialized;
 
 sub serialize {
     my $self = shift;
 
     return $self->{serialized} //=
-        $JSON->encode({
-            height       => $self->height,
-            weight       => $self->weight,
-            prev_hash    => $self->prev_hash ? unpack("H*", $self->prev_hash) : undef,
-            merkle_root  => unpack("H*", $self->merkle_root),
-            transactions => [ map { unpack("H*", $_) } @{$self->tx_hashes} ],
-            $self->received_from ? ( rcvd => $self->received_from->ip ) : (),
-        }) . "\n";
+        pack("VQ<", $self->height, $self->weight) .
+        ( $self->prev_hash // ZERO_HASH ) .
+        $self->merkle_root .
+        pack("a16", $self->received_from ? $self->received_from->id : "") .
+        pack("v", scalar(@{$self->transactions})) .
+        join('', @{$self->tx_hashes});
 }
 
 sub deserialize {
     my $class = shift;
-    my ($block_data) = @_;
-    my $decoded = eval { $JSON->decode($block_data) };
-    if (!$decoded) {
-        Warningf("Incorrect block: %s", $@);
-        return undef;
-    }
+    my ($data) = @_;
     my $block = $class->new({
-        height      => $decoded->{height},
-        weight      => $decoded->{weight},
-        prev_hash   => $decoded->{prev_hash} ? pack("H*", $decoded->{prev_hash}) : undef,
-        merkle_root => pack("H*", $decoded->{merkle_root}),
-        rcvd        => $decoded->{rcvd},
-        tx_hashes   => [ map { pack("H*", $_) } @{$decoded->{transactions}} ],
+        height      => unpack("V",  $data->get(4) // return undef),
+        weight      => unpack("Q<", $data->get(8) // return undef),
+        prev_hash   => ( $data->get(32) // return undef ),
+        merkle_root => ( $data->get(32) // return undef ),
+        rcvd        => ( $data->get(16) // return undef ),
+        tx_hashes   => [ map { $data->get(32) // return undef } 1 .. unpack("v", $data->get(2) // return undef) ],
     });
     $block->hash = $block->calculate_hash();
     $block->prev_hash = undef if $block->prev_hash eq ZERO_HASH;
