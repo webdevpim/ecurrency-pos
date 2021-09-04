@@ -150,7 +150,7 @@ sub receive {
         my $fail_tx;
 
         foreach my $tx (@{$b->transactions}) {
-            if ($tx->block_height && $tx->block_height != $b->height) {
+            if (defined($tx->block_height) && $tx->block_height != $b->height) {
                 Warningf("Transaction %s included in blocks %u and %u", $tx->hash_str, $tx->block_height, $b->height);
                 $fail_tx = $tx->hash;
                 last;
@@ -169,7 +169,7 @@ sub receive {
                 elsif (my $tx_in = QBitcoin::Transaction->get($txo->tx_in)) {
                     # Transaction with this output must be already confirmed (in the same best branch)
                     # Stored (not cached) transactions are always confirmed, not needed to load them
-                    if (!$tx_in->block_height) {
+                    if (!defined($tx_in->block_height)) {
                         Warningf("Unconfirmed input %s:%u for transaction %s, block from %s",
                             $txo->tx_in_str, $txo->num, $tx->hash_str,
                             $b->received_from ? $b->received_from->ip : "me");

@@ -64,7 +64,7 @@ sub choose_for_block {
             if (!exists $mempool_out{$txo->tx_in}) {
                 # If the transaction is not cached then it's already stored onto database, so it is in the best branch or dropped
                 if (my $tx_in = QBitcoin::Transaction->get($txo->tx_in)) {
-                    if (!$tx_in->block_height) {
+                    if (!defined($tx_in->block_height)) {
                         $skip = 1;
                         last;
                     }
