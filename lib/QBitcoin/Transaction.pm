@@ -506,14 +506,13 @@ sub validate {
     my @stored_in;
     my $input_value = 0;
     my %inputs;
-    foreach my $num (0 .. $#{$self->in}) {
-        my $in = $self->in->[$num];
-        if ($inputs{$in->{txo}->key}++) {
+    foreach my $in (map { $_->{txo} } @{$self->in}) {
+        if ($inputs{$in->key}++) {
             Warningf("Input %s:%u included in transaction %s twice",
-                $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
+                $in->tx_in_str, $in->num, $self->hash_str);
             return -1;
         }
-        $input_value += $in->{txo}->value;
+        $input_value += $in->value;
     }
     if ($input_value <= 0) {
         Warningf("Zero input in transaction %s", $self->hash_str);
