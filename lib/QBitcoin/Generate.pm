@@ -42,7 +42,7 @@ sub txo_confirmed {
 }
 
 sub make_stake_tx {
-    my ($fee) = @_;
+    my ($fee, $block_sign_data) = @_;
 
     my @my_txo = grep { txo_confirmed($_) } QBitcoin::TXO->my_utxo()
         or return undef;
@@ -53,10 +53,11 @@ sub make_stake_tx {
         open_script => scalar(QBitcoin::OpenScript->script_for_address($my_address->address)),
     );
     my $tx = QBitcoin::Transaction->new(
-        in            => [ map +{ txo => $_ }, @my_txo ],
-        out           => [ $out ],
-        fee           => -$fee,
-        received_time => time(),
+        in              => [ map +{ txo => $_ }, @my_txo ],
+        out             => [ $out ],
+        fee             => -$fee,
+        block_sign_data => $block_sign_data,
+        received_time   => time(),
     );
     $tx->sign_transaction();
     $tx->size = length $tx->serialize;
@@ -72,7 +73,7 @@ sub generate {
             or die "No prev block height " . ($height-1) . " for generate";
     }
 
-    my $stake_tx = make_stake_tx(0);
+    my $stake_tx = make_stake_tx(0, "");
     my $size = $stake_tx ? $stake_tx->size : 0;
     foreach my $coinbase (QBitcoin::Coinbase->get_new($height)) {
         # Create new coinbase transaction and add it to mempool (if it's not there)
@@ -82,7 +83,9 @@ sub generate {
     if (my $fee = sum map { $_->fee } @transactions) {
         return unless $stake_tx;
         # Generate new stake_tx with correct output value
-        $stake_tx = make_stake_tx($fee);
+        my $block_sign_data = $prev_block ? $prev_block->hash : ZERO_HASH;
+        $block_sign_data .= $_->hash foreach @transactions;
+        $stake_tx = make_stake_tx($fee, $block_sign_data);
         Infof("Generated stake tx %s with input amount %u, consume %u fee", $stake_tx->hash_str,
             sum(map { $_->{txo}->value } @{$stake_tx->in}), -$stake_tx->fee);
         QBitcoin::TXO->save_all($stake_tx->hash, $stake_tx->out);

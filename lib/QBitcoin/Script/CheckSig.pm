@@ -19,7 +19,7 @@ sub cmd_checksig($) {
 
 sub check_tx_signature {
     my ($pubkey, $signature, $tx, $input_num) = @_;
-    return check_sig($tx->sign_data, $signature, $pubkey);
+    return check_sig($tx->sign_data($input_num), $signature, $pubkey);
 }
 
 1;

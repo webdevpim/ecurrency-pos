@@ -36,6 +36,7 @@ use constant ATTR => qw(
     out
     up
     blocks
+    block_sign_data
 );
 
 mk_accessors(keys %{&FIELDS}, ATTR);
@@ -217,6 +218,7 @@ sub data { "" } # TODO
 sub serialize {
     my $self = shift;
 
+    # do not cache this in $self->{serialize} b/c it can be called from sign_data() with stripped input scripts
     my $data = varint(scalar @{$self->in});
     $data .= serialize_input($_) foreach @{$self->in};
     $data .= varint(scalar @{$self->out});
@@ -512,15 +514,16 @@ sub validate {
             return -1;
         }
         $input_value += $in->{txo}->value;
-        if ($in->{txo}->check_script($in->{close_script}, $self, $num) != 0) {
-            Warningf("Unmatched close script for input %s:%u in transaction %s",
-                $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
-            return -1;
-        }
     }
     if ($input_value <= 0) {
         Warningf("Zero input in transaction %s", $self->hash_str);
         return -1;
+    }
+    if ($self->fee >= 0) {
+        # Signcheck for stake transaction depends on block it relates to,
+        # so skip this check while block_sign_data is not known, check from valid_for_block()
+        $self->check_input_script == 0
+            or return -1;
     }
     return 0;
 }
@@ -530,6 +533,24 @@ sub valid_for_block {
     my ($block) = @_;
     ($self->min_tx_time // return -1) <= time_by_height($block->height)
         or return -1;
+    if ($self->fee < 0) {
+        $self->block_sign_data = $block->sign_data;
+        $self->check_input_script == 0
+            or return -1;
+    }
+    return 0;
+}
+
+sub check_input_script {
+    my $self = shift;
+    foreach my $num (0 .. $#{$self->in}) {
+        my $in = $self->in->[$num];
+        if ($in->{txo}->check_script($in->{close_script}, $self, $num) != 0) {
+            Warningf("Unmatched close script for input %s:%u in transaction %s",
+                $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
+            return -1;
+        }
+    }
     return 0;
 }
 

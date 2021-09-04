@@ -2,7 +2,6 @@ package QBitcoin::Transaction::Signature;
 use warnings;
 use strict;
 
-use JSON::XS;
 use QBitcoin::MyAddress;
 use QBitcoin::Log;
 use QBitcoin::Script qw(pushdata);
@@ -15,26 +14,26 @@ use Role::Tiny;
 # https://developer.bitcoin.org/devguide/transactions.html
 # https://gist.github.com/Sjors/5574485 (ruby)
 
-my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
-
 sub sign_data {
     my $self = shift;
+    my ($input_num) = @_; # currently not used
     return $self->{sign_data} if defined $self->{sign_data};
-    # All transaction inputs and outputs without close scripts
-    # TODO: set binary data as for bitcoin
-    my $data = {
-        inputs  => [ map { unpack("H*", $_->{txo}->tx_in) . ":" . $_->{txo}->num } @{$self->in} ],
-        outputs => [ map { value => $_->value+0, script => unpack("H*", $_->open_script) }, @{$self->out} ],
-    };
-    Debugf("sign data: %s", $JSON->encode($data));
-    return $self->{sign_data} = $JSON->encode($data);
+    # Serialized transaction without input scripts
+    local $self->{in} = [ map +{ %$_, close_script => "" }, @{$self->in} ];
+    my $data = $self->serialize;
+    if ($self->fee < 0) {
+        # It's stake tx which signs block, add block info
+        $data .= $self->block_sign_data;
+    }
+    return $self->{sign_data} = $data;
 }
 
 sub sign_transaction {
     my $self = shift;
-    foreach my $in (@{$self->in}) {
+    foreach my $num (0 .. $#{$self->in}) {
+        my $in = $self->in->[$num];
         if (my $address = QBitcoin::MyAddress->get_by_script($in->{txo}->open_script)) {
-            $in->{close_script} = $self->make_close_script($address);
+            $in->{close_script} = $self->make_close_script($address, $num);
         }
         else {
             Errf("Can't sign transaction: address for %s:%u is not my, script %s",
@@ -46,8 +45,8 @@ sub sign_transaction {
 
 sub make_close_script {
     my $self = shift;
-    my ($address) = @_;
-    my $script = pushdata(signature($self->sign_data, $address->privkey)) . pushdata($address->pubkey);
+    my ($address, $input_num) = @_;
+    my $script = pushdata(signature($self->sign_data($input_num), $address->privkey)) . pushdata($address->pubkey);
     return $script;
 }
 

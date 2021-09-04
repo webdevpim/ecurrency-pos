@@ -72,6 +72,7 @@ my $tx = QBitcoin::Transaction->new({
     in  => [],
     out => [ $out ],
     up  => $up,
+    fee => 0,
 });
 $tx->hash = $tx->calculate_hash;
 $out->tx_out = $tx->hash;

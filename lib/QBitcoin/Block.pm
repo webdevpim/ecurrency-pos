@@ -2,6 +2,7 @@ package QBitcoin::Block;
 use warnings;
 use strict;
 
+use QBitcoin::Const;
 use QBitcoin::ORM qw(:types);
 use QBitcoin::Accessors qw(mk_accessors new);
 
@@ -118,6 +119,16 @@ sub tx_hashes {
     my $self = shift;
     return $self->{tx_hashes} //
         [ map { $_->hash } @{$self->{transactions}} ];
+}
+
+sub sign_data {
+    my $self = shift;
+    my $data = $self->prev_hash // ZERO_HASH;
+    my $num = 0;
+    foreach (@{$self->tx_hashes}) {
+        $data .= $_ if $num++;
+    }
+    return $data;
 }
 
 sub hash_str {
