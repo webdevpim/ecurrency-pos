@@ -26,7 +26,6 @@ use constant FIELDS => {
 use constant ATTR => qw(
     next_block
     received_from
-    transactions
 );
 
 mk_accessors(keys %{&FIELDS});
@@ -103,8 +102,8 @@ sub compact_tx {
 sub free_tx {
     my $self = shift;
     # works for pending block too
-    if ($self->transactions) {
-        foreach my $tx (@{$self->transactions}) {
+    if ($self->{transactions}) {
+        foreach my $tx (@{$self->{transactions}}) {
             $tx->del_from_block($self);
         }
     }

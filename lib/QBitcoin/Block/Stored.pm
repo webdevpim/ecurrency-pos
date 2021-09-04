@@ -25,11 +25,23 @@ sub store {
 
 sub on_load {
     my $self = shift;
-    # Load transactions
-    my @transactions = QBitcoin::Transaction->find(block_height => $self->height);
-    $self->transactions = \@transactions;
-    $_->add_to_block($self) foreach @transactions;
+    # Load transaction hashes
+    my @transactions = QBitcoin::Transaction->fetch(block_height => $self->height);
+    $self->{tx_hashes} = [ map { $_->{hash} } @transactions ];
     return $self;
+}
+
+sub transactions {
+    my $self = shift;
+    if (@_) {
+        $self->transactions = $_[0];
+    }
+    elsif (!$self->{transactions}) {
+        my @transactions = QBitcoin::Transaction->find(block_height => $self->height);
+        $self->{transactions} = \@transactions;
+        $_->add_to_block($self) foreach @transactions;
+    }
+    return $self->{transactions};
 }
 
 sub max_db_height {
