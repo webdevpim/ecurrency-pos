@@ -420,7 +420,10 @@ sub cmd_ihave {
         $self->syncing(0); # prevent blocking connection on infinite wait
     }
     $self->has_weight = $weight;
-    $self->request_new_block($height) unless UPGRADE_POW && !btc_synced();
+    if (!UPGRADE_POW || btc_synced()) {
+        my $max_height = QBitcoin::Block->max_incore_height;
+        $self->request_new_block($height > $max_height ? $max_height+1 : $height);
+    }
     return 0;
 }
 
