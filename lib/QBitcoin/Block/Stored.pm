@@ -23,14 +23,6 @@ sub store {
     $MAX_DB_HEIGHT = $self->height if !defined($MAX_DB_HEIGHT) || $MAX_DB_HEIGHT < $self->height;
 }
 
-sub on_load {
-    my $self = shift;
-    # Load transaction hashes
-    my @transactions = QBitcoin::Transaction->fetch(block_height => $self->height);
-    $self->{tx_hashes} = [ map { $_->{hash} } @transactions ];
-    return $self;
-}
-
 sub transactions {
     my $self = shift;
     if (@_) {
@@ -42,6 +34,14 @@ sub transactions {
         $_->add_to_block($self) foreach @transactions;
     }
     return $self->{transactions};
+}
+
+sub tx_hashes {
+    my $self = shift;
+    return $self->{tx_hashes} //=
+        $self->{transactions} ?
+            [ map { $_->hash } @{$self->{transactions}} ] :
+            [ map { $_->{hash} } QBitcoin::Transaction->fetch(block_height => $self->height) ];
 }
 
 sub max_db_height {
