@@ -21,7 +21,7 @@ use constant DEBUG_ORM => 1;
 use constant BIN_UNHEX => 0; # does not work for sqlite
 
 use parent 'Exporter';
-our @EXPORT_OK = qw(dbh find create replace update delete IGNORE DEBUG_ORM for_log);
+our @EXPORT_OK = qw(dbh find fetch create replace update delete IGNORE DEBUG_ORM for_log);
 push @EXPORT_OK, keys %{&DB_TYPES};
 our %EXPORT_TAGS = ( types => [ keys %{&DB_TYPES} ] );
 
@@ -66,7 +66,8 @@ sub for_log {
     return $data =~ /^[[:print:]]*$/ ? "'$data'" : "X'" . unpack("H*", $data) . "'";
 }
 
-sub find {
+# Returns raw hashes, not objects, without pre_load(), on_load() and new()
+sub fetch {
     my $class = shift;
     my $args = ref $_[0] ? $_[0] : { @_ };
 
@@ -167,12 +168,24 @@ sub find {
     my @result;
     while (my $res = $sth->fetchrow_hashref()) {
         DEBUG_ORM && Debugf("orm: found {%s}", join(',', map { "'$_':" . (!defined($res->{$_}) ? "null" : $class->FIELDS->{$_} == BINARY ? for_log($res->{$_}) : $class->FIELDS->{$_} == NUMERIC ? $res->{$_} : "'$res->{$_}'") } sort keys %$res));
+        push @result, $res;
+    }
+    DEBUG_ORM && Debugf("orm: found %u entries, errstr [%s]", scalar(@result), dbh->errstr // '');
+    return @result;
+}
+
+sub find {
+    my $class = shift;
+    my $args = ref $_[0] ? $_[0] : { @_ };
+
+    my @result;
+    my $fetch_func = $class->can('fetch') // \&fetch;
+    foreach my $res ($fetch_func->($class, $args)) {
         $res = $class->pre_load($res) if $class->can('pre_load');
         my $item = $class->new($res);
         $item = $item->on_load if $class->can('on_load');
         push @result, $item;
     }
-    DEBUG_ORM && Debugf("orm: found %u entries, errstr [%s]", scalar(@result), dbh->errstr // '');
     return wantarray ? @result : $result[0];
 }
 

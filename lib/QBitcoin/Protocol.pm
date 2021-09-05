@@ -185,9 +185,8 @@ sub cmd_block {
         return 0;
     }
     if ($block->height < (QBitcoin::Block->blockchain_height // -1)) {
-        if (my $stored_block = QBitcoin::Block->find(hash => $block->hash)) {
+        if (QBitcoin::Block->find(hash => $block->hash)) {
             Debugf("Received block %s already known, skip", $block->hash_str);
-            $stored_block->free_block();
             $self->syncing(0);
             $self->request_new_block();
             return 0;
@@ -261,9 +260,8 @@ sub cmd_blocks {
             last;
         }
         if ($block->height < (QBitcoin::Block->blockchain_height // -1)) {
-            if (my $stored_block = QBitcoin::Block->find(hash => $block->hash)) {
+            if (QBitcoin::Block->find(hash => $block->hash)) {
                 Debugf("Received block %s height %u already known, skip", $block->hash_str, $block->height);
-                $stored_block->free_block();
                 next;
             }
         }
@@ -528,7 +526,6 @@ sub request_blocks {
     if (@locators) {
         my $step = 4;
         my $height = $blocks[-1]->height - $step;
-        $_->free_block() foreach @blocks;
         my @height;
         while ($height > 0 && @height < 32) {
             push @height, $height;
@@ -537,9 +534,7 @@ sub request_blocks {
             $height -= $step;
         };
         push @height, 0 if @height < 32;
-        @blocks = QBitcoin::Block->find(-sortby => 'height DESC', height => \@height);
-        push @locators, map { $_->hash } @blocks;
-        $_->free_block() foreach @blocks;
+        push @locators, map { $_->hash } QBitcoin::Block->find(-sortby => 'height DESC', height => \@height);
         $low_height = $height[-1];
     }
     Debugf("Request batch blocks between height %u and %u", $low_height, $top_height);
@@ -576,7 +571,6 @@ sub cmd_getblks {
         my ($block) = QBitcoin::Block->find(hash => [ keys %locators ], -sortby => 'height DESC', -limit => 1);
         if ($block) {
             $height = $block->height;
-            $block->free_block();
         }
         else {
             # No block for any locator found, send only one block with $low_height for continue synchronization
@@ -588,7 +582,6 @@ sub cmd_getblks {
             elsif ($block = QBitcoin::Block->find(height => $low_height)) {
                 Debugf("No block for any locator found, send block %s height %u", $block->hash_str, $block->height);
                 $self->send_message("block", $block->serialize);
-                $block->free_block();
             }
             else {
                 Warningf("I have no block with height %u requested by peer %s", $height, $self->ip);
@@ -598,7 +591,6 @@ sub cmd_getblks {
         foreach my $block (QBitcoin::Block->find(height => { '>' => $height }, -sortby => 'height ASC', -limit => BLOCKS_IN_BATCH)) {
             $response .= $block->serialize;
             $height = $block->height;
-            $block->free_block();
             $sent++;
         }
     }

@@ -10,7 +10,7 @@ use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Config;
 use QBitcoin::Accessors qw(mk_accessors);
-use QBitcoin::ORM qw(find create delete :types);
+use QBitcoin::ORM qw(find fetch create delete :types);
 use QBitcoin::Crypto qw(hash256);
 use QBitcoin::TXO;
 use QBitcoin::Coinbase;

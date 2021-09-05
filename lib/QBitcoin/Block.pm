@@ -5,6 +5,7 @@ use strict;
 use QBitcoin::Const;
 use QBitcoin::ORM qw(:types);
 use QBitcoin::Accessors qw(mk_accessors new);
+use QBitcoin::Transaction;
 
 use Role::Tiny::With;
 with 'QBitcoin::Block::Receive';
@@ -26,7 +27,6 @@ use constant FIELDS => {
 use constant ATTR => qw(
     next_block
     received_from
-    transactions
 );
 
 mk_accessors(keys %{&FIELDS});
@@ -96,15 +96,14 @@ sub pending_tx {
 sub compact_tx {
     my $self = shift;
     $self->{transactions} //= [ map { $self->{tx_by_hash}->{$_} } @{$self->{tx_hashes}} ];
-    delete $self->{tx_hashes};
     delete $self->{tx_by_hash};
 }
 
 sub free_tx {
     my $self = shift;
     # works for pending block too
-    if ($self->transactions) {
-        foreach my $tx (@{$self->transactions}) {
+    if ($self->{transactions}) {
+        foreach my $tx (@{$self->{transactions}}) {
             $tx->del_from_block($self);
         }
     }
@@ -113,12 +112,6 @@ sub free_tx {
             $tx->del_from_block($self);
         }
     }
-}
-
-sub tx_hashes {
-    my $self = shift;
-    return $self->{tx_hashes} //
-        [ map { $_->hash } @{$self->{transactions}} ];
 }
 
 sub sign_data {
