@@ -1,6 +1,7 @@
 package QBitcoin::Log;
 use warnings;
 use strict;
+use feature 'state';
 
 use Exporter qw(import);
 our @EXPORT = qw(Log);
@@ -10,26 +11,46 @@ use POSIX qw(strftime);
 use Time::HiRes;
 use QBitcoin::Config;
 
-openlog('qbitcoin', 'nofatal,pid', LOG_LOCAL0) unless $ENV{LOG_STDOUT};
+my @indent;
+my %level_numeric;
+my $loglevel;
 
-my %indent;
+$indent[&LOG_CRIT] = $indent[&LOG_ERR] = "! ";
+$indent[&LOG_WARNING] = "* ";
+$indent[&LOG_NOTICE] = "+ ";
+$indent[&LOG_INFO] = "- ";
+$indent[&LOG_DEBUG] = "  ";
+
+sub init {
+    $loglevel = $config->{loglevel} ?
+        $level_numeric{$config->{loglevel}} // die "Incorrect loglevel [$config->{loglevel}]\n" :
+        $config->{debug} ? LOG_DEBUG : LOG_INFO;
+    $config->{log} //= 'syslog';
+    if ($config->{log} eq 'syslog') {
+        openlog('qbitcoin', 'nofatal,pid', LOG_LOCAL0);
+    }
+}
 
 sub Logf {
     my ($prio, $format, @args) = @_;
-    if ($config->{verbose}) {
+    init() unless defined($loglevel);
+    if (($config->{verbose} && $prio > LOG_DEBUG) || $config->{debug}) {
         my $t = Time::HiRes::time();
-        printf "%s.%03d %s$format\n", strftime("%F %T", localtime($t)), ($t-int($t)) * 1000, $indent{$prio}, @args;
+        printf "%s.%03d %s$format\n", strftime("%F %T", localtime($t)), ($t-int($t)) * 1000, $indent[$prio], @args;
     }
-    my $log = $config->{log} // 'syslog';
-    if ($log eq 'syslog') {
-        syslog($prio, $format, @args);
-    }
-    else {
-        open my $fh, '>>', $log
-            or die "Can't open log file [$log]\n";
-        my $t = Time::HiRes::time();
-        printf $fh "%s.%03d %s$format\n", strftime("%F %T", localtime($t)), ($t-int($t)) * 1000, $indent{$prio}, @args;
-        close $fh;
+    if ($prio >= $loglevel) {
+        state $log = $config->{log};
+        if ($log eq 'syslog') {
+            state $syslog = openlog('qbitcoin', 'nofatal,pid', LOG_LOCAL0); # call once before first syslog()
+            syslog($prio, $format, @args);
+        }
+        elsif ($prio >= $loglevel) {
+            open my $fh, '>>', $log
+                or die "Can't open log file [$log]\n";
+            my $t = Time::HiRes::time();
+            printf $fh "%s.%03d %s$format\n", strftime("%F %T", localtime($t)), ($t-int($t)) * 1000, $indent[$prio], @args;
+            close $fh;
+        }
     }
 }
 
@@ -43,18 +64,16 @@ sub Log {
 
 # generate functions Debug(), Debugf(), Info(), Infof(), ...
 foreach my $level (reverse qw(debug info notice warning err crit)) {
-    push @EXPORT, 'LOG_' . uc $level;
+    my $level_const = 'LOG_' . uc $level;
+    push @EXPORT, $level_const;
+    my $level_num = Sys::Syslog->$level_const;
+    $level_numeric{$level} = $level_num;
     my $func = ucfirst $level;
     my $funcf = $func . 'f';
     push @EXPORT, $func, $funcf;
     no strict 'refs';
-    *$func = sub { Log($level, @_) };
-    *$funcf = sub { Logf($level, @_) };
+    *$func  = sub { Log ($level_num, @_) };
+    *$funcf = sub { Logf($level_num, @_) };
 }
-$indent{crit} = $indent{err} = "! ";
-$indent{warning} = "* ";
-$indent{notice} = "+ ";
-$indent{info} = "- ";
-$indent{debug} = "  ";
 
 1;

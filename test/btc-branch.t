@@ -14,7 +14,7 @@ use QBitcoin::Config;
 use Bitcoin::Protocol;
 use Bitcoin::Block;
 
-#$config->{verbose} = 1;
+#$config->{debug} = 1;
 
 # hash, prev_hash, weight [, self_weight]
 send_blocks([

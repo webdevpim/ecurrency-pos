@@ -20,7 +20,7 @@ use QBitcoin::TXO;
 use QBitcoin::Generate;
 use Bitcoin::Serialized;
 
-#$config->{verbose} = 1;
+#$config->{debug} = 1;
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });

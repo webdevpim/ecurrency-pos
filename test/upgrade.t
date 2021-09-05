@@ -17,7 +17,7 @@ use Bitcoin::Block;
 use Bitcoin::Serialized;
 use Bitcoin::Transaction;
 
-#$config->{verbose} = 1;
+#$config->{debug} = 1;
 
 my $value = 100000; # random value
 my $open_script = "\x10\x11"; # random string

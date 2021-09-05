@@ -13,7 +13,7 @@ use QBitcoin::Script qw(script_eval pushdata);
 use QBitcoin::Crypto qw(signature pubkey_by_privkey hash160);
 use Crypt::PK::ECC;
 
-$config->{verbose} = 0;
+$config->{debug} = 0;
 
 my @scripts_ok = (
     [ op_1      => OP_1 ],

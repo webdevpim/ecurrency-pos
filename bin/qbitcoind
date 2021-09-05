@@ -19,6 +19,7 @@ sub main {
         'peer|p=s'      => \@peer_hosts,
         'btcnode|B=s'   => \@btc_hosts,
         'verbose|v'     => \$opts{verbose},
+        'debug|d'       => \$opts{debug},
         'bind|b=s'      => \$opts{bind},
         'daemonize|D'   => \$opts{daemonize},
         'port|P=s'      => \$opts{port},
@@ -31,6 +32,7 @@ sub main {
         'database=s'    => \$opts{database},
         'dbi=s'         => \$opts{dbi},
         'log=s'         => \$opts{log},
+        'loglevel=s'    => \$opts{loglevel},
         'config|f=s'    => \$conffile,
     )) {
         select STDERR;
@@ -49,9 +51,15 @@ sub main {
     $config->set(peer    => @peer_hosts) if @peer_hosts;
     $config->set(btcnode => @btc_hosts)  if @btc_hosts;
 
+    QBitcoin::Log->init();
+
     if ($config->{daemonize}) {
         if ($opts{verbose}) {
             print STDERR "Options -D (daemonize) and -v (verbose) are mutually exclusive\n";
+            return 1;
+        }
+        if ($opts{debug} && $config->{loglevel}) {
+            print STDERR "Options -D (daemonize) and -d (debug) are mutually exclusive\n";
             return 1;
         }
         $config->set(verbose => 0);
@@ -82,6 +90,7 @@ sub usage {
     print "Options:\n";
     print "   -h, -? --help               - print this help message and exit,\n";
     print "   -v, --verbose               - output logs to stdout,\n";
+    print "   -d, --debug                 - output debug info,\n";
     print "   -f, --config <file>         - config file, 'key = value' format (default " . CONFIG_DIR . "/" . CONFIG_NAME . "),\n";
     print "   -p, --peer <host[:port]>    - connect to peer <host> and <port> (default port " . PORT . "),\n";
     if (UPGRADE_POW) {
@@ -91,7 +100,8 @@ sub usage {
     print "   -J, --rpc <addr[:port]>     - respond to JSON RPC API on <address> and <port> (default " . RPC_ADDR . ":" . RPC_PORT . "),\n";
     print "   -g, --generate              - generate blocks (private key must be stored in the database),\n";
     print "   -G, --genesis               - run as genesis node, do not need to synchronize with other nodes for authoritative answers,\n";
-    print "   --log <file>                - write log to <file>, 'syslog' for syslog (default).\n";
+    print "   --log <file>                - write log to <file>, 'syslog' for syslog (default),\n";
+    print "   --loglevel <prio>           - set log level: 'debug', 'info' (default), 'notice', 'warning', 'err', 'crit'.\n";
 }
 
 exit main();
