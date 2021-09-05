@@ -185,8 +185,9 @@ sub cmd_block {
         return 0;
     }
     if ($block->height < (QBitcoin::Block->blockchain_height // -1)) {
-        if (QBitcoin::Block->find(hash => $block->hash)) {
+        if (my $stored_block = QBitcoin::Block->find(hash => $block->hash)) {
             Debugf("Received block %s already known, skip", $block->hash_str);
+            $stored_block->free_block();
             $self->syncing(0);
             $self->request_new_block();
             return 0;
