@@ -199,16 +199,23 @@ sub cmd_block {
     if ($block->height && !$block->prev_block_load) {
         Debugf("Received block %s has unknown ancestor %s, request it",
             $block->hash_str, $block->hash_str($block->prev_hash));
-        $self->send_message("sendblock", pack("V", $block->height-1));
-        $PENDING_BLOCK_BLOCK{$block->prev_hash}->{$block->hash} = 1;
-        add_pending_block($block);
+        if ($block->height <= (QBitcoin::Block->blockchain_height // -1) - 3) {
+            # deep rollback, request batch of new blocks using locators
+            $self->request_blocks($block->height-1);
+        }
+        else {
+            $self->_block_load_transactions($block);
+            $self->send_message("sendblock", pack("V", $block->height-1));
+            $PENDING_BLOCK_BLOCK{$block->prev_hash}->{$block->hash} = 1;
+            add_pending_block($block);
+        }
         $self->syncing(1);
         return 0;
     }
 
     $self->_block_load_transactions($block);
+    $self->syncing(0);
     if (!$block->pending_tx) {
-        $self->syncing(0);
         $block->compact_tx();
         if ($block->receive() == 0) {
             $block = $self->process_pending_blocks($block);
@@ -219,6 +226,106 @@ sub cmd_block {
             drop_pending_block($block);
             return -1;
         }
+    }
+    return 0;
+}
+
+# Almost same as "block", but batch of blocks, and do not request next block after each processed
+sub cmd_blocks {
+    my $self = shift;
+    my ($blocks_data) = @_;
+    if (length($blocks_data) == 0) {
+        Warningf("Bad (empty) blocks params from peer %s", $self->ip);
+        $self->abort("incorrect_params");
+        return -1;
+    }
+    my $data = Bitcoin::Serialized->new($blocks_data);
+    my $num_blocks = unpack("C", $data->get(1));
+    my $block;
+    my $got_new;
+    foreach my $num (1 .. $num_blocks) {
+        my $prev_block = $block;
+        $block = QBitcoin::Block->deserialize($data);
+        if (!$block) {
+            Warningf("Bad blocks data length from peer %s", $self->ip);
+            $self->abort("bad_block_data");
+            return -1;
+        }
+        Infof("Receive blocks height %u..%u", $block->height, $block->height+$num_blocks-1) if $num == 1;
+        if (QBitcoin::Block->block_pool($block->height, $block->hash)) {
+            Debugf("Received block %s height %u already in block_pool, skip", $block->hash_str, $block->height);
+            next;
+        }
+        if ($PENDING_BLOCK{$block->hash}) {
+            Debugf("Received block %s height %u already pending, skip", $block->hash_str, $block->height);
+            last;
+        }
+        if ($block->height < (QBitcoin::Block->blockchain_height // -1)) {
+            if (my $stored_block = QBitcoin::Block->find(hash => $block->hash)) {
+                Debugf("Received block %s height %u already known, skip", $block->hash_str, $block->height);
+                $stored_block->free_block();
+                next;
+            }
+        }
+
+        $block->received_from = $self;
+        if ($num > 1) {
+            if ($block->prev_hash ne $prev_block->hash) {
+                Warningf("Received blocks are not in chain from peer %s", $self->ip);
+                $self->abort("bad_block_data");
+                return -1;
+            }
+            if (!$block->prev_block_load) {
+                # some of ancestor blocks are pending tx?
+                $self->_block_load_transactions($block);
+                $PENDING_BLOCK_BLOCK{$block->prev_hash}->{$block->hash} = 1;
+                add_pending_block($block);
+                $got_new++;
+                next;
+            }
+        }
+        elsif ($block->height && !$block->prev_block_load) {
+            Debugf("Received block %s height %u has unknown ancestor %s, request it",
+                $block->hash_str, $block->height, $block->hash_str($block->prev_hash));
+            if ($block->height <= (QBitcoin::Block->blockchain_height // -1) - 3) {
+                # deep rollback, request batch of new blocks using locators
+                $self->request_blocks($block->height-1);
+            }
+            else {
+                $self->send_message("sendblock", pack("V", $block->height-1));
+                $self->_block_load_transactions($block);
+                $PENDING_BLOCK_BLOCK{$block->prev_hash}->{$block->hash} = 1;
+                add_pending_block($block);
+            }
+            $self->syncing(1);
+            return 0;
+        }
+
+        $self->_block_load_transactions($block);
+        if (!$block->pending_tx) {
+            $block->compact_tx();
+            if ($block->receive() == 0) {
+                $block = $self->process_pending_blocks($block);
+            }
+            else {
+                drop_pending_block($block);
+                return -1;
+            }
+        }
+        $got_new++;
+    }
+    $self->syncing(0);
+    if ($got_new) {
+        if ($num_blocks == BLOCKS_IN_BATCH && $block->height < height_by_time(time())) {
+            $self->send_message("getblks", pack("Vv", $block->height+1, 1) . $block->hash);
+            $self->syncing(1);
+        }
+        elsif (!$PENDING_BLOCK{$block->hash}) { # Do not request new blocks if we're waiting for requested transactions
+            $self->request_new_block($block->height+1);
+        }
+    }
+    else {
+        $self->request_new_block();
     }
     return 0;
 }
@@ -235,7 +342,6 @@ sub process_pending_blocks {
     foreach my $hash (keys %$pending) {
         my $block_next = $PENDING_BLOCK{$hash};
         $block_next->prev_block($block);
-        $self->_block_load_transactions($block_next);
         next if $block_next->pending_tx;
         delete $PENDING_BLOCK{$hash};
         Debugf("Process block %s height %u pending for received %s", $block_next->hash_str, $block_next->height, $block->hash_str);
@@ -293,21 +399,23 @@ sub add_pending_block {
 sub _block_load_transactions {
     my $self = shift;
     my ($block) = @_;
-    foreach my $tx_hash (@{$block->tx_hashes}) {
-        my $transaction = QBitcoin::Transaction->get_by_hash($tx_hash);
-        if ($transaction) {
-            $block->add_tx($transaction);
+    if (!$block->pending_tx) {
+        foreach my $tx_hash (@{$block->tx_hashes}) {
+            my $transaction = QBitcoin::Transaction->get_by_hash($tx_hash);
+            if ($transaction) {
+                $block->add_tx($transaction);
+            }
+            else {
+                $block->pending_tx($tx_hash);
+                $PENDING_TX_BLOCK{$tx_hash}->{$block->hash} = 1;
+                Debugf("Set pending_tx %s block %s height %u", unpack("H*", substr($tx_hash, 0, 4)), $block->hash_str, $block->height);
+                $self->request_tx($tx_hash);
+            }
         }
-        else {
-            $block->pending_tx($tx_hash);
-            $PENDING_TX_BLOCK{$tx_hash}->{$block->hash} = 1;
-            Debugf("Set pending_tx %s block %s", unpack("H*", substr($tx_hash, 0, 4)), $block->hash_str);
-            $self->request_tx($tx_hash);
+        if ($block->pending_tx) {
+            add_pending_block($block);
+            return 0;
         }
-    }
-    if ($block->pending_tx) {
-        add_pending_block($block);
-        return 0;
     }
     return $block;
 }
@@ -368,7 +476,6 @@ sub block_pending_tx {
             $block->add_tx($tx);
             if (!$block->pending_tx && (!$block->height || !$PENDING_BLOCK_BLOCK{$block->prev_hash})) {
                 delete $PENDING_BLOCK{$block->hash};
-                $self->syncing(0);
                 $block->compact_tx();
                 if ($block->receive() == 0) {
                     $block = $self->process_pending_blocks($block);
@@ -391,17 +498,127 @@ sub request_new_block {
     if (!$self->syncing) {
         my $best_weight = QBitcoin::Block->best_weight;
         my $best_height = QBitcoin::Block->blockchain_height // -1;
+        my $current_height = height_by_time(time());
         $height //= $best_height+1;
-        $height-- if $height > height_by_time(time());
+        $height-- if $height > $current_height;
         if (($self->has_weight // -1) > $best_weight ||
             (($self->has_weight // -1) == $best_weight && $height > $best_height)) {
-            $self->send_message("sendblock", pack("V", $height));
-            if (($self->has_weight // -1) > $best_weight) { # otherwise remote may have no such block, no syncing
+            if ($height < $current_height - 5 && ($self->has_weight // -1) > $best_weight) {
+                $self->request_blocks($height);
                 $self->syncing(1);
-                Debugf("Remote %s have block weight more than our, request block %u", $self->ip, $height);
+            }
+            else {
+                if (($self->has_weight // -1) > $best_weight) { # otherwise remote may have no such block, no syncing
+                    $self->syncing(1);
+                    Debugf("Remote %s have block weight more than our, request block %u", $self->ip, $height);
+                }
+                $self->send_message("sendblock", pack("V", $height));
             }
         }
     }
+}
+
+# Request batch of blocks using locators (hashes of our blocks in the best branch)
+sub request_blocks {
+    my $self = shift;
+    my ($top_height) = @_;
+    my @blocks = QBitcoin::Block->find(height => { '<=' => $top_height }, -sortby => 'height DESC', -limit => 10);
+    my @locators = map { $_->hash } @blocks;
+    my $low_height = $top_height;
+    if (@locators) {
+        my $step = 4;
+        my $height = $blocks[-1]->height - $step;
+        $_->free_block() foreach @blocks;
+        my @height;
+        while ($height > 0 && @height < 32) {
+            push @height, $height;
+            $step *= 2;
+            $step = BLOCK_LOCATOR_INTERVAL if $step > BLOCK_LOCATOR_INTERVAL;
+            $height -= $step;
+        };
+        push @height, 0 if @height < 32;
+        @blocks = QBitcoin::Block->find(-sortby => 'height DESC', height => \@height);
+        push @locators, map { $_->hash } @blocks;
+        $_->free_block() foreach @blocks;
+        $low_height = $height[-1];
+    }
+    Debugf("Request batch blocks between height %u and %u", $low_height, $top_height);
+    $self->send_message("getblks", pack("Vv", $low_height, scalar(@locators)) . join("", @locators));
+}
+
+sub cmd_getblks {
+    my $self = shift;
+    my ($data) = @_;
+    my $datalen = length($data);
+    if ($datalen < 6) {
+        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        $self->abort("incorrect_params");
+        return -1;
+    }
+    my ($low_height, $locators) = unpack("Vv", substr($data, 0, 6));
+    if ($datalen != 6+32*$locators) {
+        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        $self->abort("incorrect_params");
+        return -1;
+    }
+    my %locators = map { substr($data, 6+$_*32, 32) => 1 } 0 .. $locators-1;
+    # Loop by incore levels is not good but better than loop by locators
+    my $height;
+    my $min_incore_height = QBitcoin::Block->min_incore_height;
+    for ($height = QBitcoin::Block->blockchain_height; $height >= $min_incore_height; $height--) {
+        my $block = QBitcoin::Block->best_block($height);
+        last if $locators{$block->hash};
+    }
+    my $sent = 0;
+    my $response = "";
+    if ($height < $min_incore_height) {
+        # No matched blocks in memory pool, search by database
+        my ($block) = QBitcoin::Block->find(hash => [ keys %locators ], -sortby => 'height DESC', -limit => 1);
+        if ($block) {
+            $height = $block->height;
+            $block->free_block();
+        }
+        else {
+            # No block for any locator found, send only one block with $low_height for continue synchronization
+            $block = QBitcoin::Block->best_block($low_height);
+            if ($block) {
+                Debugf("No block for any locator found, send block %s height %u", $block->hash_str, $block->height);
+                $self->send_message("block", $block->serialize);
+            }
+            elsif ($block = QBitcoin::Block->find(height => $low_height)) {
+                Debugf("No block for any locator found, send block %s height %u", $block->hash_str, $block->height);
+                $self->send_message("block", $block->serialize);
+                $block->free_block();
+            }
+            else {
+                Warningf("I have no block with height %u requested by peer %s", $height, $self->ip);
+            }
+            return 0;
+        }
+        foreach my $block (QBitcoin::Block->find(height => { '>' => $height }, -sortby => 'height ASC', -limit => BLOCKS_IN_BATCH)) {
+            $response .= $block->serialize;
+            $height = $block->height;
+            $block->free_block();
+            $sent++;
+        }
+    }
+    my $max_height = QBitcoin::Block->blockchain_height;
+    while ($height++ < $max_height && $sent < BLOCKS_IN_BATCH) {
+        my $block = QBitcoin::Block->best_block($height);
+        if ($block) {
+            $response .= $block->serialize;
+            $sent++;
+        }
+        else {
+            Warningf("Can't find best block height %u", $height--);
+            last;
+        }
+    }
+    if ($sent) {
+        Infof("Send blocks height %u .. %u to %s", $height-$sent, $height-1, $self->ip);
+        $self->send_message("blocks", pack("C", $sent) . $response);
+    }
+    return 0;
 }
 
 sub cmd_ihave {
