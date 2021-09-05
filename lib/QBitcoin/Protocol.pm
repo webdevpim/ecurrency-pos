@@ -229,6 +229,8 @@ sub process_pending_blocks {
 
     my $pending = delete $PENDING_BLOCK_BLOCK{$block->hash}
         or return $block;
+    # TODO: change recursion to loop by block chain to avoid too deep recursion
+    my $ret_block = $block;
     foreach my $hash (keys %$pending) {
         my $block_next = $PENDING_BLOCK{$hash};
         $block_next->prev_block($block);
@@ -238,14 +240,13 @@ sub process_pending_blocks {
         Debugf("Process block %s height %u pending for received %s", $block_next->hash_str, $block_next->height, $block->hash_str);
         $block_next->compact_tx();
         if ($block_next->receive() == 0) {
-            return $self->process_pending_blocks($block_next) // $block_next;
+            $ret_block = $self->process_pending_blocks($block_next);
         }
         else {
             drop_pending_block($block_next);
-            return undef;
         }
     }
-    return $block;
+    return $ret_block;
 }
 
 sub drop_pending_block {
