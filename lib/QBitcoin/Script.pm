@@ -195,26 +195,18 @@ sub is_true($) {
 
 sub pushdatan($$) {
     my ($bytes, $state) = @_;
-    my ($script, $stack, $ifstate) = @$state;
-    length($script) >= $bytes
-        or return 0;
-    my $data = substr($state->script, 0, $bytes, "");
-    return unless $ifstate;
-    push @$stack, $data;
+    my $data = $state->get_script($bytes) // return 0;
+    return unless $state->ifstate;
+    push @{$state->stack}, $data;
     return undef;
 }
 
 sub pushdatac($$$) {
     my ($c, $unpack, $state) = @_;
-    my ($script, $stack, $ifstate) = @$state;
-    length($script) >= $c
-        or return 0;
-    my $bytes = unpack($unpack, substr($state->script, 0, $c, ""));
-    length($script) >= $bytes
-        or return 0;
-    my $data = substr($state->script, 0, $bytes, "");
-    return unless $ifstate;
-    push @$stack, $data;
+    my $bytes = unpack($unpack, $state->get_script($c) // return 0);
+    my $data = $state->get_script($bytes) // return 0;
+    return unless $state->ifstate;
+    push @{$state->stack}, $data;
     return undef;
 }
 
@@ -303,8 +295,7 @@ sub cmd_equalverify($) {
 
 sub execute {
     my ($state) = @_;
-    while (length($state->script)) {
-        my $cmd_code = substr($state->script, 0, 1, "");
+    while (defined(my $cmd_code = $state->get_script(1))) {
         if (my $cmd_func = $OP_CMD[ord($cmd_code)]) {
             my $res = $cmd_func->($state);
             return $res if defined $res;
@@ -326,6 +317,7 @@ sub script_eval($$$$) {
 
     # should we check/clear the if-stack here?
     $state->script = $open_script;
+    $state->cp = 0;
     $res = execute($state);
     return $res if defined($res);
 
