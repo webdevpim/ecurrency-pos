@@ -25,7 +25,7 @@ sub init {
     $loglevel = $config->{loglevel} ?
         $level_numeric{$config->{loglevel}} // die "Incorrect loglevel [$config->{loglevel}]\n" :
         $config->{debug} ? LOG_DEBUG : LOG_INFO;
-    $config->{log} //= 'syslog';
+    $config->set(log => 'syslog') unless defined $config->{log};
     if ($config->{log} eq 'syslog') {
         openlog('qbitcoin', 'nofatal,pid', LOG_LOCAL0);
     }
@@ -34,17 +34,17 @@ sub init {
 sub Logf {
     my ($prio, $format, @args) = @_;
     init() unless defined($loglevel);
-    if (($config->{verbose} && $prio > LOG_DEBUG) || $config->{debug}) {
+    if (($config->{verbose} && $prio < LOG_DEBUG) || $config->{debug}) {
         my $t = Time::HiRes::time();
         printf "%s.%03d %s$format\n", strftime("%F %T", localtime($t)), ($t-int($t)) * 1000, $indent[$prio], @args;
     }
-    if ($prio >= $loglevel) {
+    if ($prio <= $loglevel) {
         state $log = $config->{log};
         if ($log eq 'syslog') {
             state $syslog = openlog('qbitcoin', 'nofatal,pid', LOG_LOCAL0); # call once before first syslog()
             syslog($prio, $format, @args);
         }
-        elsif ($prio >= $loglevel) {
+        else {
             open my $fh, '>>', $log
                 or die "Can't open log file [$log]\n";
             my $t = Time::HiRes::time();
