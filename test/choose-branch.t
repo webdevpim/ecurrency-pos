@@ -116,7 +116,7 @@ sub send_blocks {
     }
     elsif (defined($pid)) {
         # child
-        my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED);
+        my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED, ip => "127.0.0.1");
         foreach my $block_data (@$blocks) {
             my $block = QBitcoin::Block->new(
                 height       => $block_data->[0],
@@ -127,7 +127,6 @@ sub send_blocks {
                 merkle_root  => ZERO_HASH,
                 transactions => [],
             );
-            $peer->has_weight = $block->weight;
             my $block_data = $block->serialize;
             $block_hash = $block->hash;
             $peer->cmd_block($block_data);
