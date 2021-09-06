@@ -204,6 +204,24 @@ sub pushdatan($$) {
     return undef;
 }
 
+sub pushdatac($$$) {
+    my ($c, $unpack, $state) = @_;
+    my ($script, $stack, $ifstate) = @$state;
+    length($script) >= $c
+        or return 0;
+    my $bytes = unpack($unpack, substr($state->script, 0, $c, ""));
+    length($script) >= $bytes
+        or return 0;
+    my $data = substr($state->script, 0, $bytes, "");
+    return unless $ifstate;
+    push @$stack, $data;
+    return undef;
+}
+
+sub cmd_pushdata1 { pushdatac(1, "C", @_) }
+sub cmd_pushdata2 { pushdatac(2, "v", @_) }
+sub cmd_pushdata4 { pushdatac(4, "V", @_) }
+
 sub cmd_dup($) {
     my ($state) = @_;
     return unless $state->ifstate;
