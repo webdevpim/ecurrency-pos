@@ -34,27 +34,30 @@ sub drop_pending {
     # and drop all blocks pending by this one
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
 
-    Debugf("Drop pending block %s height %u", $self->hash_str, $self->height);
     if (my $pending = $PENDING_BLOCK_BLOCK{$self->hash}) {
+        # TODO: Change recursion to loop by block chain
         foreach my $next_block (keys %$pending) {
             $PENDING_BLOCK{$next_block}->drop_pending;
         }
     }
-    if ($self->pending_tx) {
-        foreach my $tx_hash ($self->pending_tx) {
-            delete $PENDING_TX_BLOCK{$tx_hash}->{$self->hash};
-            if (!%{$PENDING_TX_BLOCK{$tx_hash}}) {
-                delete $PENDING_TX_BLOCK{$tx_hash};
+    if ($PENDING_BLOCK{$self->hash}) {
+        Debugf("Drop pending block %s height %u", $self->hash_str, $self->height);
+        if ($self->pending_tx) {
+            foreach my $tx_hash ($self->pending_tx) {
+                delete $PENDING_TX_BLOCK{$tx_hash}->{$self->hash};
+                if (!%{$PENDING_TX_BLOCK{$tx_hash}}) {
+                    delete $PENDING_TX_BLOCK{$tx_hash};
+                }
             }
         }
-    }
-    if ($self->height && $PENDING_BLOCK_BLOCK{$self->prev_hash}) {
-        delete $PENDING_BLOCK_BLOCK{$self->prev_hash}->{$self->hash};
-        if (!%{$PENDING_BLOCK_BLOCK{$self->prev_hash}}) {
-            delete $PENDING_BLOCK_BLOCK{$self->prev_hash};
+        if ($self->height && $PENDING_BLOCK_BLOCK{$self->prev_hash}) {
+            delete $PENDING_BLOCK_BLOCK{$self->prev_hash}->{$self->hash};
+            if (!%{$PENDING_BLOCK_BLOCK{$self->prev_hash}}) {
+                delete $PENDING_BLOCK_BLOCK{$self->prev_hash};
+            }
         }
+        $self->free_tx();
     }
-    $self->free_tx();
     delete $PENDING_BLOCK{$self->hash};
 }
 

@@ -370,6 +370,7 @@ sub free_block {
     foreach my $tx (@{$block->transactions}) {
         $tx->del_from_block($block);
     }
+    $block->drop_pending();
 }
 
 sub drop_branch {
