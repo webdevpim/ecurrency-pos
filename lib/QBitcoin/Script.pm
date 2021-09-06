@@ -293,6 +293,24 @@ sub cmd_equalverify($) {
     return $data1 eq $data2 ? undef : 0;
 }
 
+sub cmd_toaltstack($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    @$stack or return 0;
+    push @{$state->altstack}, pop @$stack;
+    return undef;
+}
+
+sub cmd_fromaltstack($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $altstack = $state->altstack;
+    @$altstack or return 0;
+    push @{$state->stack}, pop @$altstack;
+    return undef;
+}
+
 sub execute {
     my ($state) = @_;
     while (defined(my $cmd_code = $state->get_script(1))) {
