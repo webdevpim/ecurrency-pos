@@ -456,7 +456,7 @@ sub process_tx {
             $tx->announce($self);
         }
     }
-    elsif (!$tx->in_blocks) {
+    elsif (!$tx->in_blocks && !$tx->block_height) {
         Debugf("Ignore stake transactions %s not related to any known block", $tx->hash_str);
         $tx->drop();
     }
