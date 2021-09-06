@@ -160,7 +160,7 @@ foreach my $opcode (keys %{&OPCODES}) {
     }
 }
 foreach my $opcode (0x01 .. 0x4b) {
-    $OP_CMD[$opcode] = sub { cmd_pushdatan($opcode, @_) };
+    $OP_CMD[$opcode] = sub { pushdatan($opcode, @_) };
 }
 
 sub unimplemented($$) {
@@ -193,7 +193,7 @@ sub is_true($) {
     return $data !~ /^\x80?\x00*\z/;
 }
 
-sub cmd_pushdatan($$) {
+sub pushdatan($$) {
     my ($bytes, $state) = @_;
     my ($script, $stack, $ifstate) = @$state;
     length($script) >= $bytes
