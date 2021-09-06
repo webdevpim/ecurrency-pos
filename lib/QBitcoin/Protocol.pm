@@ -34,7 +34,6 @@ use strict;
 # If our last known block height less than height_by_time, then batch request all blocks with height from last known to max available
 
 use parent 'QBitcoin::Protocol::Common';
-use Tie::IxHash;
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
@@ -54,11 +53,6 @@ use constant {
 use constant {
     REJECT_INVALID => 1,
 };
-
-my %PENDING_BLOCK;
-tie(%PENDING_BLOCK, 'Tie::IxHash'); # Ordered by age
-my %PENDING_TX_BLOCK;
-my %PENDING_BLOCK_BLOCK;
 
 sub type() { "QBitcoin" }
 
@@ -97,8 +91,7 @@ sub cmd_verack {
 
 sub request_tx {
     my $self = shift;
-    my ($hash) = @_;
-    $self->send_message("sendtx", $hash);
+    $self->send_message("sendtx", $_) foreach @_;
 }
 
 sub announce_tx {
@@ -178,7 +171,7 @@ sub cmd_block {
         $self->request_new_block();
         return 0;
     }
-    if ($PENDING_BLOCK{$block->hash}) {
+    if ($block->is_pending) {
         Debugf("Received block %s already pending, skip", $block->hash_str);
         $self->syncing(0);
         $self->request_new_block($block->height-1);
@@ -194,6 +187,7 @@ sub cmd_block {
     }
 
     $block->received_from = $self;
+    $self->has_weight = $block->weight if ($self->has_weight // -1) < $block->weight;
 
     if ($block->height && !$block->prev_block_load) {
         Debugf("Received block %s has unknown ancestor %s, request it",
@@ -203,26 +197,27 @@ sub cmd_block {
             $self->request_blocks($block->height-1);
         }
         else {
-            $self->_block_load_transactions($block);
+            $block->load_transactions;
+            $self->request_tx($block->pending_tx);
             $self->send_message("sendblock", pack("V", $block->height-1));
-            $PENDING_BLOCK_BLOCK{$block->prev_hash}->{$block->hash} = 1;
-            add_pending_block($block);
+            $block->add_pending_block();
         }
         $self->syncing(1);
         return 0;
     }
 
-    $self->_block_load_transactions($block);
+    $block->load_transactions($block);
+    $self->request_tx($block->pending_tx);
     $self->syncing(0);
     if (!$block->pending_tx) {
         $block->compact_tx();
         if ($block->receive() == 0) {
-            $block = $self->process_pending_blocks($block);
+            $block = $block->process_pending();
             $self->request_new_block($block->height+1);
             return 0;
         }
         else {
-            drop_pending_block($block);
+            $block->drop_pending();
             return -1;
         }
     }
@@ -255,7 +250,7 @@ sub cmd_blocks {
             Debugf("Received block %s height %u already in block_pool, skip", $block->hash_str, $block->height);
             next;
         }
-        if ($PENDING_BLOCK{$block->hash}) {
+        if ($block->is_pending) {
             Debugf("Received block %s height %u already pending, skip", $block->hash_str, $block->height);
             last;
         }
@@ -267,6 +262,8 @@ sub cmd_blocks {
         }
 
         $block->received_from = $self;
+        $self->has_weight = $block->weight if ($self->has_weight // -1) < $block->weight;
+
         if ($num > 1) {
             if ($block->prev_hash ne $prev_block->hash) {
                 Warningf("Received blocks are not in chain from peer %s", $self->ip);
@@ -275,9 +272,9 @@ sub cmd_blocks {
             }
             if (!$block->prev_block_load) {
                 # some of ancestor blocks are pending tx?
-                $self->_block_load_transactions($block);
-                $PENDING_BLOCK_BLOCK{$block->prev_hash}->{$block->hash} = 1;
-                add_pending_block($block);
+                $block->load_transactions();
+                $self->request_tx($block->pending_tx);
+                $block->add_pending_block();
                 $got_new++;
                 next;
             }
@@ -291,22 +288,25 @@ sub cmd_blocks {
             }
             else {
                 $self->send_message("sendblock", pack("V", $block->height-1));
-                $self->_block_load_transactions($block);
-                $PENDING_BLOCK_BLOCK{$block->prev_hash}->{$block->hash} = 1;
-                add_pending_block($block);
+                $block->load_transactions();
+                $self->request_tx($block->pending_tx);
+                $block->add_pending_block();
             }
             $self->syncing(1);
             return 0;
         }
 
-        $self->_block_load_transactions($block);
-        if (!$block->pending_tx) {
+        $block->load_transactions();
+        if ($block->pending_tx) {
+            $self->request_tx($block->pending_tx);
+        }
+        else {
             $block->compact_tx();
             if ($block->receive() == 0) {
-                $block = $self->process_pending_blocks($block);
+                $block = $block->process_pending();
             }
             else {
-                drop_pending_block($block);
+                $block->drop_pending();
                 return -1;
             }
         }
@@ -318,7 +318,7 @@ sub cmd_blocks {
             $self->send_message("getblks", pack("Vv", $block->height+1, 1) . $block->hash);
             $self->syncing(1);
         }
-        elsif (!$PENDING_BLOCK{$block->hash}) { # Do not request new blocks if we're waiting for requested transactions
+        elsif (!$block->is_pending) { # Do not request new blocks if we're waiting for requested transactions
             $self->request_new_block($block->height+1);
         }
     }
@@ -326,96 +326,6 @@ sub cmd_blocks {
         $self->request_new_block();
     }
     return 0;
-}
-
-sub process_pending_blocks {
-    no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
-    my $self = shift;
-    my ($block) = @_;
-
-    my $pending = delete $PENDING_BLOCK_BLOCK{$block->hash}
-        or return $block;
-    # TODO: change recursion to loop by block chain to avoid too deep recursion
-    my $ret_block = $block;
-    foreach my $hash (keys %$pending) {
-        my $block_next = $PENDING_BLOCK{$hash};
-        $block_next->prev_block($block);
-        next if $block_next->pending_tx;
-        delete $PENDING_BLOCK{$hash};
-        Debugf("Process block %s height %u pending for received %s", $block_next->hash_str, $block_next->height, $block->hash_str);
-        $block_next->compact_tx();
-        if ($block_next->receive() == 0) {
-            $ret_block = $self->process_pending_blocks($block_next);
-        }
-        else {
-            drop_pending_block($block_next);
-        }
-    }
-    return $ret_block;
-}
-
-sub drop_pending_block {
-    # and drop all blocks pending by this one
-    no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
-    my ($block) = @_;
-
-    Debugf("Drop pending block %s height %u", $block->hash_str, $block->height);
-    if (my $pending = $PENDING_BLOCK_BLOCK{$block->hash}) {
-        foreach my $next_block (keys %$pending) {
-            drop_pending_block($PENDING_BLOCK{$next_block});
-        }
-    }
-    if ($block->pending_tx) {
-        foreach my $tx_hash (@{$block->pending_tx}) {
-            delete $PENDING_TX_BLOCK{$tx_hash}->{$block->hash};
-            if (!%{$PENDING_TX_BLOCK{$tx_hash}}) {
-                delete $PENDING_TX_BLOCK{$tx_hash};
-            }
-        }
-    }
-    if ($block->height && $PENDING_BLOCK_BLOCK{$block->prev_hash}) {
-        delete $PENDING_BLOCK_BLOCK{$block->prev_hash}->{$block->hash};
-        if (!%{$PENDING_BLOCK_BLOCK{$block->prev_hash}}) {
-            delete $PENDING_BLOCK_BLOCK{$block->prev_hash};
-        }
-    }
-    $block->free_tx();
-    delete $PENDING_BLOCK{$block->hash};
-}
-
-sub add_pending_block {
-    my ($block) = @_;
-
-    $PENDING_BLOCK{$block->hash} //= $block;
-
-    if (keys %PENDING_BLOCK > MAX_PENDING_BLOCKS) {
-        my ($oldest_block) = values %PENDING_BLOCK;
-        drop_pending_block($oldest_block);
-    }
-}
-
-sub _block_load_transactions {
-    my $self = shift;
-    my ($block) = @_;
-    if (!$block->pending_tx) {
-        foreach my $tx_hash (@{$block->tx_hashes}) {
-            my $transaction = QBitcoin::Transaction->get_by_hash($tx_hash);
-            if ($transaction) {
-                $block->add_tx($transaction);
-            }
-            else {
-                $block->pending_tx($tx_hash);
-                $PENDING_TX_BLOCK{$tx_hash}->{$block->hash} = 1;
-                Debugf("Set pending_tx %s block %s height %u", unpack("H*", substr($tx_hash, 0, 4)), $block->hash_str, $block->height);
-                $self->request_tx($tx_hash);
-            }
-        }
-        if ($block->pending_tx) {
-            add_pending_block($block);
-            return 0;
-        }
-    }
-    return $block;
 }
 
 sub cmd_tx {
@@ -447,8 +357,9 @@ sub process_tx {
     $tx->receive() == 0
         or return -1;
     Debugf("Process tx %s fee %i size %u", $tx->hash_str, $tx->fee, $tx->size);
-    if ($self->block_pending_tx($tx)) {
-        return -1;
+    if (defined(my $height = QBitcoin::Block->recv_pending_tx($tx))) {
+        return -1 if $height == -1;
+        # $self->request_new_block($height+1);
     }
     if ($tx->fee >= 0) {
         if (blockchain_synced() && mempool_synced()) {
@@ -462,31 +373,6 @@ sub process_tx {
     }
     $tx->process_pending($self);
     return 0;
-}
-
-sub block_pending_tx {
-    my $self = shift;
-    my ($tx) = @_;
-    if (my $blocks = delete $PENDING_TX_BLOCK{$tx->hash}) {
-        foreach my $block_hash (keys %$blocks) {
-            my $block = $PENDING_BLOCK{$block_hash};
-            Debugf("Block %s is pending received tx %s", $block->hash_str, $tx->hash_str);
-            $block->add_tx($tx);
-            if (!$block->pending_tx && (!$block->height || !$PENDING_BLOCK_BLOCK{$block->prev_hash})) {
-                delete $PENDING_BLOCK{$block->hash};
-                $block->compact_tx();
-                if ($block->receive() == 0) {
-                    $block = $self->process_pending_blocks($block);
-                    $self->request_new_block($block->height+1);
-                }
-                else {
-                    drop_pending_block($block);
-                    return -1;
-                }
-            }
-        }
-    }
-    return undef;
 }
 
 sub request_new_block {

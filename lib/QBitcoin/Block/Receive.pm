@@ -94,8 +94,8 @@ sub receive {
     if (COMPACT_MEMORY) {
         if (defined($HEIGHT) && $best_block[$HEIGHT] && $self->weight < $best_block[$HEIGHT]->weight) {
             if (!$self->received_from || ($self->received_from->has_weight // -1) <= $best_block[$HEIGHT]->weight) {
-                Debugf("Received block weight %Lu not more than our best branch weight %Lu, ignore",
-                    $self->weight, $best_block[$HEIGHT]->weight);
+                Debugf("Received block weight %Lu (remote has %Lu) not more than our best branch weight %Lu, ignore",
+                    $self->weight, $self->received_from ? $self->received_from->has_weight // 0 : 0, $best_block[$HEIGHT]->weight);
                 $self->free_block();
                 return 0;
             }
@@ -307,6 +307,7 @@ sub want_cleanup_branch {
         return 0 if $block->received_from && $block->received_from->syncing;
         return 0 if $block->height > $HEIGHT - INCORE_LEVELS;
         my @descendants = values %{$prev_block[$block->height+1]->{$block->hash}};
+        push @descendants, $block->pending_descendants;
         # avoid too deep recursion
         my $next_block = pop @descendants
             or last;
@@ -370,6 +371,7 @@ sub free_block {
     foreach my $tx (@{$block->transactions}) {
         $tx->del_from_block($block);
     }
+    $block->drop_pending();
 }
 
 sub drop_branch {

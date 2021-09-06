@@ -13,6 +13,7 @@ with 'QBitcoin::Block::Validate';
 with 'QBitcoin::Block::Serialize';
 with 'QBitcoin::Block::Stored';
 with 'QBitcoin::Block::MerkleTree';
+with 'QBitcoin::Block::Pending';
 
 use constant PRIMARY_KEY => 'height';
 
@@ -89,7 +90,7 @@ sub pending_tx {
         return 1;
     }
     else {
-        return $self->{pending_tx} && %{$self->{pending_tx}} ? [ keys %{$self->{pending_tx}} ] : undef;
+        return $self->{pending_tx} && %{$self->{pending_tx}} ? keys %{$self->{pending_tx}} : ();
     }
 }
 
