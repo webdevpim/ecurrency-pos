@@ -12,7 +12,7 @@ use Role::Tiny::With;
 with 'QBitcoin::Script::CheckSig';
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(script_eval pushdata);
+our @EXPORT_OK = qw(script_eval op_pushdata);
 
 # bitcoin script
 # https://en.bitcoin.it/wiki/Script
@@ -169,7 +169,7 @@ sub unimplemented($$) {
     return 0;
 }
 
-sub pushdata($) {
+sub op_pushdata($) {
     my ($data) = @_;
     my $cmd;
     my $length = length($data);
