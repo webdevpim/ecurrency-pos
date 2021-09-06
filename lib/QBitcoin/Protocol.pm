@@ -187,6 +187,7 @@ sub cmd_block {
     }
 
     $block->received_from = $self;
+    $self->has_weight = $block->weight if ($self->has_weight // -1) < $block->weight;
 
     if ($block->height && !$block->prev_block_load) {
         Debugf("Received block %s has unknown ancestor %s, request it",
@@ -261,6 +262,8 @@ sub cmd_blocks {
         }
 
         $block->received_from = $self;
+        $self->has_weight = $block->weight if ($self->has_weight // -1) < $block->weight;
+
         if ($num > 1) {
             if ($block->prev_hash ne $prev_block->hash) {
                 Warningf("Received blocks are not in chain from peer %s", $self->ip);
