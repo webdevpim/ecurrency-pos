@@ -307,6 +307,7 @@ sub want_cleanup_branch {
         return 0 if $block->received_from && $block->received_from->syncing;
         return 0 if $block->height > $HEIGHT - INCORE_LEVELS;
         my @descendants = values %{$prev_block[$block->height+1]->{$block->hash}};
+        push @descendants, $block->pending_descendants;
         # avoid too deep recursion
         my $next_block = pop @descendants
             or last;

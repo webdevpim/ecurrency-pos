@@ -29,16 +29,25 @@ sub add_pending_block {
     $self->add_pending();
 }
 
+sub pending_descendants {
+    my $self = shift;
+
+    if (my $pending = $PENDING_BLOCK_BLOCK{$self->hash}) {
+        return map { $PENDING_BLOCK{$_} } keys %$pending;
+    }
+    else {
+        return ();
+    }
+}
+
 sub drop_pending {
     my $self = shift;
     # and drop all blocks pending by this one
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
 
-    if (my $pending = $PENDING_BLOCK_BLOCK{$self->hash}) {
+    foreach my $next_block ($self->pending_descendants()) {
         # TODO: Change recursion to loop by block chain
-        foreach my $next_block (keys %$pending) {
-            $PENDING_BLOCK{$next_block}->drop_pending;
-        }
+        $next_block->drop_pending();
     }
     if ($PENDING_BLOCK{$self->hash}) {
         Debugf("Drop pending block %s height %u", $self->hash_str, $self->height);
