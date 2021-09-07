@@ -2,7 +2,7 @@ package QBitcoin::Block::Receive;
 use warnings;
 use strict;
 
-use Role::Tiny; # This is role for QBitcoin::Block;
+use Scalar::Util qw(weaken);
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Config;
@@ -10,31 +10,31 @@ use QBitcoin::TXO;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Peers;
 use QBitcoin::Generate::Control;
+use Role::Tiny; # This is role for QBitcoin::Block;
 
 # @block_pool - array (by height) of hashes, block by block->hash
 # @best_block - pointers to blocks in the main branch
-# @prev_block - get block by its "prev_block" attribute, split to array by block height, for search block descendants
+# @descendant - list of block descendants (including pending), as $descendant[$height]->{$prev_hash}->{$hash}
 
 # Each block has attributes:
 # - self_weight - weight calculated by the block contents
 # - weight - weight of the branch ended with this block, i.e. self_weight of the block and all its ancestors
-# - branch_weight (calculated) - weight of the best branch contains this block, i.e. maximum weight of the block descendants
 
-# We ignore blocks with branch_weight less than our best branch
+# We ignore blocks from peer which has weight less than our best branch
 # Last INCORE_LEVELS levels keep in memory, and only then save to the database
-# If we receive block with good branch_weight (better than out best) but with unknown ancestor then
-# request the ancestor and do not switch the best branch until we have full linked branch and verify its weight
+# If we receive block with good weight (better than out best) but with unknown ancestor then
+# request the ancestor and do not switch the best branch until we have completely linked branch and verify its weight
 
 my @block_pool;
 my @best_block;
-my @prev_block;
+my @descendant;
 my $HEIGHT;
 my $MIN_INCORE_HEIGHT;
 
 END {
     # free structures
     undef @best_block;
-    undef @prev_block;
+    undef @descendant;
     undef @block_pool;
 };
 
@@ -63,8 +63,23 @@ sub max_incore_height {
 sub to_cache {
     my $self = shift;
     $block_pool[$self->height]->{$self->hash} = $self;
-    $prev_block[$self->height]->{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
+    $self->add_as_descendant();
     $MIN_INCORE_HEIGHT = $self->height if !defined($MIN_INCORE_HEIGHT) || $MIN_INCORE_HEIGHT > $self->height;
+}
+
+sub add_as_descendant {
+    my $self = shift;
+    $descendant[$self->height]->{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
+}
+
+sub del_as_descendant {
+    my $self = shift;
+    delete $descendant[$self->height]->{$self->prev_hash}->{$self->hash} if $self->prev_hash;
+}
+
+sub descendants {
+    my $self = shift;
+    return $descendant[$self->height+1] && $descendant[$self->height+1]->{$self->hash} ? values %{$descendant[$self->height+1]->{$self->hash}} : ();
 }
 
 sub block_pool {
@@ -278,7 +293,7 @@ sub receive {
 
     if (defined($HEIGHT) && $self->height < $HEIGHT) {
         foreach my $n ($self->height+1 .. $HEIGHT) {
-            $best_block[$n] = undef;
+            delete $best_block[$n];
         }
         $HEIGHT = $self->height;
         blockchain_synced(0) unless $config->{genesis};
@@ -306,8 +321,7 @@ sub want_cleanup_branch {
     while (1) {
         return 0 if $block->received_from && $block->received_from->syncing;
         return 0 if $block->height > $HEIGHT - INCORE_LEVELS;
-        my @descendants = values %{$prev_block[$block->height+1]->{$block->hash}};
-        push @descendants, $block->pending_descendants;
+        my @descendants = $block->descendants;
         # avoid too deep recursion
         my $next_block = pop @descendants
             or last;
@@ -329,32 +343,30 @@ sub cleanup_old_blocks {
     for (my $free_height = $MIN_INCORE_HEIGHT; $free_height <= $first_free_height; $free_height++) {
         if ($free_height < $first_free_height) {
             foreach my $b (values %{$block_pool[$free_height+1]}) {
-                next if $best_block[$free_height] && $b->hash eq $best_block[$free_height]->hash; # cleanup best branch after all other
+                next if $best_block[$free_height+1] && $b->hash eq $best_block[$free_height+1]->hash; # cleanup best branch after all other
                 # cleanup only full branches; if prev_block has single descendant then this branch was already checked
-                next if keys(%{$prev_block[$free_height]->{$b->prev_hash}}) == 1;
+                next if $b->prev_block && scalar($b->prev_block->descendants) == 1;
                 drop_branch($b) if want_cleanup_branch($b);
             }
         }
-        keys(%{$block_pool[$free_height]}) <= 1 && keys(%{$block_pool[$free_height+1]}) <= 1
-            or last;
-        if ($best_block[$free_height] && ($best_block[$free_height+1] || !%{$block_pool[$free_height+1]})) {
+        last if keys(%{$block_pool[$free_height]}) > 1;
+        if ($best_block[$free_height]) {
+            my @descendants = $best_block[$free_height]->descendants;
+            if (@descendants > 1 || (@descendants == 1 && !$best_block[$free_height+1])) {
+                last;
+            }
             # we have only best block on this level without descendants in alternate branches, drop it and cleanup the level
             free_block($best_block[$free_height]);
-            if ($prev_block[$free_height+1]) {
-                foreach my $descendant (values %{$prev_block[$free_height+1]->{$best_block[$free_height]->hash}}) {
-                    $descendant->prev_block(undef);
-                }
+            foreach my $descendant ($best_block[$free_height]->descendants) {
+                $descendant->prev_block(undef);
             }
-            foreach my $prev_hash (keys %{$prev_block[$free_height]}) {
-                delete $prev_block[$free_height]->{$prev_hash} unless %{$prev_block[$free_height]->{$prev_hash}};
-            }
-            $best_block[$free_height] = undef;
+            delete $best_block[$free_height];
         }
         elsif (%{$block_pool[$free_height]}) {
             last;
         }
-        $prev_block[$free_height] = undef;
-        $block_pool[$free_height] = undef;
+        delete $descendant[$free_height];
+        delete $block_pool[$free_height];
         Debugf("Level %u cleared", $free_height);
         $MIN_INCORE_HEIGHT++;
     }
@@ -367,7 +379,7 @@ sub free_block {
     $block->prev_block(undef);
     $block->next_block(undef);
     delete $block_pool[$block->height]->{$block->hash};
-    delete $prev_block[$block->height]->{$block->prev_hash}->{$block->hash} if $block->prev_hash;
+    $block->del_as_descendant();
     foreach my $tx (@{$block->transactions}) {
         $tx->del_from_block($block);
     }
@@ -380,10 +392,10 @@ sub drop_branch {
 
     while (1) {
         free_block($block);
-        my @descendants = values %{$prev_block[$block->height+1]->{$block->hash}};
-        # loop instead of deep recursion for case only one descendant (long chain)
-        my $next_block = pop @descendants
+        my @descendants = $block->descendants
             or last;
+        # loop instead of deep recursion for case only one descendant (long chain)
+        my $next_block = pop @descendants;
         foreach my $descendant (@descendants) {
             $descendant->drop_branch(); # recursively
         }

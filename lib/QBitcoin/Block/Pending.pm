@@ -66,6 +66,7 @@ sub drop_pending {
             }
         }
         $self->free_tx();
+        $self->del_as_descendant();
     }
     delete $PENDING_BLOCK{$self->hash};
 }
@@ -81,6 +82,7 @@ sub process_pending {
     foreach my $hash (keys %$pending) {
         my $block_next = $PENDING_BLOCK{$hash};
         $block_next->prev_block($self);
+        $block_next->add_as_descendant();
         next if $block_next->pending_tx;
         delete $PENDING_BLOCK{$hash};
         Debugf("Process block %s height %u pending for received %s", $block_next->hash_str, $block_next->height, $self->hash_str);
@@ -97,7 +99,7 @@ sub process_pending {
 
 sub is_pending {
     my $self = shift;
-    return !!$PENDING_BLOCK{$self->hash};
+    return !!$PENDING_BLOCK{$_[0] // $self->hash};
 }
 
 sub recv_pending_tx {

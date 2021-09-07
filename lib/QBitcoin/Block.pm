@@ -33,14 +33,6 @@ use constant ATTR => qw(
 mk_accessors(keys %{&FIELDS});
 mk_accessors(ATTR);
 
-sub branch_weight {
-    my $self = shift;
-    while ($self->next_block) {
-        $self = $self->next_block;
-    }
-    return $self->weight;
-}
-
 sub branch_height {
     my $self = shift;
     while ($self->next_block) {

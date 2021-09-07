@@ -19,7 +19,7 @@ use QBitcoin::Transaction;
 use QBitcoin::TXO;
 use Bitcoin::Serialized;
 
-#$config->{debug} = 1;
+$config->{debug} = 1;
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });
@@ -73,6 +73,7 @@ sub send_blocks {
     my @blocks = @_;
 
     state $value = 10;
+    my @pool_tx;
     foreach my $block_data (@blocks) {
         my $tx_num = $block_data->[3];
         my @tx;
@@ -85,7 +86,6 @@ sub send_blocks {
             $value += 10;
             my $tx_data = $tx->serialize;
             $tx->hash = QBitcoin::Transaction::calculate_hash($tx_data);
-            $peer->cmd_tx($tx_data);
             push @tx, $tx;
         }
 
@@ -101,6 +101,11 @@ sub send_blocks {
         my $block_data = $block->serialize;
         $block_hash = $block->hash;
         $peer->cmd_block($block_data);
+        push @pool_tx, @tx;
+    }
+    foreach my $tx (@pool_tx) {
+        my $tx_data = $tx->serialize;
+        $peer->cmd_tx($tx_data);
     }
 }
 
