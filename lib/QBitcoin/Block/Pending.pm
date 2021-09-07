@@ -19,7 +19,7 @@ sub add_pending {
 
     if (keys %PENDING_BLOCK > MAX_PENDING_BLOCKS) {
         my ($oldest_block) = values %PENDING_BLOCK;
-        drop_pending_block($oldest_block);
+        $oldest_block->drop_pending();
     }
 }
 
@@ -89,7 +89,7 @@ sub process_pending {
             $ret_block = $block_next->process_pending();
         }
         else {
-            drop_pending_block($block_next);
+            $block_next->drop_pending();
         }
     }
     return $ret_block;
