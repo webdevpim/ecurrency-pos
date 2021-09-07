@@ -26,6 +26,12 @@ our @EXPORT_OK = qw(script_eval op_pushdata);
 # https://developer.bitcoin.org/devguide/transactions.html
 # https://academy.bit2me.com/en/what-is-bitcoin-script/# (?)
 
+# Allow attributes "in1", "in2", etc
+sub MODIFY_CODE_ATTRIBUTES {
+    my ($class, $code, @attrs) = @_;
+    return grep { !/^in[0-9]+$/ } @attrs;
+}
+
 sub unpack_int($) {
     my ($data) = @_;
     defined($data) or return undef;
@@ -99,13 +105,16 @@ my %INT_2_1 = (
     add => sub { $a + $b },
     sub => sub { $a - $b },
 );
-my %BIN_1_1 = (
-    hash160 => sub { hash160($a) },
-);
 my %PUSH_CONST = (
     false     => "",
     "1negate" => pack_int(-1),
     map { $_ => pack_int($_) } 1 .. 16,
+);
+my %COMMON_CMD = (
+    dup     => sub :in1 { push @_, $_[-1] },
+    equal   => sub :in2 { push @_, pop eq pop },
+    '2drop' => sub :in2 { splice(@_, -2) },
+    hash160 => sub :in1 { push @_, hash160(pop) },
 );
 
 my @OP_CMD;
@@ -118,8 +127,22 @@ sub opcode_to_cmd($) {
 
 foreach my $opcode (keys %{&OPCODES}) {
     my $cmd = opcode_to_cmd($opcode);
-    if (my $func = __PACKAGE__->can("cmd_$cmd")) {
-        $OP_CMD[OPCODES->{$opcode}] = $func;
+    if (my $cmd_func = __PACKAGE__->can("cmd_$cmd")) {
+        $OP_CMD[OPCODES->{$opcode}] = $cmd_func;
+    }
+    elsif (my $common_func = $COMMON_CMD{$cmd}) {
+        my $input = 0;
+        foreach (attributes::get($common_func)) {
+            $input = $1 if /^in([0-9]+)$/;
+        }
+        $OP_CMD[OPCODES->{$opcode}] = sub {
+            my ($state) = @_;
+            return unless $state->ifstate;
+            @{$state->stack} >= $input or return 0;
+            local *_ = \@{$state->stack}; # localized alias @_ as @{$state->stack} without copying arrays
+            &$common_func; # inherits @_ and can modify it; it's not the same as $func->(@_)
+            return undef;
+        }
     }
     elsif ($INT_2_1{$cmd}) {
         $OP_CMD[OPCODES->{$opcode}] = sub {
@@ -133,17 +156,6 @@ foreach my $opcode (keys %{&OPCODES}) {
             return undef;
         };
     }
-    elsif ($BIN_1_1{$cmd}) {
-        $OP_CMD[OPCODES->{$opcode}] = sub {
-            my ($state) = @_;
-            return unless $state->ifstate;
-            my $stack = $state->stack;
-            @$stack >= 2 or return 0;
-            local $a = $stack->[-1];
-            $stack->[-1] = $BIN_1_1{$cmd}->();
-            return undef;
-        };
-    }
     elsif (exists $PUSH_CONST{$cmd}) {
         $OP_CMD[OPCODES->{$opcode}] = sub {
             my ($state) = @_;
@@ -152,8 +164,8 @@ foreach my $opcode (keys %{&OPCODES}) {
             return undef;
         };
     }
-
 }
+
 foreach my $opcode (keys %{&OPCODES}) {
     if (!__PACKAGE__->can(opcode_to_cmd($opcode))) {
         $OP_CMD[OPCODES->{$opcode}] //= sub { unimplemented(OPCODES->{$opcode}, @_) };
@@ -214,14 +226,6 @@ sub cmd_pushdata1 { pushdatac(1, "C", @_) }
 sub cmd_pushdata2 { pushdatac(2, "v", @_) }
 sub cmd_pushdata4 { pushdatac(4, "V", @_) }
 
-sub cmd_dup($) {
-    my ($state) = @_;
-    return unless $state->ifstate;
-    my $stack = $state->stack;
-    push @$stack, $stack->[-1];
-    return undef;
-}
-
 sub cmd_return($) {
     my ($state) = @_;
     return unless $state->ifstate;
@@ -271,16 +275,6 @@ sub cmd_verify($) {
     return unless $state->ifstate;
     my $stack = $state->stack;
     return @$stack && is_true(pop @$stack) ? undef : 0;
-}
-
-sub cmd_equal($) {
-    my ($state) = @_;
-    return unless $state->ifstate;
-    my $stack = $state->stack;
-    @$stack >= 2 or return 0;
-    my $data = pop @$stack;
-    $stack->[-1] = $stack->[-1] eq $data;
-    return undef;
 }
 
 sub cmd_equalverify($) {

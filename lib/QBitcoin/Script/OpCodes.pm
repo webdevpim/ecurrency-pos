@@ -42,7 +42,7 @@ use constant OPCODES => {
 
     OP_TOALTSTACK          => 0x6b, # +
     OP_FROMALTSTACK        => 0x6c, # +
-    OP_2DROP               => 0x6d,
+    OP_2DROP               => 0x6d, # +
     OP_2DUP                => 0x6e,
     OP_3DUP                => 0x6f,
     OP_2OVER               => 0x70,
