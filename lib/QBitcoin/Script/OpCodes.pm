@@ -108,7 +108,7 @@ use constant OPCODES => {
     OP_HASH256             => 0xaa, # +
     OP_CODESEPARATOR       => 0xab,
     OP_CHECKSIG            => 0xac, # * (implementation differ with bitcoin)
-    OP_CHECKSIGVERIFY      => 0xad,
+    OP_CHECKSIGVERIFY      => 0xad, # +
     OP_CHECKMULTISIG       => 0xae,
     OP_CHECKMULTISIGVERIFY => 0xaf,
 

@@ -17,6 +17,16 @@ sub cmd_checksig($) {
     return undef;
 }
 
+sub cmd_checksigverify($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    @$stack >= 2 or return 0;
+    my $pubkey = pop @$stack;
+    my $signature = pop @$stack;
+    return check_tx_signature($pubkey, $signature, $state->tx, $state->input_num) ? undef : 0;
+}
+
 sub check_tx_signature {
     my ($pubkey, $signature, $tx, $input_num) = @_;
     return check_sig($tx->sign_data($input_num), $signature, $pubkey);
