@@ -343,7 +343,7 @@ sub cleanup_old_blocks {
     for (my $free_height = $MIN_INCORE_HEIGHT; $free_height <= $first_free_height; $free_height++) {
         if ($free_height < $first_free_height) {
             foreach my $b (values %{$block_pool[$free_height+1]}) {
-                next if $best_block[$free_height] && $b->hash eq $best_block[$free_height]->hash; # cleanup best branch after all other
+                next if $best_block[$free_height+1] && $b->hash eq $best_block[$free_height+1]->hash; # cleanup best branch after all other
                 # cleanup only full branches; if prev_block has single descendant then this branch was already checked
                 next if $b->prev_block && scalar($b->prev_block->descendants) == 1;
                 drop_branch($b) if want_cleanup_branch($b);
