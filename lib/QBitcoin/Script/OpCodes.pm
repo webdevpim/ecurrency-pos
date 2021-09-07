@@ -109,8 +109,8 @@ use constant OPCODES => {
     OP_CODESEPARATOR       => 0xab, # * (just ignored, do not save position for checksig)
     OP_CHECKSIG            => 0xac, # * (implementation differ with bitcoin)
     OP_CHECKSIGVERIFY      => 0xad, # +
-    OP_CHECKMULTISIG       => 0xae,
-    OP_CHECKMULTISIGVERIFY => 0xaf,
+    OP_CHECKMULTISIG       => 0xae, # +
+    OP_CHECKMULTISIGVERIFY => 0xaf, # +
 
     OP_NOP2                => 0xb1, # + previously OP_CHECKLOCKTIMEVERIFY
     OP_NOP3                => 0xb2, # + previously OP_CHECKSEQUENCEVERIFY
