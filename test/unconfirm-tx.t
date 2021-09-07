@@ -112,7 +112,7 @@ is($height, 19,    "height");
 is($hash,   "b19", "hash");
 is($weight, 2210,  "weight");
 
-send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], $height+1 .. 30);
+send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 21 .. 30);
 send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 20);
 send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 31 .. 35);
 my $incore = QBitcoin::Block->min_incore_height;
