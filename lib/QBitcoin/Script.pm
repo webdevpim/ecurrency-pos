@@ -3,7 +3,7 @@ use warnings;
 use strict;
 
 use QBitcoin::Log;
-use QBitcoin::Crypto qw(hash160);
+use QBitcoin::Crypto qw(hash160 ripemd160 sha1 sha256 hash256);
 use QBitcoin::Script::OpCodes qw(OPCODES :OPCODES);
 use QBitcoin::Script::Const;
 use QBitcoin::Script::State;
@@ -147,7 +147,11 @@ my %COMMON_CMD = (
     booland => sub :in2 { push @_, is_true(pop) && is_true(pop) ? TRUE : FALSE },
     boolor  => sub :in2 { push @_, is_true(pop) || is_true(pop) ? TRUE : FALSE },
 
-    hash160 => sub :in1 { push @_, hash160(pop) },
+    hash160   => sub :in1 { push @_, hash160(pop) },
+    ripemd160 => sub :in1 { push @_, ripemd160(pop) },
+    sha1      => sub :in1 { push @_, sha1(pop) },
+    sha256    => sub :in1 { push @_, sha256(pop) },
+    hash256   => sub :in1 { push @_, hash256(pop) },
 );
 
 my @OP_CMD;

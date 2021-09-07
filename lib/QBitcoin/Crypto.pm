@@ -4,9 +4,22 @@ use strict;
 
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(check_sig hash160 hash256 checksum32 pubkey_by_privkey signature pk_serialize pk_import signature);
+our @EXPORT_OK = qw(
+    check_sig
+    hash160
+    hash256
+    ripemd160
+    sha256
+    sha1
+    checksum32
+    pubkey_by_privkey
+    signature
+    pk_serialize
+    pk_import
+    signature
+);
 
-use Digest::SHA qw(sha256);
+use Digest::SHA qw(sha1 sha256);
 use Crypt::Digest::RIPEMD160 qw(ripemd160);
 use Crypt::PK::ECC;
 
