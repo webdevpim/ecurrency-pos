@@ -102,8 +102,22 @@ sub pack_int($) {
 }
 
 my %INT_2_1 = (
-    add => sub { $a + $b },
-    sub => sub { $a - $b },
+    add         => sub { $a + $b },
+    sub         => sub { $a - $b },
+    min         => sub { $a < $b ? $a : $b },
+    max         => sub { $a > $b ? $a : $b },
+    numequal    => sub { $a == $b ? 1 : 0 },
+    numnotequal => sub { $a == $b ? 0 : 1 },
+    lessthan    => sub { $a < $b ? 1 : 0 },
+    greaterthan => sub { $a > $b ? 1 : 0 },
+    lessthanorequal    => sub { $a <= $b ? 1 : 0 },
+    greaterthanorequal => sub { $a >= $b ? 1 : 0 },
+);
+my %INT_1_1 = (
+    '1add' => sub { $a + 1 },
+    '1sub' => sub { $a - 1 },
+    negate => sub { -$a },
+    abs    => sub { $a >= 0 ? $a : -$a },
 );
 my %PUSH_CONST = (
     false     => "",
@@ -127,6 +141,12 @@ my %COMMON_CMD = (
     rot     => sub :in2 { push @_, splice(@_,-3,1) },
     swap    => sub :in2 { push @_, splice(@_,-2,1) },
     tuck    => sub :in2 { splice(@_,-2,0,$_[-1]) },
+    size    => sub :in1 { push @_, pack_int(length($_[-1])) },
+    not     => sub :in1 { push @_, is_true(pop) ? FALSE : TRUE },
+    '0notequal' => sub :in1 { push @_, is_true(pop) ? TRUE : FALSE },
+    booland => sub :in2 { push @_, is_true(pop) && is_true(pop) ? TRUE : FALSE },
+    boolor  => sub :in2 { push @_, is_true(pop) || is_true(pop) ? TRUE : FALSE },
+
     hash160 => sub :in1 { push @_, hash160(pop) },
 );
 
@@ -157,14 +177,24 @@ foreach my $opcode (keys %{&OPCODES}) {
             return undef;
         }
     }
+    elsif ($INT_1_1{$cmd}) {
+        $OP_CMD[OPCODES->{$opcode}] = sub {
+            my ($state) = @_;
+            return unless $state->ifstate;
+            my $stack = $state->stack;
+            @$stack >= 1 or return 0;
+            local $a = unpack_int(pop @$stack) // return 0;
+            push @$stack, pack_int($INT_1_1{$cmd}->());
+            return undef;
+        };
+    }
     elsif ($INT_2_1{$cmd}) {
         $OP_CMD[OPCODES->{$opcode}] = sub {
             my ($state) = @_;
             return unless $state->ifstate;
             my $stack = $state->stack;
             @$stack >= 2 or return 0;
-            local $a = unpack_int(pop @$stack) // return 0;
-            local $b = unpack_int(pop @$stack) // return 0;
+            local ($a, $b) = map { unpack_int($_) // return 0 } splice(@$stack, -2);
             push @$stack, pack_int($INT_2_1{$cmd}->());
             return undef;
         };
@@ -341,6 +371,26 @@ sub cmd_roll($) {
     my $n = unpack_int(pop @$stack) // return 0;
     @$stack > $n or return 0;
     push @$stack, splice(@$stack,-$n-1,1);
+    return undef;
+}
+
+sub cmd_numequalverify($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    @$stack >= 2 or return 0;
+    my $n1 = unpack_int(pop @$stack) // return 0;
+    my $n2 = unpack_int(pop @$stack) // return 0;
+    return $n1 == $n2 ? undef : 0;
+}
+
+sub cmd_within($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    @$stack >= 3 or return 0;
+    my ($x, $min, $max) = map { unpack_int($_) // return 0 } splice(@$stack, -3);
+    push @$stack, $x >= $min && $x < $max ? TRUE : FALSE;
     return undef;
 }
 
