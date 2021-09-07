@@ -322,6 +322,18 @@ sub cmd_endif($) {
 }
 
 sub cmd_nop($) { undef }
+sub cmd_reserved($)  { shift->ifstate ? 0 : undef }
+sub cmd_reserved1($) { shift->ifstate ? 0 : undef }
+sub cmd_reserved2($) { shift->ifstate ? 0 : undef }
+sub cmd_ver($)       { shift->ifstate ? 0 : undef }
+sub cmd_invalidopcode($) { 0 }
+sub cmd_pubkey($)        { 0 }
+sub cmd_pubkeyhash($)    { 0 }
+sub cmd_verif($)         { 0 }
+sub cmd_vernotif($)      { 0 }
+
+# in bitcoin script last processed codeseparator is stored and used during checksig
+sub cmd_codeseparator($) { undef }
 
 sub cmd_verify($) {
     my ($state) = @_;
