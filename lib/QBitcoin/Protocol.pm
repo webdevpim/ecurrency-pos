@@ -190,20 +190,30 @@ sub cmd_block {
     $self->has_weight = $block->weight if ($self->has_weight // -1) < $block->weight;
 
     if ($block->height && !$block->prev_block_load) {
-        Debugf("Received block %s has unknown ancestor %s, request it",
-            $block->hash_str, $block->hash_str($block->prev_hash));
-        if ($block->height <= (QBitcoin::Block->blockchain_height // -1) - 3) {
-            # deep rollback, request batch of new blocks using locators
-            $self->request_blocks($block->height-1);
+        if (QBitcoin::Block->is_pending($block->prev_hash)) {
+            Debugf("Received block %s height %u has pending ancestor %s",
+                $block->hash_str, $block->height, $block->hash_str($block->prev_hash));
+            $block->load_transactions();
+            $self->request_tx($block->pending_tx);
+            $block->add_pending_block();
+            return 0;
         }
         else {
-            $block->load_transactions;
-            $self->request_tx($block->pending_tx);
-            $self->send_message("sendblock", pack("V", $block->height-1));
-            $block->add_pending_block();
+            Debugf("Received block %s has unknown ancestor %s, request it",
+                $block->hash_str, $block->hash_str($block->prev_hash));
+            if ($block->height <= (QBitcoin::Block->blockchain_height // -1) - 3) {
+                # deep rollback, request batch of new blocks using locators
+                $self->request_blocks($block->height-1);
+            }
+            else {
+                $block->load_transactions;
+                $self->request_tx($block->pending_tx);
+                $self->send_message("sendblock", pack("V", $block->height-1));
+                $block->add_pending_block();
+            }
+            $self->syncing(1);
+            return 0;
         }
-        $self->syncing(1);
-        return 0;
     }
 
     $block->load_transactions($block);
@@ -280,20 +290,30 @@ sub cmd_blocks {
             }
         }
         elsif ($block->height && !$block->prev_block_load) {
-            Debugf("Received block %s height %u has unknown ancestor %s, request it",
-                $block->hash_str, $block->height, $block->hash_str($block->prev_hash));
-            if ($block->height <= (QBitcoin::Block->blockchain_height // -1) - 3) {
-                # deep rollback, request batch of new blocks using locators
-                $self->request_blocks($block->height-1);
-            }
-            else {
-                $self->send_message("sendblock", pack("V", $block->height-1));
+            if (QBitcoin::Block->is_pending($block->prev_hash)) {
+                Debugf("Received block %s height %u has pending ancestor %s",
+                    $block->hash_str, $block->height, $block->hash_str($block->prev_hash));
                 $block->load_transactions();
                 $self->request_tx($block->pending_tx);
                 $block->add_pending_block();
+                next;
             }
-            $self->syncing(1);
-            return 0;
+            else {
+                Debugf("Received block %s height %u has unknown ancestor %s, request it",
+                    $block->hash_str, $block->height, $block->hash_str($block->prev_hash));
+                if ($block->height <= (QBitcoin::Block->blockchain_height // -1) - 3) {
+                    # deep rollback, request batch of new blocks using locators
+                    $self->request_blocks($block->height-1);
+                }
+                else {
+                    $block->load_transactions();
+                    $self->request_tx($block->pending_tx);
+                    $self->send_message("sendblock", pack("V", $block->height-1));
+                    $block->add_pending_block();
+                }
+                $self->syncing(1);
+                return 0;
+            }
         }
 
         $block->load_transactions();

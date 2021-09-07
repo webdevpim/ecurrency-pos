@@ -99,7 +99,7 @@ sub process_pending {
 
 sub is_pending {
     my $self = shift;
-    return !!$PENDING_BLOCK{$self->hash};
+    return !!$PENDING_BLOCK{$_[0] // $self->hash};
 }
 
 sub recv_pending_tx {
