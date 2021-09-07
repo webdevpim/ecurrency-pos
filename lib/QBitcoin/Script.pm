@@ -111,9 +111,22 @@ my %PUSH_CONST = (
     map { $_ => pack_int($_) } 1 .. 16,
 );
 my %COMMON_CMD = (
+    drop    => sub :in1 { pop },
     dup     => sub :in1 { push @_, $_[-1] },
     equal   => sub :in2 { push @_, pop eq pop },
-    '2drop' => sub :in2 { splice(@_, -2) },
+    '2drop' => sub :in2 { splice(@_,-2) },
+    '2dup'  => sub :in2 { push @_, @_[-2,-1] },
+    '3dup'  => sub :in3 { push @_, @_[-3,-2,-1] },
+    '2over' => sub :in4 { push @_, @_[-4,-3] },
+    '2rot'  => sub :in6 { push @_, splice(@_,-6,2) },
+    '2swap' => sub :in4 { push @_, splice(@_,-4,2) },
+    ifdup   => sub :in4 { push @_, $_[-1] if is_true($_[-1]) },
+    depth   => sub :in4 { push @_, pack_int(scalar @_) },
+    nip     => sub :in2 { splice(@_,-2,1) },
+    over    => sub :in2 { push @_, $_[-2] },
+    rot     => sub :in2 { push @_, splice(@_,-3,1) },
+    swap    => sub :in2 { push @_, splice(@_,-2,1) },
+    tuck    => sub :in2 { splice(@_,-2,0,$_[-1]) },
     hash160 => sub :in1 { push @_, hash160(pop) },
 );
 
@@ -173,6 +186,10 @@ foreach my $opcode (keys %{&OPCODES}) {
 }
 foreach my $opcode (0x01 .. 0x4b) {
     $OP_CMD[$opcode] = sub { pushdatan($opcode, @_) };
+}
+foreach (1 .. 10) {
+    my $opcode = OPCODES->{"OP_NOP$_"} or die "No opcode for OP_NOP$_\n";
+    $OP_CMD[$opcode] = sub { undef };
 }
 
 sub unimplemented($$) {
@@ -270,6 +287,8 @@ sub cmd_endif($) {
     return undef;
 }
 
+sub cmd_nop($) { undef }
+
 sub cmd_verify($) {
     my ($state) = @_;
     return unless $state->ifstate;
@@ -302,6 +321,26 @@ sub cmd_fromaltstack($) {
     my $altstack = $state->altstack;
     @$altstack or return 0;
     push @{$state->stack}, pop @$altstack;
+    return undef;
+}
+
+sub cmd_pick($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    my $n = unpack_int(pop @$stack) // return 0;
+    @$stack > $n or return 0;
+    push @$stack, $stack->[-$n-1];
+    return undef;
+}
+
+sub cmd_roll($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    my $n = unpack_int(pop @$stack) // return 0;
+    @$stack > $n or return 0;
+    push @$stack, splice(@$stack,-$n-1,1);
     return undef;
 }
 
