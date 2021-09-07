@@ -349,9 +349,12 @@ sub cleanup_old_blocks {
                 drop_branch($b) if want_cleanup_branch($b);
             }
         }
-        keys(%{$block_pool[$free_height]}) <= 1 && keys(%{$block_pool[$free_height+1]}) <= 1
-            or last;
-        if ($best_block[$free_height] && ($best_block[$free_height+1] || !%{$block_pool[$free_height+1]})) {
+        last if keys(%{$block_pool[$free_height]}) > 1;
+        if ($best_block[$free_height]) {
+            my @descendants = $best_block[$free_height]->descendants;
+            if (@descendants > 1 || (@descendants == 1 && !$best_block[$free_height+1])) {
+                last;
+            }
             # we have only best block on this level without descendants in alternate branches, drop it and cleanup the level
             free_block($best_block[$free_height]);
             foreach my $descendant ($best_block[$free_height]->descendants) {
