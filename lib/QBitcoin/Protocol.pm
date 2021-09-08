@@ -148,7 +148,7 @@ sub cmd_ihavetx {
         or return 0;
 
     my $hash = unpack("a32", $data);
-    if (QBitcoin::Transaction->get_by_hash($hash)) {
+    if (QBitcoin::Transaction->check_by_hash($hash)) {
         return 0;
     }
     $self->request_tx($hash);

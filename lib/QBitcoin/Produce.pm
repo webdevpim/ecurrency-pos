@@ -147,7 +147,7 @@ sub _produce_tx {
         @txo ? () : ( coins_created => $amount ),
     );
     $tx->calculate_hash;
-    if (QBitcoin::Transaction->get_by_hash($tx->hash)) {
+    if (QBitcoin::Transaction->check_by_hash($tx->hash)) {
         Infof("Just produced transaction %s already exists", $tx->hash_str);
         return undef;
     }

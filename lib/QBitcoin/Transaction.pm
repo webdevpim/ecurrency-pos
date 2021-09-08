@@ -60,6 +60,24 @@ sub get_by_hash { # cached or load from database
     return $class->get($tx_hash) // $class->find(hash => $tx_hash);
 }
 
+# return block_height or undef for unknown transaction, -1 for mempool (unconfirmed)
+sub check_by_hash {
+    my $class = shift;
+    my ($tx_hash) = @_;
+
+    my $block_height;
+    if (my $tx = $class->get($tx_hash)) {
+        $block_height = $tx->block_height // -1;
+    }
+    elsif (my ($tx_hash) = $class->fetch(hash => $tx_hash)) {
+        $block_height = $tx_hash->{block_height};
+    }
+    else {
+        return undef;
+    }
+    return $block_height || "0e0";
+}
+
 sub get { # only cached
     my $class = shift;
     my ($tx_hash) = @_;
@@ -321,7 +339,7 @@ sub deserialize {
         Debugf("Transaction %s already pending", $class->hash_str($hash));
         return "";
     }
-    if ($class->get_by_hash($hash)) {
+    if ($class->check_by_hash($hash)) {
         Debugf("Transaction %s already known", $class->hash_str($hash));
         return "";
     }
@@ -423,9 +441,9 @@ sub load_inputs {
                 };
             }
             else {
-                if (my $tx_in = $class->get_by_hash($in->{tx_out})) {
+                if ($class->check_by_hash($in->{tx_out})) {
                     Warningf("Transaction %s has no output %u for tx %s input",
-                        $tx_in->hash_str, $in->{num}, $tx_in->hash_str($hash));
+                        $class->hash_str($in->{tx_out}), $in->{num}, $class->hash_str($hash));
                     return undef;
                 }
                 else {
@@ -662,13 +680,13 @@ sub stake_weight {
     if ($self->fee < 0) {
         my $class = ref $self;
         foreach my $in (map { $_->{txo} } @{$self->in}) {
-            if (my $tx = $class->get_by_hash($in->tx_in)) {
-                if (!defined($tx->block_height)) {
+            if (my $in_block_height = $class->check_by_hash($in->tx_in)) {
+                if ($in_block_height < 0) {
                     Warningf("Can't get stake_weight for %s with unconfirmed input %s:%u",
                         $self->hash_str, $in->tx_in_str, $in->num);
                     return undef;
                 }
-                $weight += $in->value * ($block_height - $tx->block_height);
+                $weight += $in->value * ($block_height - $in_block_height);
             }
             else {
                 # tx generated this txo should be loaded during tx validation
