@@ -4,7 +4,7 @@ use strict;
 
 use QBitcoin::MyAddress;
 use QBitcoin::Log;
-use QBitcoin::Script qw(pushdata);
+use QBitcoin::Script qw(op_pushdata);
 use QBitcoin::Crypto qw(signature);
 use Role::Tiny;
 
@@ -46,7 +46,7 @@ sub sign_transaction {
 sub make_close_script {
     my $self = shift;
     my ($address, $input_num) = @_;
-    my $script = pushdata(signature($self->sign_data($input_num), $address->privkey)) . pushdata($address->pubkey);
+    my $script = op_pushdata(signature($self->sign_data($input_num), $address->privkey)) . op_pushdata($address->pubkey);
     return $script;
 }
 

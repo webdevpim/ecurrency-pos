@@ -3,7 +3,7 @@ use warnings;
 use strict;
 
 use QBitcoin::Log;
-use QBitcoin::Crypto qw(hash160);
+use QBitcoin::Crypto qw(hash160 ripemd160 sha1 sha256 hash256);
 use QBitcoin::Script::OpCodes qw(OPCODES :OPCODES);
 use QBitcoin::Script::Const;
 use QBitcoin::Script::State;
@@ -12,7 +12,7 @@ use Role::Tiny::With;
 with 'QBitcoin::Script::CheckSig';
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(script_eval pushdata);
+our @EXPORT_OK = qw(script_eval op_pushdata);
 
 # bitcoin script
 # https://en.bitcoin.it/wiki/Script
@@ -25,6 +25,12 @@ our @EXPORT_OK = qw(script_eval pushdata);
 # https://en.bitcoin.it/w/images/en/7/70/Bitcoin_OpCheckSig_InDetail.png
 # https://developer.bitcoin.org/devguide/transactions.html
 # https://academy.bit2me.com/en/what-is-bitcoin-script/# (?)
+
+# Allow attributes "in1", "in2", etc
+sub MODIFY_CODE_ATTRIBUTES {
+    my ($class, $code, @attrs) = @_;
+    return grep { !/^in[0-9]+$/ } @attrs;
+}
 
 sub unpack_int($) {
     my ($data) = @_;
@@ -96,16 +102,56 @@ sub pack_int($) {
 }
 
 my %INT_2_1 = (
-    add => sub { $a + $b },
-    sub => sub { $a - $b },
+    add         => sub { $a + $b },
+    sub         => sub { $a - $b },
+    min         => sub { $a < $b ? $a : $b },
+    max         => sub { $a > $b ? $a : $b },
+    numequal    => sub { $a == $b ? 1 : 0 },
+    numnotequal => sub { $a == $b ? 0 : 1 },
+    lessthan    => sub { $a < $b ? 1 : 0 },
+    greaterthan => sub { $a > $b ? 1 : 0 },
+    lessthanorequal    => sub { $a <= $b ? 1 : 0 },
+    greaterthanorequal => sub { $a >= $b ? 1 : 0 },
 );
-my %BIN_1_1 = (
-    hash160 => sub { hash160($a) },
+my %INT_1_1 = (
+    '1add' => sub { $a + 1 },
+    '1sub' => sub { $a - 1 },
+    negate => sub { -$a },
+    abs    => sub { $a >= 0 ? $a : -$a },
 );
 my %PUSH_CONST = (
     false     => "",
     "1negate" => pack_int(-1),
     map { $_ => pack_int($_) } 1 .. 16,
+);
+my %COMMON_CMD = (
+    drop    => sub :in1 { pop },
+    dup     => sub :in1 { push @_, $_[-1] },
+    equal   => sub :in2 { push @_, pop eq pop },
+    '2drop' => sub :in2 { splice(@_,-2) },
+    '2dup'  => sub :in2 { push @_, @_[-2,-1] },
+    '3dup'  => sub :in3 { push @_, @_[-3,-2,-1] },
+    '2over' => sub :in4 { push @_, @_[-4,-3] },
+    '2rot'  => sub :in6 { push @_, splice(@_,-6,2) },
+    '2swap' => sub :in4 { push @_, splice(@_,-4,2) },
+    ifdup   => sub :in4 { push @_, $_[-1] if is_true($_[-1]) },
+    depth   => sub :in4 { push @_, pack_int(scalar @_) },
+    nip     => sub :in2 { splice(@_,-2,1) },
+    over    => sub :in2 { push @_, $_[-2] },
+    rot     => sub :in2 { push @_, splice(@_,-3,1) },
+    swap    => sub :in2 { push @_, splice(@_,-2,1) },
+    tuck    => sub :in2 { splice(@_,-2,0,$_[-1]) },
+    size    => sub :in1 { push @_, pack_int(length($_[-1])) },
+    not     => sub :in1 { push @_, is_true(pop) ? FALSE : TRUE },
+    '0notequal' => sub :in1 { push @_, is_true(pop) ? TRUE : FALSE },
+    booland => sub :in2 { push @_, is_true(pop) && is_true(pop) ? TRUE : FALSE },
+    boolor  => sub :in2 { push @_, is_true(pop) || is_true(pop) ? TRUE : FALSE },
+
+    hash160   => sub :in1 { push @_, hash160(pop) },
+    ripemd160 => sub :in1 { push @_, ripemd160(pop) },
+    sha1      => sub :in1 { push @_, sha1(pop) },
+    sha256    => sub :in1 { push @_, sha256(pop) },
+    hash256   => sub :in1 { push @_, hash256(pop) },
 );
 
 my @OP_CMD;
@@ -118,8 +164,33 @@ sub opcode_to_cmd($) {
 
 foreach my $opcode (keys %{&OPCODES}) {
     my $cmd = opcode_to_cmd($opcode);
-    if (my $func = __PACKAGE__->can("cmd_$cmd")) {
-        $OP_CMD[OPCODES->{$opcode}] = $func;
+    if (my $cmd_func = __PACKAGE__->can("cmd_$cmd")) {
+        $OP_CMD[OPCODES->{$opcode}] = $cmd_func;
+    }
+    elsif (my $common_func = $COMMON_CMD{$cmd}) {
+        my $input = 0;
+        foreach (attributes::get($common_func)) {
+            $input = $1 if /^in([0-9]+)$/;
+        }
+        $OP_CMD[OPCODES->{$opcode}] = sub {
+            my ($state) = @_;
+            return unless $state->ifstate;
+            @{$state->stack} >= $input or return 0;
+            local *_ = \@{$state->stack}; # localized alias @_ as @{$state->stack} without copying arrays
+            &$common_func; # inherits @_ and can modify it; it's not the same as $func->(@_)
+            return undef;
+        }
+    }
+    elsif ($INT_1_1{$cmd}) {
+        $OP_CMD[OPCODES->{$opcode}] = sub {
+            my ($state) = @_;
+            return unless $state->ifstate;
+            my $stack = $state->stack;
+            @$stack >= 1 or return 0;
+            local $a = unpack_int(pop @$stack) // return 0;
+            push @$stack, pack_int($INT_1_1{$cmd}->());
+            return undef;
+        };
     }
     elsif ($INT_2_1{$cmd}) {
         $OP_CMD[OPCODES->{$opcode}] = sub {
@@ -127,20 +198,8 @@ foreach my $opcode (keys %{&OPCODES}) {
             return unless $state->ifstate;
             my $stack = $state->stack;
             @$stack >= 2 or return 0;
-            local $a = unpack_int(pop @$stack) // return 0;
-            local $b = unpack_int(pop @$stack) // return 0;
+            local ($a, $b) = map { unpack_int($_) // return 0 } splice(@$stack, -2);
             push @$stack, pack_int($INT_2_1{$cmd}->());
-            return undef;
-        };
-    }
-    elsif ($BIN_1_1{$cmd}) {
-        $OP_CMD[OPCODES->{$opcode}] = sub {
-            my ($state) = @_;
-            return unless $state->ifstate;
-            my $stack = $state->stack;
-            @$stack >= 2 or return 0;
-            local $a = $stack->[-1];
-            $stack->[-1] = $BIN_1_1{$cmd}->();
             return undef;
         };
     }
@@ -152,15 +211,19 @@ foreach my $opcode (keys %{&OPCODES}) {
             return undef;
         };
     }
-
 }
+
 foreach my $opcode (keys %{&OPCODES}) {
     if (!__PACKAGE__->can(opcode_to_cmd($opcode))) {
         $OP_CMD[OPCODES->{$opcode}] //= sub { unimplemented(OPCODES->{$opcode}, @_) };
     }
 }
 foreach my $opcode (0x01 .. 0x4b) {
-    $OP_CMD[$opcode] = sub { cmd_pushdatan($opcode, @_) };
+    $OP_CMD[$opcode] = sub { pushdatan($opcode, @_) };
+}
+foreach (1 .. 10) {
+    my $opcode = OPCODES->{"OP_NOP$_"} or die "No opcode for OP_NOP$_\n";
+    $OP_CMD[$opcode] = sub { undef };
 }
 
 sub unimplemented($$) {
@@ -169,7 +232,7 @@ sub unimplemented($$) {
     return 0;
 }
 
-sub pushdata($) {
+sub op_pushdata($) {
     my ($data) = @_;
     my $cmd;
     my $length = length($data);
@@ -193,24 +256,26 @@ sub is_true($) {
     return $data !~ /^\x80?\x00*\z/;
 }
 
-sub cmd_pushdatan($$) {
+sub pushdatan($$) {
     my ($bytes, $state) = @_;
-    my ($script, $stack, $ifstate) = @$state;
-    length($script) >= $bytes
-        or return 0;
-    my $data = substr($state->script, 0, $bytes, "");
-    return unless $ifstate;
-    push @$stack, $data;
+    my $data = $state->get_script($bytes) // return 0;
+    return unless $state->ifstate;
+    push @{$state->stack}, $data;
     return undef;
 }
 
-sub cmd_dup($) {
-    my ($state) = @_;
+sub pushdatac($$$) {
+    my ($c, $unpack, $state) = @_;
+    my $bytes = unpack($unpack, $state->get_script($c) // return 0);
+    my $data = $state->get_script($bytes) // return 0;
     return unless $state->ifstate;
-    my $stack = $state->stack;
-    push @$stack, $stack->[-1];
+    push @{$state->stack}, $data;
     return undef;
 }
+
+sub cmd_pushdata1 { pushdatac(1, "C", @_) }
+sub cmd_pushdata2 { pushdatac(2, "v", @_) }
+sub cmd_pushdata4 { pushdatac(4, "V", @_) }
 
 sub cmd_return($) {
     my ($state) = @_;
@@ -256,21 +321,25 @@ sub cmd_endif($) {
     return undef;
 }
 
+sub cmd_nop($) { undef }
+sub cmd_reserved($)  { shift->ifstate ? 0 : undef }
+sub cmd_reserved1($) { shift->ifstate ? 0 : undef }
+sub cmd_reserved2($) { shift->ifstate ? 0 : undef }
+sub cmd_ver($)       { shift->ifstate ? 0 : undef }
+sub cmd_invalidopcode($) { 0 }
+sub cmd_pubkey($)        { 0 }
+sub cmd_pubkeyhash($)    { 0 }
+sub cmd_verif($)         { 0 }
+sub cmd_vernotif($)      { 0 }
+
+# in bitcoin script last processed codeseparator is stored and used during checksig
+sub cmd_codeseparator($) { undef }
+
 sub cmd_verify($) {
     my ($state) = @_;
     return unless $state->ifstate;
     my $stack = $state->stack;
     return @$stack && is_true(pop @$stack) ? undef : 0;
-}
-
-sub cmd_equal($) {
-    my ($state) = @_;
-    return unless $state->ifstate;
-    my $stack = $state->stack;
-    @$stack >= 2 or return 0;
-    my $data = pop @$stack;
-    $stack->[-1] = $stack->[-1] eq $data;
-    return undef;
 }
 
 sub cmd_equalverify($) {
@@ -283,10 +352,67 @@ sub cmd_equalverify($) {
     return $data1 eq $data2 ? undef : 0;
 }
 
+sub cmd_toaltstack($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    @$stack or return 0;
+    push @{$state->altstack}, pop @$stack;
+    return undef;
+}
+
+sub cmd_fromaltstack($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $altstack = $state->altstack;
+    @$altstack or return 0;
+    push @{$state->stack}, pop @$altstack;
+    return undef;
+}
+
+sub cmd_pick($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    my $n = unpack_int(pop @$stack) // return 0;
+    @$stack > $n or return 0;
+    push @$stack, $stack->[-$n-1];
+    return undef;
+}
+
+sub cmd_roll($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    my $n = unpack_int(pop @$stack) // return 0;
+    @$stack > $n or return 0;
+    push @$stack, splice(@$stack,-$n-1,1);
+    return undef;
+}
+
+sub cmd_numequalverify($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    @$stack >= 2 or return 0;
+    my $n1 = unpack_int(pop @$stack) // return 0;
+    my $n2 = unpack_int(pop @$stack) // return 0;
+    return $n1 == $n2 ? undef : 0;
+}
+
+sub cmd_within($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    @$stack >= 3 or return 0;
+    my ($x, $min, $max) = map { unpack_int($_) // return 0 } splice(@$stack, -3);
+    push @$stack, $x >= $min && $x < $max ? TRUE : FALSE;
+    return undef;
+}
+
 sub execute {
     my ($state) = @_;
-    while (length($state->script)) {
-        my $cmd_code = substr($state->script, 0, 1, "");
+    while (defined(my $cmd_code = $state->get_script(1))) {
         if (my $cmd_func = $OP_CMD[ord($cmd_code)]) {
             my $res = $cmd_func->($state);
             return $res if defined $res;
@@ -308,6 +434,7 @@ sub script_eval($$$$) {
 
     # should we check/clear the if-stack here?
     $state->script = $open_script;
+    $state->cp = 0;
     $res = execute($state);
     return $res if defined($res);
 
