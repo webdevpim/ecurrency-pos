@@ -316,7 +316,7 @@ sub deserialize {
     my $end_index = $data->index;
     $data->index = $start_index;
     my $tx_raw_data = $data->get($end_index - $start_index);
-    my $hash = calculate_hash($tx_raw_data);
+    my $hash = tx_data_hash($tx_raw_data);
     if ($PENDING_TX_INPUT{$hash}) {
         Debugf("Transaction %s already pending", $class->hash_str($hash));
         return "";
@@ -351,14 +351,15 @@ sub deserialize {
         in            => $in,
         out           => create_outputs(\@output, $hash),
         $up ? UPGRADE_POW ? ( up => $up ) : ( coins_created => $up ) : (),
+        # data          => $tx_data, # TODO
         hash          => $hash,
         size          => $end_index - $start_index,
         received_time => time(),
     );
 
-    my $calculated_hash = calculate_hash($self->serialize);
-    if ($calculated_hash ne $hash) {
-        Warningf("Incorrect serialized transaction has different hash: %s: %s", $self->hash_str, $self->hash_str($calculated_hash));
+    $self->calculate_hash; # this is just for check that received data is equal to serialized created transaction
+    if ($self->hash ne $hash) {
+        Warningf("Incorrect serialized transaction has different hash: %s: %s", $self->hash_str, $self->hash_str($hash));
         return undef;
     }
 
@@ -446,9 +447,16 @@ sub _cmp_inputs {
     return $in1->{txo}->tx_in cmp $in2->{txo}->tx_in || $in1->{txo}->num <=> $in2->{txo}->num;
 }
 
-sub calculate_hash {
+sub tx_data_hash {
     my ($tx_raw_data) = @_;
     return hash256($tx_raw_data);
+}
+
+sub calculate_hash {
+    my $self = shift;
+    my $tx_raw_data = $self->serialize;
+    $self->size = length($tx_raw_data);
+    $self->hash = tx_data_hash($tx_raw_data);
 }
 
 sub validate_coinbase {
@@ -597,14 +605,15 @@ sub new {
 sub on_load {
     my $self = shift;
 
-    if ($TRANSACTION{$self->hash}) {
-        $self = $TRANSACTION{$self->hash};
+    my $hash = $self->hash;
+    if ($TRANSACTION{$hash}) {
+        $self = $TRANSACTION{$hash};
     }
     else {
         if (!UPGRADE_POW && !@{$self->in}) {
             $self->{coins_created} = sum0(map { $_->value } @{$self->out}) - $self->fee;
         }
-        my $hash = calculate_hash($self->serialize);
+        $self->calculate_hash;
         if ($self->hash ne $hash) {
             die "Incorrect hash for loaded transaction " . $self->hash_str . " != " . $self->hash_str($hash) . "\n";
         }
@@ -706,8 +715,7 @@ sub new_coinbase {
         fee           => $coinbase->value - $txo->value,
         received_time => time(),
     );
-    my $tx_raw_data = $self->serialize;
-    $self->hash = calculate_hash($tx_raw_data);
+    $self->calculate_hash;
     if (my $cached = $class->get($self->hash)) {
         Debugf("Coinbase transaction %s for btc %s:%u already in mempool",
             $self->hash_str, $class->hash_str($coinbase->btc_tx_hash), $coinbase->btc_out_num);
@@ -715,7 +723,6 @@ sub new_coinbase {
     }
     else {
         QBitcoin::TXO->save_all($self->hash, $self->out);
-        $self->size = length($tx_raw_data);
         $self->receive(); # Add coinbase tx to mempool
         $coinbase->tx_hash = $self->hash;
         Infof("Generated new coinbase transaction %s for btc output %s:%u",

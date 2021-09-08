@@ -74,7 +74,7 @@ my $tx = QBitcoin::Transaction->new({
     up  => $up,
     fee => 0,
 });
-$tx->hash = $tx->calculate_hash;
+$tx->calculate_hash;
 $out->tx_out = $tx->hash;
 $out->num = 0;
 
@@ -91,8 +91,9 @@ $out->num = 0;
 {
     my $extra_out = QBitcoin::TXO->new_txo({ value => 10, open_script => "\x01\x02", num => 1 });
     local $tx->{out} = [ $out, $extra_out ];
-    local $tx->{hash} = $tx->calculate_hash;
-    local $out->{tx_out} = $extra_out->tx_out = $tx->hash;
+    local $tx->{hash};
+    $tx->calculate_hash;
+    local $out->{tx_out} = $extra_out->tx_out;
     isnt($tx->validate(), 0, "Extra output");
 }
 {

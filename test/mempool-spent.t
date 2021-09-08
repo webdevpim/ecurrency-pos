@@ -40,15 +40,14 @@ sub make_tx {
     );
     $value += 10;
     $tx_num++;
-    my $tx_data = $tx->serialize;
-    $tx->hash = QBitcoin::Transaction::calculate_hash($tx_data);
+    $tx->calculate_hash;
     my $num = 0;
     foreach my $out (@{$tx->out}) {
         $out->tx_in = $tx->hash;
         $out->num = $num++;
     }
     $peer->command = "tx";
-    $peer->cmd_tx($tx_data);
+    $peer->cmd_tx($tx->serialize);
     return QBitcoin::Transaction->get($tx->hash);
 }
 

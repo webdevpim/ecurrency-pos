@@ -74,9 +74,8 @@ sub make_tx {
     );
     $value += 10;
     $tx_num++;
-    my $tx_data = $tx->serialize;
-    $tx->hash = QBitcoin::Transaction::calculate_hash($tx_data);
-    $peer->cmd_tx($tx_data);
+    $tx->calculate_hash;
+    $peer->cmd_tx($tx->serialize);
     return $tx;
 }
 

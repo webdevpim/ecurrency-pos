@@ -40,7 +40,7 @@ sub sign_transaction {
                 $in->{txo}->tx_in_str, $in->{txo}->num, unpack("H*", $in->{txo}->open_script));
         }
     }
-    $self->hash //= QBitcoin::Transaction::calculate_hash($self->serialize);
+    $self->calculate_hash;
 }
 
 sub make_close_script {
