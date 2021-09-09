@@ -16,7 +16,6 @@ our @EXPORT_OK = qw(
     signature
     pk_serialize
     pk_import
-    signature
 );
 
 use Digest::SHA qw(sha1 sha256);
