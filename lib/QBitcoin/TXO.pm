@@ -4,26 +4,28 @@ use strict;
 
 use Scalar::Util qw(weaken refaddr);
 use QBitcoin::Accessors qw(mk_accessors);
-use QBitcoin::ORM qw(:types dbh find DEBUG_ORM);
-use QBitcoin::OpenScript;
+use QBitcoin::ORM qw(:types dbh find DEBUG_ORM for_log);
+use QBitcoin::Crypto qw(hash160 hash256);
+use QBitcoin::RedeemScript;
 
 use Role::Tiny::With;
 with 'QBitcoin::TXO::My';
 
 use constant PRIMARY_KEY => qw(tx_in num);
 use constant FIELDS => {
-    value        => NUMERIC,
-    num          => NUMERIC,
-    tx_in        => NUMERIC,
-    tx_out       => NUMERIC,
-    close_script => BINARY,
-    open_script  => NUMERIC,
+    value      => NUMERIC,
+    num        => NUMERIC,
+    tx_in      => NUMERIC,
+    tx_out     => NUMERIC,
+    sigscript  => BINARY,
+    scripthash => NUMERIC,
 };
 
 use constant TABLE => "txo";
 use constant TRANSACTION_TABLE => "transaction";
 
 mk_accessors(keys %{&FIELDS});
+mk_accessors(qw(redeem_script));
 
 # hash by tx and out-num
 my %TXO;
@@ -100,8 +102,8 @@ sub load {
     my $class = shift;
     my (@in) = @_;
     # TODO: move this to QBitcoin::ORM
-    my $sql = "SELECT value, num, tx_in.hash AS tx_in, tx_out.hash AS tx_out, close_script, s.data as open_script";
-    $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::OpenScript->TABLE . "` AS s ON (t.open_script = s.id)";
+    my $sql = "SELECT value, num, tx_in.hash AS tx_in, tx_out.hash AS tx_out, sigscript, s.hash as scripthash, s.script as redeem_script";
+    $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::RedeemScript->TABLE . "` AS s ON (t.scripthash = s.id)";
     $sql .= " JOIN `" . TRANSACTION_TABLE . "` AS tx_in ON (tx_in.id = t.tx_in)";
     $sql .= " LEFT JOIN `" . TRANSACTION_TABLE . "` AS tx_out ON (tx_out.id = t.tx_out)";
     $sql .= " WHERE " . join(" OR ", ("(tx_in.hash = ? AND num = ?)")x@in);
@@ -141,8 +143,8 @@ sub DESTROY {
 sub store {
     my $self = shift;
     my ($tx) = @_;
-    my $script = QBitcoin::OpenScript->store($self->open_script);
-    my $sql = "REPLACE INTO `" . TABLE . "` (value, num, tx_in, open_script, tx_out, close_script) VALUES (?,?,?,?,NULL,NULL)";
+    my $script = QBitcoin::RedeemScript->store($self->scripthash);
+    my $sql = "REPLACE INTO `" . TABLE . "` (value, num, tx_in, scripthash, tx_out, sigscript) VALUES (?,?,?,?,NULL,NULL)";
     DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%u]", $sql, $self->value, $self->num, $tx->id, $script->id);
     my $res = dbh->do($sql, undef, $self->value, $self->num, $tx->id, $script->id);
     $res == 1
@@ -151,11 +153,17 @@ sub store {
 
 sub store_spend {
     my $self = shift;
+    # We're already inside SQL transaction created in QBitcoin::Block->store()
     my ($tx) = @_;
     my ($tx_in_id) = dbh->selectrow_array("SELECT id FROM `" . TRANSACTION_TABLE . "` WHERE hash = ?", undef, $self->tx_in);
-    my $sql = "UPDATE `" . TABLE . "` SET tx_out = ?, close_script = ? WHERE tx_in = ? AND num = ?";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,X'%s',X'%s',%u]", $sql, $tx->id, unpack("H*", $self->close_script), $tx_in_id, $self->num);
-    my $res = dbh->do($sql, undef, $tx->id, $self->close_script, $tx_in_id, $self->num);
+    my $sql = "UPDATE `" . QBitcoin::RedeemScript->TABLE . "` SET script = ? WHERE hash = ? AND script IS NULL";
+    DEBUG_ORM && Debugf("dbi [%s] values [%s,%s]", $sql, for_log($self->redeem_script), for_log($self->scripthash));
+    my $res = dbh->do($sql, undef, $self->redeem_script, $self->scripthash);
+    $res
+        or die "Can't store txo " . $self->tx_in_str . ":" . $self->num . " as spend: " . (dbh->errstr // "no error") . "\n";
+    $sql = "UPDATE `" . TABLE . "` SET tx_out = ?, sigscript = ? WHERE tx_in = ? AND num = ?";
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%u,%u]", $sql, $tx->id, for_log($self->sigscript), $tx_in_id, $self->num);
+    $res = dbh->do($sql, undef, $tx->id, $self->sigscript, $tx_in_id, $self->num);
     $res == 1
         or die "Can't store txo " . $self->tx_in_str . ":" . $self->num . " as spend: " . (dbh->errstr // "no error") . "\n";
 }
@@ -165,8 +173,8 @@ sub load_stored_inputs {
     my $class = shift;
     my ($tx_id, $tx_hash) = @_;
     # TODO: move this to QBitcoin::ORM
-    my $sql = "SELECT value, num, tx_in.hash AS tx_in, close_script, s.data as open_script";
-    $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::OpenScript->TABLE . "` AS s ON (t.open_script = s.id)";
+    my $sql = "SELECT value, num, tx_in.hash AS tx_in, sigscript, s.hash as scripthash, s.script as redeem_script";
+    $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::RedeemScript->TABLE . "` AS s ON (t.scripthash = s.id)";
     $sql .= " JOIN `" . TRANSACTION_TABLE . "` AS tx_in ON (tx_in.id = t.tx_in)";
     $sql .= " WHERE tx_out = ?";
     my $sth = dbh->prepare($sql);
@@ -188,8 +196,8 @@ sub load_stored_outputs {
     my $class = shift;
     my ($tx_id, $tx_hash) = @_;
     # TODO: move this to QBitcoin::ORM
-    my $sql = "SELECT value, num, tx_out.hash AS tx_out, close_script, s.data as open_script";
-    $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::OpenScript->TABLE . "` AS s ON (t.open_script = s.id)";
+    my $sql = "SELECT value, num, tx_out.hash AS tx_out, sigscript, s.hash as scripthash, s.script as redeem_script";
+    $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::RedeemScript->TABLE . "` AS s ON (t.scripthash = s.id)";
     $sql .= " LEFT JOIN `" . TRANSACTION_TABLE . "` AS tx_out ON (tx_out.id = t.tx_out)";
     $sql .= " WHERE tx_in = ?";
     my $sth = dbh->prepare($sql);
@@ -209,20 +217,21 @@ sub load_stored_outputs {
 sub pre_load {
     my $class = shift;
     my ($attr) = @_;
-    # load tx_in, tx_out as hashes; open_script as data instead of id
+    # load tx_in, tx_out as hashes; scripthash and redeem_script as data instead of id
     # TODO: move this to QBitcoin::ORM
-    my $sql = "SELECT value, num, tx_in.hash AS tx_in, s.data as open_script";
+    my $sql = "SELECT value, num, tx_in.hash AS tx_in, s.hash as scripthash, s.script as redeem_script";
     $sql .= ", tx_out.hash AS tx_out" if $attr->{tx_out};
-    $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::OpenScript->TABLE . "` s ON (t.open_script = s.id)";
+    $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::RedeemScript->TABLE . "` s ON (t.scripthash = s.id)";
     $sql .= " JOIN `" . TRANSACTION_TABLE . "` AS tx_in ON (tx_in.id = t.tx_in)";
     $sql .= " LEFT JOIN `" . TRANSACTION_TABLE . "` AS tx_out ON (tx_out.id = t.tx_out)" if $attr->{tx_out};
     $sql .= " WHERE tx_in.id = ? AND num = ?";
     DEBUG_ORM && Debugf("sql: [%s] values [%u,%u]", $sql, $attr->{tx_in}, $attr->{num});
     my $hash = dbh->selectrow_hashref($sql, undef, $attr->{tx_in}, $attr->{num});
     if ($hash) {
-        $attr->{tx_in}       = $hash->{tx_in};
-        $attr->{tx_out}      = $hash->{tx_out} if $attr->{tx_out};
-        $attr->{open_script} = $hash->{open_script};
+        $attr->{tx_in}         = $hash->{tx_in};
+        $attr->{tx_out}        = $hash->{tx_out} if $attr->{tx_out};
+        $attr->{scripthash}    = $hash->{scripthash};
+        $attr->{redeem_script} = $hash->{redeem_script};
     }
     return $attr;
 }
@@ -248,8 +257,21 @@ sub spent_list {
 
 sub check_script {
     my $self = shift;
-    my ($close_script, $tx, $input_num) = @_;
-    return QBitcoin::OpenScript->check_input($self->open_script, $close_script, $tx, $input_num);
+    my ($sigscript, $tx, $input_num) = @_;
+    my $hashlength = length($self->scripthash);
+    my $scripthash;
+    if ($hashlength == 20) {
+        $scripthash = hash160($self->redeem_script);
+    }
+    elsif ($hashlength == 32) {
+        $scripthash = hash256($self->redeem_script);
+    }
+    else {
+        return 0;
+    }
+    $scripthash eq $self->scripthash
+        or return 0;
+    return QBitcoin::RedeemScript->check_input($sigscript, $self->redeem_script, $tx, $input_num);
 }
 
 sub tx_in_str {

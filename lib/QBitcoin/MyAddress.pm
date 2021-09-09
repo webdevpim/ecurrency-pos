@@ -6,8 +6,8 @@ use feature 'state';
 use QBitcoin::Config;
 use QBitcoin::Accessors qw(mk_accessors new);
 use QBitcoin::ORM qw(find :types);
-use QBitcoin::Crypto qw(hash160 pubkey_by_privkey pk_import);
-use QBitcoin::Address qw(address_by_pubkey wif_to_pk);
+use QBitcoin::Crypto qw(hash160 hash256 pubkey_by_privkey pk_import);
+use QBitcoin::Address qw(wif_to_pk address_by_pubkey script_by_pubkey script_by_pubkeyhash);
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(my_address);
@@ -17,7 +17,7 @@ use constant TABLE => 'my_address';
 use constant FIELDS => {
     # address     => STRING,
     private_key => STRING,
-    pubkey_crc  => STRING,
+    # pubkey_crc  => STRING,
 };
 
 mk_accessors(keys %{&FIELDS});
@@ -40,9 +40,9 @@ sub pubkey {
     return $self->{pubkey} = pubkey_by_privkey($self->privkey);
 }
 
-sub pubkey_hash {
+sub pubkeyhash {
     my $self = shift;
-    return $self->{pubkey_hash} //= hash160($self->pubkey);
+    return hash160($self->pubkey);
 }
 
 sub address {
@@ -50,19 +50,49 @@ sub address {
     return $self->{address} //= address_by_pubkey($self->pubkey);
 }
 
-sub get_by_script {
+sub redeem_script {
+    my $self = shift;
+    my $main_script = script_by_pubkey($self->pubkey);
+    return wantarray ? (
+        $main_script,
+        script_by_pubkeyhash($self->pubkeyhash),
+    ) : $main_script;
+}
+
+sub scripthash {
+    my $self = shift;
+    return wantarray ? ( map { hash160($_), hash256($_) } $self->redeem_script ) : hash160(scalar $self->redeem_script);
+}
+
+sub get_by_hash {
     my $class = shift;
-    my ($script) = @_;
-    state $my_scripts;
-    if (!$my_scripts) {
-        $my_scripts = {};
+    my ($hash) = @_;
+    state $my_hashes;
+    if (!$my_hashes) {
+        $my_hashes = {};
         foreach my $address (my_address()) {
-            foreach my $script (QBitcoin::OpenScript->script_for_address($address->address)) {
-                $my_scripts->{$script} = $address;
+            foreach my $scripthash ($address->scripthash) {
+                $my_hashes->{$scripthash} = $address;
             }
         }
     }
-    return $my_scripts->{$script};
+    return $my_hashes->{$hash};
+}
+
+sub script_by_hash {
+    my $class = shift;
+    my ($hash) = @_;
+    state $script_hashes;
+    if (!$script_hashes) {
+        $script_hashes = {};
+        foreach my $address (my_address()) {
+            foreach my $redeem_script ($address->redeem_script) {
+                $script_hashes->{hash160($redeem_script)} = $redeem_script;
+                $script_hashes->{hash256($redeem_script)} = $redeem_script;
+            }
+        }
+    }
+    return $script_hashes->{$hash};
 }
 
 1;

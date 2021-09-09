@@ -6,6 +6,7 @@ use QBitcoin::MyAddress;
 use QBitcoin::Log;
 use QBitcoin::Script qw(op_pushdata);
 use QBitcoin::Crypto qw(signature);
+use QBitcoin::RedeemScript;
 use Role::Tiny;
 
 # useful links:
@@ -14,40 +15,36 @@ use Role::Tiny;
 # https://developer.bitcoin.org/devguide/transactions.html
 # https://gist.github.com/Sjors/5574485 (ruby)
 
-sub sign_data {
-    my $self = shift;
-    my ($input_num) = @_; # currently not used
-    return $self->{sign_data} if defined $self->{sign_data};
-    # Serialized transaction without input scripts
-    local $self->{in} = [ map +{ %$_, close_script => "" }, @{$self->in} ];
-    my $data = $self->serialize;
-    if ($self->fee < 0) {
-        # It's stake tx which signs block, add block info
-        $data .= $self->block_sign_data;
-    }
-    return $self->{sign_data} = $data;
-}
-
 sub sign_transaction {
     my $self = shift;
     foreach my $num (0 .. $#{$self->in}) {
         my $in = $self->in->[$num];
-        if (my $address = QBitcoin::MyAddress->get_by_script($in->{txo}->open_script)) {
-            $in->{close_script} = $self->make_close_script($address, $num);
+        if (my $address = QBitcoin::MyAddress->get_by_hash($in->{txo}->scripthash)) {
+            $self->make_sigscript($in, $address, $num);
         }
         else {
-            Errf("Can't sign transaction: address for %s:%u is not my, script %s",
-                $in->{txo}->tx_in_str, $in->{txo}->num, unpack("H*", $in->{txo}->open_script));
+            Errf("Can't sign transaction: address for %s:%u is not my, scripthash %s",
+                $in->{txo}->tx_in_str, $in->{txo}->num, unpack("H*", $in->{txo}->scripthash));
         }
     }
     $self->calculate_hash;
 }
 
-sub make_close_script {
+sub make_sigscript {
     my $self = shift;
-    my ($address, $input_num) = @_;
-    my $script = op_pushdata(signature($self->sign_data($input_num), $address->privkey)) . op_pushdata($address->pubkey);
-    return $script;
+    my ($in, $address, $input_num) = @_;
+
+    my $redeem_script = QBitcoin::MyAddress->script_by_hash($in->{txo}->scripthash)
+        or die "Can't get redeem script by hash " . unpack("H*", $in->{txo}->scripthash);
+    my $signature = signature($self->sign_data($input_num), $address->privkey);
+    $in->{txo}->redeem_script = $redeem_script;
+    my $script_type = QBitcoin::RedeemScript->script_type($redeem_script);
+    if ($script_type eq "P2PKH") {
+        $in->{sigscript} = op_pushdata($signature) . op_pushdata($address->pubkey);
+    }
+    elsif ($script_type eq "P2PK") {
+        $in->{signscript} = op_pushdata($signature);
+    }
 }
 
 1;

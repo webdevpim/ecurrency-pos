@@ -17,6 +17,8 @@ use QBitcoin::Protocol;
 use QBitcoin::Block;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
+use QBitcoin::Crypto qw(hash160);
+use QBitcoin::Test::ORM;
 use Bitcoin::Serialized;
 
 #$config->{debug} = 1;
@@ -79,7 +81,7 @@ sub send_blocks {
         my @tx;
         foreach (1 .. $tx_num) {
             my $tx = QBitcoin::Transaction->new(
-                out           => [ QBitcoin::TXO->new_txo( value => $value, open_script => "txo_$tx_num" ) ],
+                out           => [ QBitcoin::TXO->new_txo( value => $value, scripthash => hash160("txo_$tx_num") ) ],
                 in            => [],
                 coins_created => $value,
             );

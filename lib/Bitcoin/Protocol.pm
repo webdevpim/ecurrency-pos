@@ -320,7 +320,7 @@ sub add_coinbase($$$) {
         btc_tx_data      => $tx->data,
         merkle_path      => $block->merkle_path($tx_num),
         value            => $out->{value},
-        open_script      => substr($out->{open_script}, QBT_SCRIPT_START_LEN),
+        scripthash       => substr($out->{open_script}, QBT_SCRIPT_START_LEN),
     );
     $coinbase->store();
 }
@@ -358,7 +358,8 @@ sub process_transactions {
                 QBitcoin::Produce->produce_coinbase($tx, $num);
             }
             my $out = $tx->out->[$num];
-            if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) eq QBT_SCRIPT_START) {
+            if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) eq QBT_SCRIPT_START &&
+                length($out->{open_script}) == QBT_SCRIPT_START_LEN + 20) {
                 add_coinbase($block, $i, $num);
             }
         }
