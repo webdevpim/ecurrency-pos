@@ -177,6 +177,17 @@ sub serialize {
         (varstr($self->merkle_path) // return undef);
 }
 
+sub get_scripthash {
+    my $class = shift;
+    my ($tx, $out_num) = @_;
+    my $out = $tx->out->[$out_num];
+    if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) eq QBT_SCRIPT_START &&
+        length($out->{open_script}) == QBT_SCRIPT_START_LEN + 20) {
+        return substr($out->{open_script}, QBT_SCRIPT_START_LEN);
+    }
+    return undef;
+}
+
 sub deserialize {
     my $class = shift;
     my ($data) = @_;
@@ -197,9 +208,8 @@ sub deserialize {
         Warningf("Incorrect btc upgrade transaction data %s, no output %u", $transaction->hash_str, $btc_out_num);
         return undef;
     }
-    my $scripthash;
-    if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) ne QBT_SCRIPT_START ||
-        length($out->{open_script}) != QBT_SCRIPT_START_LEN + 20) {
+    my $scripthash = $class->get_scripthash($transaction, $btc_out_num);
+    if (!$scripthash) {
         Warningf("Incorrect btc upgrade transaction %s output open_script", $transaction->hash_str);
         return undef unless $config->{fake_coinbase};
     }
@@ -212,7 +222,7 @@ sub deserialize {
         btc_tx_hash    => $transaction->hash,
         merkle_path    => $merkle_path,
         value          => $out->{value},
-        scripthash     => substr($out->{open_script}, QBT_SCRIPT_START_LEN),
+        scripthash     => $scripthash,
     });
 }
 
