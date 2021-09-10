@@ -4,6 +4,7 @@ use strict;
 use feature 'state';
 
 use QBitcoin::Config;
+use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors new);
 use QBitcoin::ORM qw(find :types);
 use QBitcoin::Crypto qw(hash160 hash256 pubkey_by_privkey pk_import);
@@ -15,12 +16,11 @@ our @EXPORT_OK = qw(my_address);
 use constant TABLE => 'my_address';
 
 use constant FIELDS => {
-    # address     => STRING,
+    address     => STRING,
     private_key => STRING,
-    # pubkey_crc  => STRING,
 };
 
-mk_accessors(keys %{&FIELDS});
+mk_accessors(qw(private_key));
 
 sub my_address {
     my $class = shift // __PACKAGE__;
@@ -47,7 +47,14 @@ sub pubkeyhash {
 
 sub address {
     my $self = shift;
-    return $self->{address} //= address_by_pubkey($self->pubkey);
+    # return $self->{address} ||= address_by_pubkey($self->pubkey // return undef);
+    if (!$self->{addr}) {
+        $self->{addr} = address_by_pubkey($self->pubkey // return undef);
+        if ($self->{address} && $self->{address} ne $self->{addr}) {
+            Errf("Mismatch my private key and address: %s != %s", $self->{addr}, $self->{address});
+        }
+    }
+    return $self->{addr};
 }
 
 sub redeem_script {
