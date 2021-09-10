@@ -39,6 +39,7 @@ sub cmd_btc_ihave {
     my ($data) = @_;
     if (length($data) != 32) {
         Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        $self->received_from->decrease_reputation();
         $self->abort("incorrect_params");
         return -1;
     }
@@ -56,6 +57,7 @@ sub cmd_btcgetheader {
     my ($data) = @_;
     if (length($data) != 32) {
         Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        $self->received_from->decrease_reputation();
         $self->abort("incorrect_params");
         return -1;
     }
@@ -75,7 +77,15 @@ sub cmd_btcblockhdr {
     my ($payload) = @_;
     my $data = Bitcoin::Serialized->new($payload);
     my $block = Bitcoin::Block->deserialize($data);
-    if (!$block || !$block->validate) {
+    if (!$block) {
+        Err("BTC block deserialization error");
+        $self->received_from->decrease_reputation();
+        $self->abort("bad_btcblockhdr");
+        return -1;
+    }
+    if (!$block->validate) {
+        Errf("BTC block %s validation error", $block->hash_hex);
+        $self->received_from->decrease_reputation();
         $self->abort("bad_btcblockhdr");
         return -1;
     }
@@ -125,6 +135,7 @@ sub cmd_btcgethdrs {
     my ($payload) = @_;
     if (length($payload) < 5) {
         Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($payload));
+        $self->received_from->decrease_reputation();
         $self->abort("incorrect_params");
         return -1;
     }
@@ -150,6 +161,7 @@ sub cmd_btcheaders {
     my ($payload) = @_;
     if (length($payload) == 0) {
         Errf("Incorrect params from peer %s cmd %s data length %u", $self->ip, $self->command, length($payload));
+        $self->received_from->decrease_reputation();
         $self->abort("incorrect_params");
         return -1;
     }
@@ -157,6 +169,7 @@ sub cmd_btcheaders {
     my $num = $data->get_varint();
     if ($data->length != $num*80) {
         Errf("Incorrect params from peer %s cmd %s data length %u expected %u", $self->ip, $self->command, $data->length, $num*80);
+        $self->received_from->decrease_reputation();
         $self->abort("incorrect_params");
         return -1;
     }
@@ -168,11 +181,13 @@ sub cmd_btcheaders {
         my $block = Bitcoin::Block->deserialize($data);
         if (!$block) {
             Errf("Bad btc block header, deserializes error");
+            $self->received_from->decrease_reputation();
             $self->abort("bad_block_header");
             return -1;
         }
         elsif (!$block->validate) {
             Errf("Bad btc block %s header, validate error", $block->hash_hex);
+            $self->received_from->decrease_reputation();
             $self->abort("bad_block_header");
             return -1;
         }

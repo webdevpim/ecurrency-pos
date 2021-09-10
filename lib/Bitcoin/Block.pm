@@ -76,11 +76,14 @@ sub validate {
     my $bits_expo = $self->bits >> 24;
     my $zero_bytes = 32-$bits_expo;
     # hash must have first 8*(32-$bits_expo) zero bits
-    substr($self->hash, -$zero_bytes) eq "\x00" x $zero_bytes
-        or return 0;
-    my $first4 = substr($self->hash, -$zero_bytes-4, 4);
-    unpack("V", substr($self->hash, -$zero_bytes-4, 4)) < $bits_coef * 256
-        or return 0;
+    if (substr($self->hash, -$zero_bytes) ne "\x00" x $zero_bytes) {
+        Warningf("PoW bytes: block hash %s, bits %u, coef %u, expo %u", unpack("H*", reverse $self->hash), $self->bits, $bits_expo, $bits_coef);
+        return 0;
+    }
+    if (unpack("V", substr($self->hash, -$zero_bytes-4, 4)) >= $bits_coef * 256) {
+        Warningf("PoW value fail: block hash %s, bits %u, coef %u, expo %u", unpack("H*", reverse $self->hash), $self->bits, $bits_expo, $bits_coef);
+        return 0;
+    }
     return 1;
 }
 
