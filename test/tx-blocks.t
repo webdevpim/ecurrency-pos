@@ -18,6 +18,7 @@ use QBitcoin::Block;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
 use QBitcoin::Generate;
+use QBitcoin::Crypto qw(hash160);
 use Bitcoin::Serialized;
 
 #$config->{debug} = 1;
@@ -68,7 +69,7 @@ sub make_tx {
     state $value = 10;
     state $tx_num = 1;
     my $tx = QBitcoin::Transaction->new(
-        out           => [ QBitcoin::TXO->new_txo( value => $value, open_script => "txo_$tx_num" ) ],
+        out           => [ QBitcoin::TXO->new_txo( value => $value, scripthash => hash160("txo_$tx_num") ) ],
         in            => [],
         coins_created => $value,
     );

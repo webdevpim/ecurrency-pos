@@ -7,9 +7,10 @@ use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Mempool;
 use QBitcoin::Block;
-use QBitcoin::OpenScript;
+use QBitcoin::RedeemScript;
 use QBitcoin::TXO;
 use QBitcoin::Coinbase;
+use QBitcoin::Address qw(scripthash_by_address);
 use QBitcoin::MyAddress qw(my_address);
 use QBitcoin::Generate::Control;
 
@@ -18,9 +19,9 @@ my %MY_UTXO;
 sub load_utxo {
     my $class = shift;
     foreach my $my_address (my_address()) {
-        my @script_data = QBitcoin::OpenScript->script_for_address($my_address->address);
-        if (my @script = QBitcoin::OpenScript->find(data => \@script_data)) {
-            foreach my $utxo (grep { !$_->is_cached } QBitcoin::TXO->find(open_script => [ map { $_->id } @script ], tx_out => undef)) {
+        my @scripthash = scripthash_by_address($my_address->address);
+        if (my @script = QBitcoin::RedeemScript->find(hash => \@scripthash)) {
+            foreach my $utxo (grep { !$_->is_cached } QBitcoin::TXO->find(scripthash => [ map { $_->id } @script ], tx_out => undef)) {
                 $utxo->save();
                 $utxo->add_my_utxo();
             }
@@ -49,8 +50,8 @@ sub make_stake_tx {
     my $my_amount = sum map { $_->value } @my_txo;
     my ($my_address) = my_address(); # first one
     my $out = QBitcoin::TXO->new_txo(
-        value       => $my_amount + $fee,
-        open_script => scalar(QBitcoin::OpenScript->script_for_address($my_address->address)),
+        value      => $my_amount + $fee,
+        scripthash => scalar(scripthash_by_address($my_address->address)),
     );
     my $tx = QBitcoin::Transaction->new(
         in              => [ map +{ txo => $_ }, @my_txo ],

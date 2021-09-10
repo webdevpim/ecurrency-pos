@@ -26,30 +26,31 @@ CREATE TABLE `tx_data` (
 );
 
 -- Actually these are qbt addresses
-CREATE TABLE IF NOT EXISTS `open_script` (
+CREATE TABLE IF NOT EXISTS `redeem_script` (
   id integer NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  data blob NOT NULL
+  hash VARBINARY(32) NOT NULL,
+  script blob NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS `open_script_data` ON `open_script` (data);
+CREATE UNIQUE INDEX IF NOT EXISTS `redeem_script_hash` ON `redeem_script` (hash);
 
 CREATE TABLE IF NOT EXISTS `txo` (
-  value     bigint unsigned NOT NULL,
-  num          int unsigned NOT NULL,
-  tx_in        int unsigned NOT NULL,
-  tx_out       int unsigned DEFAULT NULL,
-  open_script  int unsigned NOT NULL,
-  close_script blob DEFAULT NULL,
+  value      bigint unsigned NOT NULL,
+  num           int unsigned NOT NULL,
+  tx_in         int unsigned NOT NULL,
+  tx_out        int unsigned DEFAULT NULL,
+  scripthash    int NOT NULL,
+  siglist      blob DEFAULT NULL,
   PRIMARY KEY (tx_in, num),
-  FOREIGN KEY (tx_in)       REFERENCES `transaction` (id) ON DELETE CASCADE,
-  FOREIGN KEY (tx_out)      REFERENCES `transaction` (id) ON DELETE SET NULL,
-  FOREIGN KEY (open_script) REFERENCES `open_script` (id) ON DELETE RESTRICT
+  FOREIGN KEY (tx_in)      REFERENCES `transaction`   (id) ON DELETE CASCADE,
+  FOREIGN KEY (tx_out)     REFERENCES `transaction`   (id) ON DELETE SET NULL,
+  FOREIGN KEY (scripthash) REFERENCES `redeem_script` (id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS `tx_out` ON `txo` (tx_out);
 
 CREATE TABLE IF NOT EXISTS `my_address` (
   address     varchar(255) NOT NULL PRIMARY KEY,
-  private_key varchar(255) NOT NULL, -- encrypted
-  pubkey_crc  varchar(255) NOT NULL
+  public_key  blob(4096)   NOT NULL,
+  private_key blob(4096)   NOT NULL -- TODO: encrypted
 );
 
 CREATE TABLE `btc_block` (
@@ -76,11 +77,11 @@ CREATE TABLE `coinbase` (
   merkle_path blob(512) NOT NULL, -- 16-level btree with 32-byte (256-bit) hashes
   btc_tx_data longblob NOT NULL, -- or 'blob' for sqlite
   value bigint unsigned NOT NULL,
-  open_script int unsigned NOT NULL,
+  scripthash int NOT NULL,
   tx_out int unsigned DEFAULT NULL,
   PRIMARY KEY (btc_tx_hash, btc_out_num),
-  FOREIGN KEY (btc_block_height) REFERENCES `btc_block`   (height) ON DELETE RESTRICT, -- should never happens
-  FOREIGN KEY (tx_out)           REFERENCES `transaction` (id)     ON DELETE SET NULL,
-  FOREIGN KEY (open_script)      REFERENCES `open_script` (id)     ON DELETE RESTRICT
+  FOREIGN KEY (btc_block_height) REFERENCES `btc_block`     (height) ON DELETE RESTRICT, -- should never happens
+  FOREIGN KEY (tx_out)           REFERENCES `transaction`   (id)     ON DELETE SET NULL,
+  FOREIGN KEY (scripthash)       REFERENCES `redeem_script` (id)     ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS `coinbase_tx_out` ON `coinbase` (tx_out);

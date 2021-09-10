@@ -6,9 +6,10 @@ use QBitcoin::Script::Const;
 
 sub new {
     my $class = shift;
-    my ($script, $tx, $input_num) = @_;
+    my ($script, $stack, $tx, $input_num) = @_;
     # script, cp, stack, if-state, if-stack, alt-stack, tx, input_num
-    return bless [$script, 0, [], 1, [], [], $tx, $input_num], $class;
+    my @stack = $stack ? @$stack : (); # make a copy of stack to prevent siglist modifiactions
+    return bless [$script, 0, \@stack, 1, [], [], $tx, $input_num], $class;
 }
 
 sub script  :lvalue { $_[0]->[0] }

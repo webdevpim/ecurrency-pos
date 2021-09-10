@@ -36,13 +36,13 @@ my @scripts_fail = (
 
 foreach my $check_data (@scripts_ok) {
     my ($name, $script, $tx_data) = @$check_data;
-    my $res = script_eval($script, "", $tx_data // "", 0);
+    my $res = script_eval([], $script, $tx_data // "", 0);
     ok($res, $name);
 }
 
 foreach my $check_data (@scripts_fail) {
     my ($name, $script, $tx_data) = @$check_data;
-    my $res = script_eval($script, "", $tx_data // "", 0);
+    my $res = script_eval([], $script, $tx_data // "", 0);
     ok(!$res, $name);
 }
 
@@ -50,11 +50,11 @@ my $pk = Crypt::PK::ECC->new();
 $pk->generate_key(QBitcoin::Crypto->CURVE);
 my $sign_data = "\x55\xaa" x 700;
 my $pubkey = pubkey_by_privkey($pk);
-my $open_script = OP_DUP . OP_HASH160 . op_pushdata(hash160($pubkey)) . OP_EQUALVERIFY . OP_CHECKSIG;
+my $redeem_script = OP_DUP . OP_HASH160 . op_pushdata(hash160($pubkey)) . OP_EQUALVERIFY . OP_CHECKSIG;
 my $signature = signature($sign_data, $pk);
-my $close_script = op_pushdata($signature) . op_pushdata($pubkey);
+my $siglist = [ $signature, $pubkey ];
 my $tx = TestTx->new(sign_data => $sign_data);
-my $res = script_eval($close_script, $open_script, $tx, 0);
+my $res = script_eval($siglist, $redeem_script, $tx, 0);
 ok($res, "checksig");
 
 done_testing();

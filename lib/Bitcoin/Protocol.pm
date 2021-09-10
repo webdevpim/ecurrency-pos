@@ -302,8 +302,8 @@ sub cmd_block {
     return 0;
 }
 
-sub add_coinbase($$$) {
-    my ($block, $tx_num, $out_num) = @_;
+sub add_coinbase($$$$) {
+    my ($block, $tx_num, $out_num, $scripthash) = @_;
     my $tx = $block->transactions->[$tx_num];
     my $out = $tx->out->[$out_num];
     if ($out->{value} == 0) {
@@ -320,7 +320,7 @@ sub add_coinbase($$$) {
         btc_tx_data      => $tx->data,
         merkle_path      => $block->merkle_path($tx_num),
         value            => $out->{value},
-        open_script      => substr($out->{open_script}, QBT_SCRIPT_START_LEN),
+        scripthash       => $scripthash,
     );
     $coinbase->store();
 }
@@ -357,9 +357,8 @@ sub process_transactions {
                 # replace open_script to upgrade
                 QBitcoin::Produce->produce_coinbase($tx, $num);
             }
-            my $out = $tx->out->[$num];
-            if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) eq QBT_SCRIPT_START) {
-                add_coinbase($block, $i, $num);
+            if (my $scripthash = QBitcoin::Coinbase->get_scripthash($tx, $num)) {
+                add_coinbase($block, $i, $num, $scripthash);
             }
         }
     }

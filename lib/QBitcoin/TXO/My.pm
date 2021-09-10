@@ -6,7 +6,6 @@ use feature 'state';
 use Role::Tiny;
 
 use QBitcoin::Log;
-use QBitcoin::OpenScript;
 use QBitcoin::MyAddress qw(my_address);
 
 my %MY_UTXO;
@@ -34,7 +33,7 @@ sub my_utxo {
 
 sub is_my {
     my $self = shift;
-    return !!QBitcoin::MyAddress->get_by_script($self->open_script);
+    return !!QBitcoin::MyAddress->get_by_hash($self->scripthash);
 }
 
 1;

@@ -11,9 +11,10 @@ use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
-use QBitcoin::OpenScript;
+use QBitcoin::RedeemScript;
 use QBitcoin::Script::OpCodes qw(:OPCODES);
-use QBitcoin::Crypto qw(checksum32);
+use QBitcoin::Crypto qw(hash160 checksum32);
+use QBitcoin::Address qw(scripthash_by_address);
 use QBitcoin::MyAddress qw(my_address);
 
 use constant {
@@ -64,15 +65,15 @@ sub produce_coinbase {
     # We should not generate coinbase for my address on different nodes for the same btc txo, so xor $rnd with hash of my address
     state $myaddr_hash = unpack("V", checksum32((my_address)[0]->address));
     if ($rnd < 0x10000 * 0x10000 / UPGRADE_PROB) {
-        $out->{open_script} = QBT_SCRIPT_START . OP_VERIFY;
-        Info("Produce coinbase with open txo");
+        $out->{open_script} = QBT_SCRIPT_START . hash160(OP_VERIFY);
+        Infof("Produce coinbase with open txo: tx %s value %Lu", $tx->hash_str, $tx->out->[$num]->{value});
         return 1;
     }
     elsif (QBitcoin::TXO->my_utxo() < MAX_MY_UTXO &&
            ($rnd ^ $myaddr_hash) < 0x10000 * 0x10000 / MY_UPGRADE) {
-        state $my_script = QBitcoin::OpenScript->script_for_address((my_address)[0]->address);
-        $out->{open_script} = QBT_SCRIPT_START . $my_script;
-        Info("Produce coinbase for my address");
+        state $my_scripthash = scripthash_by_address((my_address)[0]->address);
+        $out->{open_script} = QBT_SCRIPT_START . $my_scripthash;
+        Infof("Produce coinbase for my address: tx %s value %Lu", $tx->hash_str, $tx->out->[$num]->{value});
         return 1;
     }
     return undef;
@@ -86,8 +87,8 @@ sub _produce_my_utxo {
     my $age = int($time - GENESIS_TIME);
     $last_time = $last_time < $age ? $age : $last_time+1;
     my $out = QBitcoin::TXO->new_txo(
-        value       => $last_time, # vary for get unique hash for each coinbase transaction
-        open_script => scalar(QBitcoin::OpenScript->script_for_address($my_address->address)),
+        value      => $last_time, # vary for get unique hash for each coinbase transaction
+        scripthash => scalar(scripthash_by_address($my_address->address)),
     );
     my $tx = QBitcoin::Transaction->new(
         in            => [],
@@ -112,15 +113,16 @@ sub _produce_my_utxo {
 sub _produce_tx {
     my ($fee_part) = @_;
 
+    my $redeem_script = OP_VERIFY;
     state $script;
     if (!$script) {
-        ($script) = QBitcoin::OpenScript->find(data => OP_VERIFY);
+        ($script) = QBitcoin::RedeemScript->find(hash => hash160($redeem_script));
         if (!$script) {
             Debugf("No free txo script, produce transaction skipped");
             return undef;
         }
     }
-    my @txo = QBitcoin::TXO->find(tx_out => undef, open_script => $script->id, -limit => 100);
+    my @txo = QBitcoin::TXO->find(tx_out => undef, scripthash => $script->id, -limit => 100);
     # Exclude loaded txo to avoid double-spend
     # b/c its may be included as input into another mempool transaction
     @txo = grep { !$_->is_cached } @txo;
@@ -132,15 +134,16 @@ sub _produce_tx {
     @txo = shuffle @txo;
     @txo = splice(@txo, 0, 2);
     $_->save foreach grep { !$_->is_cached } @txo;
+    $_->redeem_script = $redeem_script foreach @txo;
     my $amount = sum map { $_->value } @txo;
     my $fee = int($amount * $fee_part);
-    my $open_script = OP_VERIFY;
+    my $siglist = [ "\x01", "\x01" ];
     my $out = QBitcoin::TXO->new_txo(
-        value       => $amount - $fee,
-        open_script => $open_script,
+        value      => $amount - $fee,
+        scripthash => hash160($redeem_script),
     );
     my $tx = QBitcoin::Transaction->new(
-        in            => [ map +{ txo => $_, close_script => OP_1 . OP_1 }, @txo ],
+        in            => [ map +{ txo => $_, siglist => $siglist }, @txo ],
         out           => [ $out ],
         fee           => $fee,
         received_time => time(),

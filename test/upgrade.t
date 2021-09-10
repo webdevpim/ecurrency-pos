@@ -9,6 +9,7 @@ use Test::More;
 use QBitcoin::Test::ORM;
 use QBitcoin::Const;
 use QBitcoin::Config;
+use QBitcoin::Crypto qw(hash160);
 use QBitcoin::Coinbase;
 use QBitcoin::TXO;
 use QBitcoin::Transaction;
@@ -20,7 +21,7 @@ use Bitcoin::Transaction;
 #$config->{debug} = 1;
 
 my $value = 100000; # random value
-my $open_script = "\x10\x11"; # random string
+my $open_script = hash160("\x10\x11"); # random string
 
 my $btc_tx_data = pack("VC", 1, 1); # version, txin_count
 $btc_tx_data .= "\x00" x 36 . "\x00" . "\x00" x 4; # prev output, script (var_str), sequence
@@ -61,12 +62,12 @@ my $up = QBitcoin::Coinbase->new({
     btc_tx_data      => $btc_tx->data,
     merkle_path      => $btc_block[1]->merkle_path($btc_tx_num),
     value            => $value,
-    open_script      => substr($btc_tx->out->[$btc_out_num]->{open_script}, QBT_SCRIPT_START_LEN),
+    scripthash       => substr($btc_tx->out->[$btc_out_num]->{open_script}, QBT_SCRIPT_START_LEN),
 });
 
 my $out = QBitcoin::TXO->new_txo({
-    value       => $value,
-    open_script => $open_script,
+    value      => $value,
+    scripthash => $open_script,
 });
 my $tx = QBitcoin::Transaction->new({
     in  => [],
@@ -85,11 +86,11 @@ $out->num = 0;
     isnt($tx->validate(), 0, "Too small value");
 }
 {
-    local $out->{open_script} = "\x10\x11\x12";
-    isnt($tx->validate(), 0, "Incorrect open_script");
+    local $out->{scripthash} = hash160("\x10\x11\x12");
+    isnt($tx->validate(), 0, "Incorrect scripthash");
 }
 {
-    my $extra_out = QBitcoin::TXO->new_txo({ value => 10, open_script => "\x01\x02", num => 1 });
+    my $extra_out = QBitcoin::TXO->new_txo({ value => 10, scripthash => hash160("\x01\x02"), num => 1 });
     local $tx->{out} = [ $out, $extra_out ];
     local $tx->{hash};
     $tx->calculate_hash;
@@ -97,8 +98,8 @@ $out->num = 0;
     isnt($tx->validate(), 0, "Extra output");
 }
 {
-    my $extra_in = QBitcoin::TXO->new_txo({ value => 10, open_script => "\x01\x02", tx_out => "\xaa" x 32, num => 1 });
-    local $tx->{in} = [ { txo => $extra_in, close_script => "\x02\x01" } ];
+    my $extra_in = QBitcoin::TXO->new_txo({ value => 10, redeem_script => "\x01\x02", scripthash => hash160("\x01\x02"), tx_out => "\xaa" x 32, num => 1 });
+    local $tx->{in} = [ { txo => $extra_in, siglist => [] } ];
     isnt($tx->validate(), 0, "Extra input");
 }
 {
