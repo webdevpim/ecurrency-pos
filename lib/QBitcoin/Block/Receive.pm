@@ -198,7 +198,7 @@ sub receive {
             foreach my $in (@{$tx->in}) {
                 my $txo = $in->{txo};
                 $txo->tx_out = $tx->hash;
-                $txo->sigscript = $in->{sigscript};
+                $txo->siglist = $in->{siglist};
                 $txo->del_my_utxo if $txo->is_my; # for stake transaction
             }
             foreach my $txo (@{$tx->out}) {
@@ -242,7 +242,7 @@ sub receive {
                     foreach my $in (@{$tx->in}) {
                         my $txo = $in->{txo};
                         $txo->tx_out = $tx->hash;
-                        $txo->sigscript = $in->{sigscript};
+                        $txo->siglist = $in->{siglist};
                         $txo->del_my_utxo if $txo->is_my;
                     }
                     foreach my $txo (@{$tx->out}) {

@@ -236,7 +236,6 @@ sub data { "" } # TODO
 sub serialize {
     my $self = shift;
 
-    # do not cache this in $self->{serialize} b/c it can be called from sign_data() with stripped sigscripts
     my $data = varint(scalar @{$self->in});
     $data .= serialize_input($_) foreach @{$self->in};
     $data .= varint(scalar @{$self->out});
@@ -287,19 +286,25 @@ sub as_hashref {
 
 sub input_as_hashref {
     my $in = shift;
+    $in->{siglist} or die "Undefined siglist during input_as_hashref";
     return {
         tx_out        => unpack("H*", $in->{txo}->tx_in),
         num           => $in->{txo}->num+0,
-        sigscript     => unpack("H*", $in->{sigscript}          // die "Undefined sigscript during input_as_hashref"),
+        siglist       => [ map { unpack("H*", $_) } @{$in->{siglist}} ],
         redeem_script => unpack("H*", $in->{txo}->redeem_script // die "Undefined redeem_script during input_as_hashref"),
     };
 }
 
+sub serialize_siglist {
+    my $siglist = shift;
+    return varint(scalar @$siglist) . join("", map { varstr($_) } @$siglist);
+}
+
 sub serialize_input {
     my $in = shift;
-    my $sigscript = $in->{sigscript} // die "Undefined sigscript during serialize_input";
+    my $siglist = $in->{siglist} // die "Undefined siglist during serialize_input";
     my $redeem_script = $in->{txo}->redeem_script // die "Undefined redeem_script during serialize_input";
-    return $in->{txo}->tx_in . varint($in->{txo}->num) . varstr($sigscript) . varstr($redeem_script);
+    return $in->{txo}->tx_in . varint($in->{txo}->num) . serialize_siglist($siglist) . varstr($redeem_script);
 }
 
 sub serialize_input_for_sign {
@@ -307,12 +312,19 @@ sub serialize_input_for_sign {
     return $in->{txo}->tx_in . varint($in->{txo}->num);
 }
 
+sub deserialize_siglist {
+    my $data = shift;
+    my $num = $data->get_varint() // return undef;
+    my @siglist = map { $data->get_string() // return undef } 1 .. $num;
+    return \@siglist;
+}
+
 sub deserialize_input {
     my $data = shift;
     return {
         tx_out        => ( $data->get(32) // return undef ),
         num           => ( $data->get_varint() // return undef ),
-        sigscript     => ( $data->get_string() // return undef ),
+        siglist       => ( deserialize_siglist($data) // return undef ),
         redeem_script => ( $data->get_string() // return undef ),
     };
 }
@@ -449,8 +461,8 @@ sub load_inputs {
         if (my $txo = QBitcoin::TXO->get($in)) {
             $txo->redeem_script = $in->{redeem_script};
             push @loaded_inputs, {
-                txo       => $txo,
-                sigscript => $in->{sigscript},
+                txo     => $txo,
+                siglist => $in->{siglist},
             };
         }
         else {
@@ -466,8 +478,8 @@ sub load_inputs {
             if (my $txo = QBitcoin::TXO->get($in)) {
                 $txo->redeem_script = $in->{redeem_script};
                 push @loaded_inputs, {
-                    txo       => $txo,
-                    sigscript => $in->{sigscript},
+                    txo     => $txo,
+                    siglist => $in->{siglist},
                 };
             }
             else {
@@ -600,7 +612,7 @@ sub check_input_script {
     my $self = shift;
     foreach my $num (0 .. $#{$self->in}) {
         my $in = $self->in->[$num];
-        if ($in->{txo}->check_script($in->{sigscript}, $self, $num) != 0) {
+        if ($in->{txo}->check_script($in->{siglist}, $self, $num) != 0) {
             Warningf("Unmatched close script for input %s:%u in transaction %s",
                 $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
             return -1;
@@ -628,8 +640,8 @@ sub pre_load {
         my @inputs;
         foreach my $txo (QBitcoin::TXO->load_stored_inputs($attr->{id}, $attr->{hash})) {
             push @inputs, {
-                txo       => $txo,
-                sigscript => $txo->sigscript,
+                txo     => $txo,
+                siglist => $txo->siglist,
             };
         }
         my $upgrade = QBitcoin::Coinbase->load_stored_coinbase($attr->{id}, $attr->{hash});
@@ -683,7 +695,7 @@ sub unconfirm {
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
         $txo->tx_out = undef;
-        $txo->sigscript = undef;
+        $txo->siglist = undef;
         # Return to list of my utxo inputs from stake transaction, but do not use returned to mempool
         $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my && !$txo->spent_list;
     }

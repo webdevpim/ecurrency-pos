@@ -26,8 +26,8 @@ sub store {
 
 sub check_input {
     my ($class) = shift;
-    my ($sigscript, $redeem_script, $tx, $input_num) = @_;
-    my $res = script_eval($sigscript, $redeem_script, $tx, $input_num);
+    my ($siglist, $redeem_script, $tx, $input_num) = @_;
+    my $res = script_eval($siglist, $redeem_script, $tx, $input_num);
     return $res ? 0 : -1; # if script_eval return true then it's ok (0)
 }
 

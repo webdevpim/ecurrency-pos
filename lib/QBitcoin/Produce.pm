@@ -137,12 +137,13 @@ sub _produce_tx {
     $_->redeem_script = $redeem_script foreach @txo;
     my $amount = sum map { $_->value } @txo;
     my $fee = int($amount * $fee_part);
+    my $siglist = [ "\x01", "\x01" ];
     my $out = QBitcoin::TXO->new_txo(
         value      => $amount - $fee,
         scripthash => hash160($redeem_script),
     );
     my $tx = QBitcoin::Transaction->new(
-        in            => [ map +{ txo => $_, sigscript => OP_1 . OP_1 }, @txo ],
+        in            => [ map +{ txo => $_, siglist => $siglist }, @txo ],
         out           => [ $out ],
         fee           => $fee,
         received_time => time(),

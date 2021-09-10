@@ -20,7 +20,7 @@ sub sign_transaction {
     foreach my $num (0 .. $#{$self->in}) {
         my $in = $self->in->[$num];
         if (my $address = QBitcoin::MyAddress->get_by_hash($in->{txo}->scripthash)) {
-            $self->make_sigscript($in, $address, $num);
+            $self->make_sign($in, $address, $num);
         }
         else {
             Errf("Can't sign transaction: address for %s:%u is not my, scripthash %s",
@@ -30,7 +30,7 @@ sub sign_transaction {
     $self->calculate_hash;
 }
 
-sub make_sigscript {
+sub make_sign {
     my $self = shift;
     my ($in, $address, $input_num) = @_;
 
@@ -40,10 +40,10 @@ sub make_sigscript {
     $in->{txo}->redeem_script = $redeem_script;
     my $script_type = QBitcoin::RedeemScript->script_type($redeem_script);
     if ($script_type eq "P2PKH") {
-        $in->{sigscript} = op_pushdata($signature) . op_pushdata($address->pubkey);
+        $in->{siglist} = [ $signature, $address->pubkey ];
     }
     elsif ($script_type eq "P2PK") {
-        $in->{signscript} = op_pushdata($signature);
+        $in->{siglist} = [ $signature ];
     }
 }
 

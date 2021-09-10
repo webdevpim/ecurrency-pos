@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS `txo` (
   tx_in         int unsigned NOT NULL,
   tx_out        int unsigned DEFAULT NULL,
   scripthash    int NOT NULL,
-  sigscript    blob DEFAULT NULL,
+  siglist      blob DEFAULT NULL,
   PRIMARY KEY (tx_in, num),
   FOREIGN KEY (tx_in)      REFERENCES `transaction`   (id) ON DELETE CASCADE,
   FOREIGN KEY (tx_out)     REFERENCES `transaction`   (id) ON DELETE SET NULL,

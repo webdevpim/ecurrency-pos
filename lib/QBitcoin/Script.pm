@@ -425,17 +425,10 @@ sub execute {
 }
 
 sub script_eval($$$$) {
-    my ($sigscript, $redeem_script, $tx, $input_num) = @_;
+    my ($siglist, $redeem_script, $tx, $input_num) = @_;
 
-    my $state = QBitcoin::Script::State->new($sigscript, $tx, $input_num);
-    my $res;
-    $res = execute($state);
-    return $res if defined($res);
-
-    # should we check/clear the if-stack here?
-    $state->script = $redeem_script;
-    $state->cp = 0;
-    $res = execute($state);
+    my $state = QBitcoin::Script::State->new($redeem_script, $siglist, $tx, $input_num);
+    my $res = execute($state);
     return $res if defined($res);
 
     return $state->ok;

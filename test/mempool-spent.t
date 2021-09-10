@@ -37,7 +37,7 @@ sub make_tx {
     $_->redeem_script = "open_ " . $_->value foreach @in;
     my $tx = QBitcoin::Transaction->new(
         out => [ QBitcoin::TXO->new_txo( value => $out_value, scripthash => hash160("open_$out_value") ) ],
-        in  => [ map +{ txo => $_, sigscript => "" }, @in ],
+        in  => [ map +{ txo => $_, siglist => [] }, @in ],
         @in ? () : ( coins_created => $out_value ),
     );
     $value += 10;
