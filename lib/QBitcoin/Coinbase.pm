@@ -10,6 +10,7 @@ use QBitcoin::Config;
 use QBitcoin::ORM qw(:types dbh find for_log DEBUG_ORM);
 use QBitcoin::Crypto qw(hash256);
 use QBitcoin::ProtocolState qw(btc_synced);
+use QBitcoin::Script::OpCodes qw(:OPCODES);
 use QBitcoin::RedeemScript;
 use Bitcoin::Serialized;
 use Bitcoin::Transaction;
@@ -184,6 +185,72 @@ sub get_scripthash {
     if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) eq QBT_SCRIPT_START &&
         length($out->{open_script}) == QBT_SCRIPT_START_LEN + 20) {
         return substr($out->{open_script}, QBT_SCRIPT_START_LEN);
+    }
+    elsif ($out->{open_script} eq QBT_BURN_SCRIPT) {
+        # OK, make scripthash by first input of this transaction
+        my $in = $tx->in->[0]
+            or return undef;
+        my $input_script = $in->{script};
+        if (my $witness = $tx->in->[0]->{witness}) {
+            if ($input_script eq "" && @$witness == 2 && length($witness->[0]) <= 72 && length($witness->[1]) == 33) {
+                # P2WPKH
+                return hash160(script_by_pubkey($witness->[1]));
+            }
+            elsif (@$witness > 1) {
+                # P2WSH?
+                return hash160($witness->[-1]);
+            }
+            else {
+                return undef;
+            }
+        }
+        elsif ($input_script eq "") {
+            return undef;
+        }
+        # Can we reliable get pubkey or scripthash by the bitcoin input script?
+        # In particular, how can we distinguish "push <serialized-script>" for P2SH and "push <pubkeyhash>" for P2PKH without unlock-script?
+        # Assume the <serialized-script> is longer than 33 bytes.
+        # It's not fully reliable but if somebody tries to deceive this algorithm by creating unusually short script
+        # then he will simple lost (burn) his money
+        if ($input_script =~ /^([\x41-\x48])(??{ ".{" . ord($1) . "}" })\x21(.{33})\z/) {
+            # it's P2PKH: push 72-bytes signature, push 33-bytes pubkey
+            return hash160(script_by_pubkey($2));
+        }
+        elsif ($input_script =~ /^([\x41-\x48])((??{ ".{" . ord($1) . "}" }))\z/) {
+            # it's P2PK, push only 72-bytes DER-encoded signature
+            # TODO: fetch pubkey from it (?)
+            my $signature = $2;
+            return undef;
+        }
+        elsif (0) {
+            # BTC and QBT scripts are not fully compatible
+            # It should work correctly in most cases, but isn't it better deterministic "never" than "almost always"?
+            # P2SH script may contains only pushes, and the last one contains the serialized script
+            my $last_push_data;
+            while ($input_script ne "") {
+                my $first_byte = unpack("C", substr($input_script, 0, 1));
+                if ($first_byte > 0 && $first_byte < 0x4c) {
+                    $last_push_data = substr($input_script, 0, $first_byte+1, "");
+                    substr($last_push_data, 0, 1, "");
+                }
+                elsif ($first_byte == OP_PUSHDATA1) {
+                    my $bytes = unpack("C", substr($input_script, 1, 1));
+                    $last_push_data = substr($input_script, 0, $bytes+2, "");
+                    substr($last_push_data, 0, 2, "");
+                    length($last_push_data) == $bytes or return undef;
+                }
+                elsif ($first_byte == OP_PUSHDATA2) {
+                    my $bytes = unpack("v", substr($input_script, 1, 2));
+                    $last_push_data = substr($input_script, 0, $bytes+3, "");
+                    substr($last_push_data, 0, 3, "");
+                    length($last_push_data) == $bytes or return undef;
+                }
+                else {
+                    return undef;
+                }
+            }
+            return hash160($last_push_data);
+        }
     }
     return undef;
 }

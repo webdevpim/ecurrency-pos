@@ -2,10 +2,11 @@ package QBitcoin::Const;
 use warnings;
 use strict;
 
-use QBitcoin::Script::OpCodes qw(OP_RETURN);
+use QBitcoin::Script::OpCodes qw(:OPCODES);
 
 use constant GENESIS_BLOCK_HASH => "1234";
 use constant QBT_SCRIPT_START   => OP_RETURN . "QBTC";
+use constant QBT_BURN_HASH      => pack("H*", "fe5205472fb87124923f4be64292ef289478b06d"); # 1QBitcoin1QBitcoin1QBitcoin1pSAg3e
 
 use constant QBITCOIN_CONST => {
     VERSION                 => "0.1",
@@ -47,6 +48,7 @@ use constant QBITCOIN_CONST => {
     BTC_TESTNET             => 1,
     QBT_SCRIPT_START        => QBT_SCRIPT_START,
     QBT_SCRIPT_START_LEN    => length(QBT_SCRIPT_START),
+    QBT_BURN_SCRIPT         => OP_DUP . OP_HASH160 . pack("C", length(QBT_BURN_HASH)) . QBT_BURN_HASH . OP_EQUALVERIFY . OP_CHECKSIG,
     CONFIG_DIR              => "/etc",
     CONFIG_NAME             => "qbitcoin.conf",
     ZERO_HASH               => "\x00" x 32,
