@@ -68,7 +68,7 @@ my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED, ip => '127.0.0.1');
 send_blocks([ 0, "a0", undef, 0, 50 ]);
 send_blocks(map [ $_, "a$_", "a" . ($_-1), 1, $_*100 ], 1 .. 20);
 $peer->cmd_ihave(pack("VQ<a32", 20, 20*120-70, "\xaa" x 32));
-send_blocks([ 5, "b5", "a4", 1, 450 ]);
+send_blocks([ 21, "a21", "a20", 1, 2021 ], [ 5, "b5", "a4", 1, 450 ]);
 send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 6 .. 19);
 
 sub send_blocks {

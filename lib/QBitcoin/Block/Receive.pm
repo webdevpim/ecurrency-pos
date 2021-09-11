@@ -2,7 +2,6 @@ package QBitcoin::Block::Receive;
 use warnings;
 use strict;
 
-use Scalar::Util qw(weaken);
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Config;
