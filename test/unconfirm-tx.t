@@ -13,7 +13,8 @@ use JSON::XS;
 use QBitcoin::Test::ORM;
 use QBitcoin::Const;
 use QBitcoin::Config;
-use QBitcoin::Protocol;
+use QBitcoin::Peer;
+use QBitcoin::Connection;
 use QBitcoin::Block;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
@@ -62,11 +63,12 @@ sub mock_self_weight {
         $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
 }
 
-my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED, ip => '127.0.0.1');
+my $peer = QBitcoin::Peer->new(type => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
+my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
 # height, hash, prev_hash, $tx_num, weight [, self_weight]
 send_blocks([ 0, "a0", undef, 0, 50 ]);
 send_blocks(map [ $_, "a$_", "a" . ($_-1), 1, $_*100 ], 1 .. 20);
-$peer->cmd_ihave(pack("VQ<a32", 20, 20*120-70, "\xaa" x 32));
+$connection->protocol->cmd_ihave(pack("VQ<a32", 20, 20*120-70, "\xaa" x 32));
 send_blocks([ 5, "b5", "a4", 1, 450 ]);
 send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 6 .. 19);
 
@@ -85,7 +87,7 @@ sub send_blocks {
             );
             $value += 10;
             $tx->calculate_hash;
-            $peer->cmd_tx($tx->serialize);
+            $connection->protocol->cmd_tx($tx->serialize);
             push @tx, $tx;
         }
 
@@ -100,7 +102,7 @@ sub send_blocks {
         $block->merkle_root = $block->calculate_merkle_root();
         my $block_data = $block->serialize;
         $block_hash = $block->hash;
-        $peer->cmd_block($block_data);
+        $connection->protocol->cmd_block($block_data);
     }
 }
 

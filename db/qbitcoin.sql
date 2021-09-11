@@ -1,5 +1,5 @@
 
-CREATE TABLE `block` (
+CREATE TABLE IF NOT EXISTS `block` (
   height int unsigned NOT NULL PRIMARY KEY,
   hash binary(32) NOT NULL,
   weight bigint unsigned NOT NULL,
@@ -8,7 +8,7 @@ CREATE TABLE `block` (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS `block_hash` ON `block` (hash);
 
-CREATE TABLE `transaction` (
+CREATE TABLE IF NOT EXISTS `transaction` (
   id integer NOT NULL AUTO_INCREMENT PRIMARY KEY, -- "integer" (signed) required for sqlite autoincrement
   hash binary(32) NOT NULL,
   block_height int unsigned NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE `transaction` (
 CREATE UNIQUE INDEX IF NOT EXISTS `tx_hash` ON `transaction` (hash);
 CREATE INDEX IF NOT EXISTS `tx_block_height` ON `transaction` (block_height);
 
-CREATE TABLE `tx_data` (
+CREATE TABLE IF NOT EXISTS `tx_data` (
   id int unsigned NOT NULL PRIMARY KEY,
   data blob NOT NULL,
   FOREIGN KEY (id) REFERENCES `transaction` (id) ON DELETE CASCADE
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS `my_address` (
   private_key blob(4096)   NOT NULL -- TODO: encrypted
 );
 
-CREATE TABLE `btc_block` (
+CREATE TABLE IF NOT EXISTS `btc_block` (
   height int unsigned DEFAULT NULL,
   time int unsigned NOT NULL,
   bits int unsigned NOT NULL,
@@ -69,7 +69,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS `btc_height` ON `btc_block` (height);
 CREATE UNIQUE INDEX IF NOT EXISTS `btc_hash`   ON `btc_block` (hash);
 CREATE        INDEX IF NOT EXISTS `scanned`    ON `btc_block` (scanned, height);
 
-CREATE TABLE `coinbase` (
+CREATE TABLE IF NOT EXISTS `coinbase` (
   btc_block_height int unsigned DEFAULT NULL,
   btc_tx_num smallint unsigned DEFAULT NULL,
   btc_out_num smallint unsigned NOT NULL,
@@ -85,3 +85,25 @@ CREATE TABLE `coinbase` (
   FOREIGN KEY (scripthash)       REFERENCES `redeem_script` (id)     ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS `coinbase_tx_out` ON `coinbase` (tx_out);
+
+CREATE TABLE IF NOT EXISTS `peer` (
+  type smallint unsigned NOT NULL,
+  status smallint unsigned,
+  ip binary(16) NOT NULL,
+  port smallint unsigned,
+  create_time int unsigned NOT NULL,
+  update_time int unsigned NOT NULL,
+  software varchar(256),
+  features bigint unsigned NOT NULL DEFAULT 0,
+  bytes_sent bigint unsigned NOT NULL DEFAULT 0,
+  bytes_recv bigint unsigned NOT NULL DEFAULT 0,
+  obj_sent int unsigned NOT NULL DEFAULT 0,
+  obj_recv bigint unsigned NOT NULL DEFAULT 0,
+  ping_min_ms int unsigned,
+  ping_avg_ms int unsigned,
+  reputation int NOT NULL DEFAULT 0,
+  failed_connects int NOT NULL DEFAULT 0,
+  pinned smallint unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY (type, ip)
+);
+CREATE INDEX IF NOT EXISTS `peer_reputation` ON `peer` (reputation);

@@ -55,9 +55,9 @@ use constant QBITCOIN_CONST => {
 };
 
 use constant STATE_CONST => {
-    STATE_CONNECTED    => 'connected',
-    STATE_CONNECTING   => 'connecting',
-    STATE_DISCONNECTED => 'disconnected',
+    STATE_CONNECTED    => 1,
+    STATE_CONNECTING   => 2,
+    STATE_DISCONNECTED => 3,
 };
 
 use constant DIR_CONST => {
@@ -65,9 +65,16 @@ use constant DIR_CONST => {
     DIR_OUT => 'out',
 };
 
+use constant PROTOCOL_CONST => {
+    PROTOCOL_QBITCOIN => 1,
+    PROTOCOL_BITCOIN  => 2,
+    PROTOCOL_RPC      => 3,
+};
+
 use constant QBITCOIN_CONST;
 use constant STATE_CONST;
 use constant DIR_CONST;
+use constant PROTOCOL_CONST;
 
 sub time_by_height {
     my ($height) = @_;
@@ -82,7 +89,7 @@ sub height_by_time {
 }
 
 use Exporter qw(import);
-our @EXPORT = ( keys %{&QBITCOIN_CONST}, keys %{&STATE_CONST}, keys %{&DIR_CONST} );
+our @EXPORT = ( keys %{&QBITCOIN_CONST}, keys %{&STATE_CONST}, keys %{&DIR_CONST}, keys %{&PROTOCOL_CONST} );
 push @EXPORT, qw(time_by_height height_by_time);
 
 1;

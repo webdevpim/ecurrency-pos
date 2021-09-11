@@ -11,7 +11,8 @@ use Test::MockModule;
 use QBitcoin::Test::ORM qw(dbh);
 use QBitcoin::Const;
 use QBitcoin::Config;
-use Bitcoin::Protocol;
+use QBitcoin::Peer;
+use QBitcoin::Connection;
 use Bitcoin::Block;
 
 #$config->{debug} = 1;
@@ -48,12 +49,13 @@ send_blocks([
 sub send_blocks {
     my ($blocks, $expect) = @_;
 
+    state $peer = QBitcoin::Peer->get_or_create(type => PROTOCOL_BITCOIN, state => STATE_CONNECTED, ip => 'btc-test-node');
     state $n=1;
     subtest "branch " . $n++ => sub {
         # Create new blockchain from scratch for each send_blocks() call
         dbh->do("DELETE FROM `" . Bitcoin::Block->TABLE . "`");
+        my $connection = QBitcoin::Connection->new(peer => $peer, state => STATE_CONNECTED);
 
-        my $peer = Bitcoin::Protocol->new(state => STATE_CONNECTED, ip => 'btc-test-node');
         foreach my $block_data (@$blocks) {
             my $block = Bitcoin::Block->new(
                 hash        => $block_data->[0],
@@ -65,7 +67,7 @@ sub send_blocks {
                 scanned     => 0,
                 merkle_root => ZERO_HASH,
             );
-            $peer->process_btc_block($block)
+            $connection->protocol->process_btc_block($block)
                 && $block->create();
         }
         my ($best_block) = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1);

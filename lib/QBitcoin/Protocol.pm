@@ -54,7 +54,7 @@ use constant {
     REJECT_INVALID => 1,
 };
 
-sub type() { "QBitcoin" }
+sub type() { PROTOCOL_QBITCOIN }
 
 sub startup {
     my $self = shift;
@@ -65,7 +65,13 @@ sub startup {
 
 sub pack_my_address {
     my $self = shift;
-    return pack("Q<a16n", PROTOCOL_FEATURES, $self->my_addr, $self->my_port);
+    return pack("Q<a16n", PROTOCOL_FEATURES, $self->connection->my_addr, $self->connection->my_port);
+}
+
+sub peer_id {
+    my $self = shift;
+    use constant IPV6_V4_PREFIX => "\x00" x 10 . "\xff" x 2;
+    return $self->{peer_id} //= IPV6_V4_PREFIX . inet_aton($self->peer->ip);
 }
 
 sub cmd_version {
@@ -109,6 +115,7 @@ sub abort {
     my $self = shift;
     my ($reason) = @_;
     $self->send_message("reject", pack("C/a*", $self->command) . pack("C", REJECT_INVALID) . pack("C/a*", $reason // "general_error"));
+    $self->peer->decrease_reputation;
 }
 
 sub announce_block {
@@ -121,7 +128,7 @@ sub cmd_sendtx {
     my $self = shift;
     my ($data) = @_;
     if (length($data) != 32) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->ip, $self->command, length($data));
         $self->abort("incorrect_params");
         return -1;
     }
@@ -131,7 +138,7 @@ sub cmd_sendtx {
         $self->send_message("tx", $tx->serialize);
     }
     else {
-        Warningf("I have no transaction with hash %u requested by peer %s", $hash, $self->ip);
+        Warningf("I have no transaction with hash %u requested by peer %s", $hash, $self->peer->ip);
     }
     return 0;
 }
@@ -140,7 +147,7 @@ sub cmd_ihavetx {
     my $self = shift;
     my ($data) = @_;
     if (length($data) != 32) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->ip, $self->command, length($data));
         $self->abort("incorrect_params");
         return -1;
     }
@@ -161,7 +168,7 @@ sub cmd_block {
     my $data = Bitcoin::Serialized->new($block_data);
     my $block = QBitcoin::Block->deserialize($data);
     if (!$block || $data->length) {
-        Warningf("Bad block data length %u from peer %s", length($block_data), $self->ip);
+        Warningf("Bad block data length %u from peer %s", length($block_data), $self->peer->ip);
         $self->abort("bad_block_data");
         return -1;
     }
@@ -242,7 +249,7 @@ sub cmd_blocks {
     my $self = shift;
     my ($blocks_data) = @_;
     if (length($blocks_data) == 0) {
-        Warningf("Bad (empty) blocks params from peer %s", $self->ip);
+        Warningf("Bad (empty) blocks params from peer %s", $self->peer->ip);
         $self->abort("incorrect_params");
         return -1;
     }
@@ -254,7 +261,7 @@ sub cmd_blocks {
         my $prev_block = $block;
         $block = QBitcoin::Block->deserialize($data);
         if (!$block) {
-            Warningf("Bad blocks data length from peer %s", $self->ip);
+            Warningf("Bad blocks data length from peer %s", $self->peer->ip);
             $self->abort("bad_block_data");
             return -1;
         }
@@ -279,7 +286,7 @@ sub cmd_blocks {
 
         if ($num > 1) {
             if ($block->prev_hash ne $prev_block->hash) {
-                Warningf("Received blocks are not in chain from peer %s", $self->ip);
+                Warningf("Received blocks are not in chain from peer %s", $self->peer->ip);
                 $self->abort("bad_block_data");
                 return -1;
             }
@@ -418,7 +425,7 @@ sub request_new_block {
             else {
                 if (($self->has_weight // -1) > $best_weight) { # otherwise remote may have no such block, no syncing
                     $self->syncing(1);
-                    Debugf("Remote %s have block weight more than our, request block %u", $self->ip, $height);
+                    Debugf("Remote %s have block weight more than our, request block %u", $self->peer->ip, $height);
                 }
                 $self->send_message("sendblock", pack("V", $height));
             }
@@ -456,13 +463,13 @@ sub cmd_getblks {
     my ($data) = @_;
     my $datalen = length($data);
     if ($datalen < 6) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->ip, $self->command, length($data));
         $self->abort("incorrect_params");
         return -1;
     }
     my ($low_height, $locators) = unpack("Vv", substr($data, 0, 6));
     if ($datalen != 6+32*$locators) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->ip, $self->command, length($data));
         $self->abort("incorrect_params");
         return -1;
     }
@@ -494,7 +501,7 @@ sub cmd_getblks {
                 $self->send_message("block", $block->serialize);
             }
             else {
-                Warningf("I have no block with height %u requested by peer %s", $height, $self->ip);
+                Warningf("I have no block with height %u requested by peer %s", $height, $self->peer->ip);
             }
             return 0;
         }
@@ -517,7 +524,7 @@ sub cmd_getblks {
         }
     }
     if ($sent) {
-        Infof("Send blocks height %u .. %u to %s", $height-$sent, $height-1, $self->ip);
+        Infof("Send blocks height %u .. %u to %s", $height-$sent, $height-1, $self->peer->ip);
         $self->send_message("blocks", pack("C", $sent) . $response);
     }
     return 0;
@@ -527,13 +534,13 @@ sub cmd_ihave {
     my $self = shift;
     my ($data) = @_;
     if (length($data) != 44) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->ip, $self->command, length($data));
         $self->abort("incorrect_params");
         return -1;
     }
     my ($height, $weight, $hash) = unpack("VQ<a32", $data);
     if (time() < time_by_height($height)) {
-        Warningf("Ignore too early block height %u from peer %s", $height, $self->ip);
+        Warningf("Ignore too early block height %u from peer %s", $height, $self->peer->ip);
         return 0;
     }
     if ($weight < ($self->has_weight // -1)) {
@@ -552,7 +559,7 @@ sub cmd_sendblock {
     my $self = shift;
     my ($data) = @_;
     if (length($data) != 4) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->ip, $self->command, length($data));
         $self->abort("incorrect_params");
         return -1;
     }
@@ -566,7 +573,7 @@ sub cmd_sendblock {
         $block->free_block();
     }
     else {
-        Warningf("I have no block with height %u requested by peer %s", $height, $self->ip);
+        Warningf("I have no block with height %u requested by peer %s", $height, $self->peer->ip);
     }
     return 0;
 }
@@ -575,7 +582,7 @@ sub cmd_mempool {
     my $self = shift;
     my ($data) = @_;
     if (length($data) != 0) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->ip, $self->command, length($data));
         $self->abort("incorrect_params");
         return -1;
     }
@@ -590,7 +597,7 @@ sub cmd_eomempool {
     my $self = shift;
     my $data = shift;
      if (length($data) != 0) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->ip, $self->command, length($data));
+        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->ip, $self->command, length($data));
         $self->abort("incorrect_params");
         return -1;
     }
@@ -619,14 +626,8 @@ sub cmd_pong {
 
 sub cmd_reject {
     my $self = shift;
-    Warningf("Peer %s aborted connection", $self->ip);
+    Warningf("%s peer %s aborted connection", $self->type, $self->peer->ip);
     return -1;
-}
-
-sub decrease_reputation {
-    my $self = shift;
-    ...;
-    return 0;
 }
 
 1;

@@ -8,7 +8,7 @@ use List::Util qw(max);
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::ProtocolState qw(btc_synced);
-use QBitcoin::Peers;
+use QBitcoin::ConnectionList;
 use Bitcoin::Block;
 
 use constant MAINNET => !BTC_TESTNET;
@@ -100,8 +100,8 @@ sub announce_btc_block_to_peers {
     my ($block) = @_;
 
     if (btc_synced()) {
-        foreach my $peer (QBitcoin::Peers->connected('QBitcoin')) {
-            next if $peer->ip eq $self->ip && $self->type eq 'QBitcoin';
+        foreach my $peer (QBitcoin::ConnectionList->connected('QBitcoin')) {
+            next if $peer->ip eq $self->peer->ip && $self->type eq 'QBitcoin';
             next unless $peer->can('announce_btc_block');
             $peer->announce_btc_block($block);
         }
