@@ -74,7 +74,7 @@ sub fetch {
     my $table = $class->TABLE
         or die "No TABLE defined in $class\n";
     my $sql = "SELECT " .
-        join(', ', map { $class->FIELDS->{$_} == TIMESTAMP ? "UNIX_TIMESTAMP($_) AS $_" : $_ } keys %{$class->FIELDS}) .
+        join(', ', map { $class->FIELDS->{$_} == TIMESTAMP ? "UNIX_TIMESTAMP(`$_`) AS `$_`" : "`$_`" } keys %{$class->FIELDS}) .
         " FROM `$table`";
     my @values;
     my $condition = '';
@@ -98,11 +98,11 @@ sub fetch {
         if (ref $value eq 'ARRAY') {
             # "IN()" is sql syntax error, "IN(NULL)" matches nothing
             if ($type == BINARY && BIN_UNHEX) {
-                $condition .= " $key IN (" . (@$value ? join(',', ('UNHEX(?)')x@$value) : "NULL") . ")";
+                $condition .= " `$key` IN (" . (@$value ? join(',', ('UNHEX(?)')x@$value) : "NULL") . ")";
                 push @values, map unpack("H*", $_), @$value;
             }
             else {
-                $condition .= " $key IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
+                $condition .= " `$key` IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
                 push @values, @$value;
             }
         }
@@ -112,15 +112,15 @@ sub fetch {
                 $condition .= " AND" unless $first;
                 my $v = $value->{$op};
                 if (ref $v eq 'SCALAR') {
-                    $condition .= "$key $op $$v ";
+                    $condition .= "`$key` $op $$v ";
                 }
                 elsif (ref $v eq 'ARRAY') { # key => { not => [ 'value1', 'value2 ] }
                     if ($type == BINARY && BIN_UNHEX) {
-                        $condition .= " $key $op IN (" . (@$value ? join(',', ('UNHEX(?)')x@$value) : "NULL") . ")";
+                        $condition .= " `$key` $op IN (" . (@$value ? join(',', ('UNHEX(?)')x@$value) : "NULL") . ")";
                         push @values, map unpack("H*", $_), @$value;
                     }
                     else {
-                        $condition .= " $key $op IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
+                        $condition .= " `$key` $op IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
                         push @values, @$value;
                     }
                 }
@@ -128,34 +128,34 @@ sub fetch {
                     die "Incorrect search value type " . ref($v) . " key $key\n";
                 }
                 else {
-                    $condition .= " $key $op ?";
+                    $condition .= " `$key` $op ?";
                     push @values, $v;
                 }
                 $first = 0;
             }
         }
         elsif (ref $value eq 'SCALAR') {
-            $condition .= " $key = $$value" if defined $$value; # \undef is IGNORE
+            $condition .= " `$key` = $$value" if defined $$value; # \undef is IGNORE
         }
         elsif (ref $value) {
             die "Incorrect search value type " . ref($value) . " key $key\n";
         }
         elsif (defined $value) {
             if ($type == TIMESTAMP) {
-                $condition .= " $key = FROM_UNIXTIME(?)";
+                $condition .= " `$key` = FROM_UNIXTIME(?)";
                 push @values, $value;
             }
             if ($type == BINARY && BIN_UNHEX) {
-                $condition .= " $key = UNHEX(?)";
+                $condition .= " `$key` = UNHEX(?)";
                 push @values, unpack("H*", $value);
             }
             else {
-                $condition .= " $key = ?";
+                $condition .= " `$key` = ?";
                 push @values, $value;
             }
         }
         else {
-            $condition .= " $key IS NULL";
+            $condition .= " `$key` IS NULL";
         }
     }
     $sql .= " WHERE$condition"  if $condition;
@@ -227,7 +227,7 @@ sub create {
             push @values, $args->{$key};
         }
     }
-    my $sql = "INSERT INTO `$table` (" . join(',', @keys) . ") VALUES (" . join(',', @placeholders) . ")";
+    my $sql = "INSERT INTO `$table` (" . join(',', map { "`$_`" } @keys) . ") VALUES (" . join(',', @placeholders) . ")";
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { for_log($_) } @values));
     my $res = dbh->do($sql, undef, @values);
     if ($res != 1) {
@@ -274,7 +274,7 @@ sub replace {
             push @values, $self->$key;
         }
     }
-    my $sql = "REPLACE INTO `" . $table . "` (" . join(',', @keys) . ") VALUES (" . join(',', @placeholders) . ")";
+    my $sql = "REPLACE INTO `" . $table . "` (" . join(',', map { "`$_`" } @keys) . ") VALUES (" . join(',', @placeholders) . ")";
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { for_log($_) } @values));
     dbh->do($sql, undef, @values);
     if ($class->FIELDS->{id} && !$self->id) {
@@ -301,30 +301,30 @@ sub update {
         $sql .= ", " if $count++;
         my $value = $args->{$key};
         if (ref $value eq "SCALAR") {
-            $sql .= "$key = $$value";
+            $sql .= "`$key` = $$value";
         }
         else {
             if ($self->FIELDS->{$key} == TIMESTAMP) {
-                $sql .= "$key = FROM_UNIXTIME(?)";
+                $sql .= "`$key` = FROM_UNIXTIME(?)";
                 push @values, $args->{$key};
             }
             elsif ($self->FIELDS->{$key} == BINARY && BIN_UNHEX) {
-                $sql .= "$key = UNHEX(?)";
+                $sql .= "`$key` = UNHEX(?)";
                 push @values, unpack("H*", $args->{$key});
             }
             else {
-                $sql .= "$key = ?";
+                $sql .= "`$key` = ?";
                 push @values, $args->{$key};
             }
         }
     }
     my @pk_values;
     if ($self->can('PRIMARY_KEY')) {
-        $sql .= " WHERE " . join(" AND ", map { "$_ = ?" } $self->PRIMARY_KEY);
+        $sql .= " WHERE " . join(" AND ", map { "`$_` = ?" } $self->PRIMARY_KEY);
         @pk_values = map { $self->$_ } $self->PRIMARY_KEY;
     }
     else {
-        $sql .= " WHERE id = ?";
+        $sql .= " WHERE `id` = ?";
         @pk_values = ($self->id);
     }
     DEBUG_ORM && Debugf("orm: [%s], values [%s]", $sql, join(',', map { for_log($_) } @values, @pk_values));
@@ -339,11 +339,11 @@ sub delete {
     my $sql = "DELETE FROM `$table` ";
     my @pk_values;
     if ($self->can('PRIMARY_KEY')) {
-        $sql .= "WHERE " . join(" AND ", map { "$_ = ?" } $self->PRIMARY_KEY);
+        $sql .= "WHERE " . join(" AND ", map { "`$_` = ?" } $self->PRIMARY_KEY);
         @pk_values = map { $self->$_ } $self->PRIMARY_KEY;
     }
     else {
-        $sql .= "WHERE id = ?";
+        $sql .= "WHERE `id` = ?";
         @pk_values = ($self->id);
     }
     if (grep { !defined } @pk_values) {
