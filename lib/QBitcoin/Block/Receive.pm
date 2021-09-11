@@ -277,6 +277,10 @@ sub receive {
         $best_block[$b->height] = $b;
     }
 
+    if ($self->received_from && $self->self_weight) {
+        $self->received_from->peer->add_reputation(blockchain_synced() ? 1 : 0.01);
+    }
+
     if (defined($HEIGHT) && $new_best->height <= $HEIGHT) {
         QBitcoin::Generate::Control->generate_new() if $new_best->height < $HEIGHT;
         Debugf("%s block height %u hash %s, best branch altered, weight %Lu, %u transactions",

@@ -59,7 +59,9 @@ sub add_reputation {
     my $self = shift;
     my $increment = shift // DEFAULT_INCREASE;
 
-    my $reputation = $self->reputation + $increment;
+    my $reputation = $self->reputation;
+    Infof("Change reputation for peer %s: %u -> %u", $self->ip, $reputation, $reputation + $increment);
+    $reputation += $increment;
     $self->update(update_time => time(), reputation => $reputation);
 }
 

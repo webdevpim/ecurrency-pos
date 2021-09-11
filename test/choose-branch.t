@@ -4,11 +4,12 @@ use strict;
 use feature 'state';
 
 use FindBin '$Bin';
-use lib "$Bin/../lib";
+use lib ("$Bin/../lib", "$Bin/lib");
 
 use Test::More;
 use Test::MockModule;
 use JSON::XS;
+use QBitcoin::Test::ORM;
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Peer;

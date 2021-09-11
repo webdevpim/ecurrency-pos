@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS `peer` (
   obj_recv bigint unsigned NOT NULL DEFAULT 0,
   ping_min_ms int unsigned,
   ping_avg_ms int unsigned,
-  reputation int NOT NULL DEFAULT 0,
+  reputation float NOT NULL DEFAULT 0,
   failed_connects int NOT NULL DEFAULT 0,
   pinned smallint unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY (type, ip)
