@@ -302,6 +302,7 @@ sub update {
         my $value = $args->{$key};
         if (ref $value eq "SCALAR") {
             $sql .= "`$key` = $$value";
+            $self->$key(undef); # unknown value
         }
         else {
             if ($self->FIELDS->{$key} == TIMESTAMP) {
@@ -316,6 +317,7 @@ sub update {
                 $sql .= "`$key` = ?";
                 push @values, $args->{$key};
             }
+            $self->$key($args->{$key});
         }
     }
     my @pk_values;
