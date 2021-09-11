@@ -66,9 +66,9 @@ sub receive {
         my $func = "cmd_" . $command;
         if ($self->can($func)) {
             $self->last_recv_time = time();
-            Debugf("Received [%s] from %s peer %s", $command, $self->type, $self->peer->ip);
+            Debugf("Received [%s] from %s peer %s", $command, $self->type, $self->peer->id);
             if ($command ne "version" && !$self->greeted) {
-                Errf("command [%s] before greeting from %s peer %s", $command, $self->type, $self->peer->ip);
+                Errf("command [%s] before greeting from %s peer %s", $command, $self->type, $self->peer->id);
                 $self->abort("protocol_error");
                 return -1;
             }
@@ -77,7 +77,7 @@ sub receive {
             $self->peer->recv_good_command();
         }
         else {
-            Errf("Unknown command [%s] from %s peer %s", $command, $self->type, $self->peer->ip);
+            Errf("Unknown command [%s] from %s peer %s", $command, $self->type, $self->peer->id);
             $self->abort("unknown_command");
             return -1;
         }
@@ -88,11 +88,11 @@ sub send_message {
     my $self = shift;
     my ($cmd, $data) = @_;
     if (!$self->connection) {
-        Debugf("Skip sending [%s] to closed %s connection peer %s", $cmd, $self->type, $self->peer->ip);
+        Debugf("Skip sending [%s] to closed %s connection peer %s", $cmd, $self->type, $self->peer->id);
         return -1;
     }
     else {
-        Debugf("Send [%s] to %s peer %s", $cmd, $self->type, $self->peer->ip);
+        Debugf("Send [%s] to %s peer %s", $cmd, $self->type, $self->peer->id);
         return $self->connection->send(pack("a4a12Va4", $self->MAGIC, $cmd, length($data), checksum32($data)) . $data);
     }
 }

@@ -119,14 +119,14 @@ sub cmd_inv {
     my $self = shift;
     my ($payload) = @_;
     if (length($payload) == 0) {
-        Errf("Incorrect params from peer %s cmd %s data length %u", $self->peer->ip, $self->command, length($payload));
+        Errf("Incorrect params from peer %s cmd %s data length %u", $self->peer->id, $self->command, length($payload));
         $self->abort("incorrect_params");
         return -1;
     }
     my $data = Bitcoin::Serialized->new($payload);
     my $num = $data->get_varint();
     if ($data->length != 36*$num) {
-        Errf("Incorrect params from peer %s cmd %s data length %u, expected %u", $self->peer->ip, $self->command, $data->length, 36*$num);
+        Errf("Incorrect params from peer %s cmd %s data length %u, expected %u", $self->peer->id, $self->command, $data->length, 36*$num);
         $self->abort("incorrect_params");
         return -1;
     }
@@ -143,7 +143,7 @@ sub cmd_inv {
             }
         }
         else {
-            Debugf("Ignore inv type %u from peer %s", $type, $self->peer->ip);
+            Debugf("Ignore inv type %u from peer %s", $type, $self->peer->id);
         }
     }
     return 0;
@@ -153,14 +153,14 @@ sub cmd_headers {
     my $self = shift;
     my ($payload) = @_;
     if (length($payload) == 0) {
-        Errf("Incorrect params from peer %s cmd %s data length %u", $self->peer->ip, $self->command, length($payload));
+        Errf("Incorrect params from peer %s cmd %s data length %u", $self->peer->id, $self->command, length($payload));
         $self->abort("incorrect_params");
         return -1;
     }
     my $data = Bitcoin::Serialized->new($payload);
     my $num = $data->get_varint();
     if ($data->length != $num*81) {
-        Errf("Incorrect params from peer %s cmd %s data length %u expected %u", $self->peer->ip, $self->command, $data->length, $num*81);
+        Errf("Incorrect params from peer %s cmd %s data length %u expected %u", $self->peer->id, $self->command, $data->length, $num*81);
         $self->abort("incorrect_params");
         return -1;
     }
@@ -330,14 +330,14 @@ sub process_transactions {
 
     my $tx_num = $tx_data->get_varint();
     if (!defined($tx_num)) {
-        Warningf("Incorrect input from %s peer %s", $self->type, $self->peer->ip);
+        Warningf("Incorrect input from %s peer %s", $self->type, $self->peer->id);
         return -1;
     }
     my @transactions;
     for (my $i = 0; $i < $tx_num; $i++) {
         my $tx = Bitcoin::Transaction->deserialize($tx_data);
         if (!defined($tx)) {
-            Warningf("Incorrect input from %s peer %s", $self->type, $self->peer->ip);
+            Warningf("Incorrect input from %s peer %s", $self->type, $self->peer->id);
             return -1;
         }
         Debugf("process transaction: %s", $tx->hash_hex);
@@ -395,14 +395,14 @@ sub cmd_pong {
 
 sub cmd_reject {
     my $self = shift;
-    Warningf("%s peer %s reject our request", $self->type, $self->peer->ip);
+    Warningf("%s peer %s reject our request", $self->type, $self->peer->id);
     return 0;
 }
 
 sub cmd_alert {
     my $self = shift;
     my ($data) = @_;
-    Warningf("%s peer %s sends alert: %s", $self->type, $self->peer->ip, unpack("H*", $data));
+    Warningf("%s peer %s sends alert: %s", $self->type, $self->peer->id, unpack("H*", $data));
     return 0;
 }
 

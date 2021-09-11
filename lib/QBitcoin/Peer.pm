@@ -53,7 +53,7 @@ sub get_or_create {
             Errf("Unknown host: %s", $addr);
             return 0;
         }
-        $args->{ip} = inet_ntoa($iaddr);
+        $args->{ip} = $iaddr; # TODO: convert to ipv6
         $args->{port} = $port;
     }
     if (my ($peer) = $class->find(type => $args->{type}, ip => $args->{ip})) {
@@ -67,12 +67,17 @@ sub get_or_create {
     );
 }
 
+sub id {
+    my $self = shift;
+    return $self->{id} //= inet_ntoa($self->ip);
+}
+
 sub add_reputation {
     my $self = shift;
     my $increment = shift // DEFAULT_INCREASE;
 
     my $reputation = $self->reputation;
-    Infof("Change reputation for peer %s: %u -> %u", $self->ip, $reputation, $reputation + $increment);
+    Infof("Change reputation for peer %s: %u -> %u", $self->id, $reputation, $reputation + $increment);
     $reputation += $increment;
     $self->update(update_time => time(), reputation => $reputation);
 }

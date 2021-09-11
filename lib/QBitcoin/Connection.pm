@@ -24,7 +24,7 @@ sub new {
     my $attr = @_ == 1 ? $_[0] : { @_ };
     my $self = bless $attr, $class;
     $attr->{type} //= $attr->{peer}->type if $attr->{peer};
-    $attr->{ip}   //= $attr->{peer}->ip   if $attr->{peer};
+    $attr->{ip}   //= inet_ntoa($attr->{peer}->ip) if $attr->{peer};
     my $protocol_module = MODULE_BY_TYPE->{$attr->{type}}
         or die "Unknown connection type [$attr->{type}]";
     $self->protocol = $protocol_module->new(connection => $self);

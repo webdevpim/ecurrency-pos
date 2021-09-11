@@ -38,7 +38,7 @@ sub cmd_btc_ihave {
     my $self = shift;
     my ($data) = @_;
     if (length($data) != 32) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->ip, $self->command, length($data));
+        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->id, $self->command, length($data));
         $self->abort("incorrect_params");
         return -1;
     }
@@ -55,7 +55,7 @@ sub cmd_btcgetheader {
     my $self = shift;
     my ($data) = @_;
     if (length($data) != 32) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->ip, $self->command, length($data));
+        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->id, $self->command, length($data));
         $self->abort("incorrect_params");
         return -1;
     }
@@ -65,7 +65,7 @@ sub cmd_btcgetheader {
         $self->send_message("btcblockhdr", $block->serialize);
     }
     else {
-        Warningf("I have no btc block with hash %s requested by peer %s", unpack("H*", scalar reverse $hash), $self->peer->ip);
+        Warningf("I have no btc block with hash %s requested by peer %s", unpack("H*", scalar reverse $hash), $self->peer->id);
     }
     return 0;
 }
@@ -130,7 +130,7 @@ sub cmd_btcgethdrs {
     my $self = shift;
     my ($payload) = @_;
     if (length($payload) < 5) {
-        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->ip, $self->command, length($payload));
+        Errf("Incorrect params from peer %s command %s: length %u", $self->peer->id, $self->command, length($payload));
         $self->abort("incorrect_params");
         return -1;
     }
@@ -155,14 +155,14 @@ sub cmd_btcheaders {
     my $self = shift;
     my ($payload) = @_;
     if (length($payload) == 0) {
-        Errf("Incorrect params from peer %s cmd %s data length %u", $self->peer->ip, $self->command, length($payload));
+        Errf("Incorrect params from peer %s cmd %s data length %u", $self->peer->id, $self->command, length($payload));
         $self->abort("incorrect_params");
         return -1;
     }
     my $data = Bitcoin::Serialized->new($payload);
     my $num = $data->get_varint();
     if ($data->length != $num*80) {
-        Errf("Incorrect params from peer %s cmd %s data length %u expected %u", $self->peer->ip, $self->command, $data->length, $num*80);
+        Errf("Incorrect params from peer %s cmd %s data length %u expected %u", $self->peer->id, $self->command, $data->length, $num*80);
         $self->abort("incorrect_params");
         return -1;
     }

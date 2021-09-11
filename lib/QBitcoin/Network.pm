@@ -50,12 +50,7 @@ sub listen_socket {
 
 sub connect_to {
     my $peer = shift;
-    my $iaddr = inet_aton($peer->ip);
-    if (!$iaddr) {
-        Errf("Unknown host: %s", $peer->ip);
-        $peer->failed_connect();
-        return 0;
-    }
+    my $iaddr = $peer->ip; # TODO: convert IPv6 to IPv4
     my $paddr = sockaddr_in($peer->port, $iaddr);
     my $proto = getprotobyname('tcp');
     socket(my $socket, PF_INET, SOCK_STREAM, $proto)
@@ -68,16 +63,13 @@ sub connect_to {
         or die "setsockopt error: $!\n";
     my $connection = QBitcoin::Connection->new(
         peer      => $peer,
-        ip        => inet_ntoa($iaddr),
-        port      => $peer->port,
-        addr      => "\x00"x10 . "\xff\xff" . $iaddr,
         socket    => $socket,
         state     => STATE_CONNECTING,
         direction => DIR_OUT,
     );
     connect($socket, $paddr);
     QBitcoin::ConnectionList->add($connection);
-    Debugf("Connecting to %s peer %s", $peer->type, $peer->ip);
+    Debugf("Connecting to %s peer %s", $peer->type, $peer->id);
     $peer->update(update_time => time());
     return $connection;
 }
@@ -200,7 +192,8 @@ sub main_loop {
                 Infof("Incoming connection from %s", $peer_ip);
                 # TODO: close listen socket if too many incoming connections; open again after disconnect some of them
                 my $peer = QBitcoin::Peer->get_or_create(
-                    ip   => $peer_ip,
+                    ip   => $peer_addr,
+                    host => $peer_ip,
                     type => PROTOCOL_QBITCOIN,
                 );
                 # TODO: drop connection from peers with too low reputation (banned)
@@ -235,7 +228,7 @@ sub main_loop {
                 state      => STATE_CONNECTED,
                 state_time => $time,
                 host       => $peer_ip,
-                ip         => $peer_ip,
+                ip         => $peer_addr,
                 port       => $remote_port,
                 addr       => "\x00"x10 . "\xff\xff" . $peer_addr,
                 direction  => DIR_IN,

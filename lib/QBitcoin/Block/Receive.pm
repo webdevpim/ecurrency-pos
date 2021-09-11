@@ -93,7 +93,7 @@ sub receive {
 
     return 0 if $block_pool[$self->height]->{$self->hash};
     if (my $err = $self->validate()) {
-        Warningf("Incorrect block %s from %s: %s", $self->hash_str, $self->received_from ? $self->received_from->peer->ip : "me", $err);
+        Warningf("Incorrect block %s from %s: %s", $self->hash_str, $self->received_from ? $self->received_from->peer->id : "me", $err);
         # Incorrect block
         # NB! Incorrect hash is not this case, hash must be checked earlier
         # Drop descendants, it's not possible to receive correct block with the same hash
@@ -128,7 +128,7 @@ sub receive {
         ($self->weight == $best_block[$HEIGHT]->weight && $self->branch_height <= $HEIGHT))) {
         my $has_weight = $self->received_from ? ($self->received_from->has_weight // -1) : -1;
         Debugf("Received block %s height %u from %s has too low weight for us: %Lu < %Lu",
-            $self->hash_str, $self->height, $self->received_from ? $self->received_from->peer->ip : "me",
+            $self->hash_str, $self->height, $self->received_from ? $self->received_from->peer->id : "me",
             $self->weight, $best_block[$HEIGHT]->weight);
         return 0;
     }
@@ -178,7 +178,7 @@ sub receive {
                     # double-spend; drop this branch, return to old best branch and decrease reputation for peer $b->received_from
                     Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %s, block from %s",
                         $txo->tx_in_str, $txo->num, $txo->tx_out_str, $tx->hash_str,
-                        $b->received_from ? $b->received_from->peer->ip : "me");
+                        $b->received_from ? $b->received_from->peer->id : "me");
                     $fail_tx = $tx->hash;
                     last;
                 }
@@ -188,7 +188,7 @@ sub receive {
                     if (!defined($tx_in->block_height)) {
                         Warningf("Unconfirmed input %s:%u for transaction %s, block from %s",
                             $txo->tx_in_str, $txo->num, $tx->hash_str,
-                            $b->received_from ? $b->received_from->peer->ip : "me");
+                            $b->received_from ? $b->received_from->peer->id : "me");
                         $fail_tx = $tx->hash;
                         last;
                     }
@@ -463,7 +463,7 @@ sub announce_to_peers {
     my $self = shift;
 
     foreach my $connection (QBitcoin::ConnectionList->connected('QBitcoin')) {
-        next if $self->received_from && $connection->ip eq $self->received_from->peer->ip;
+        next if $self->received_from && $connection->peer->id eq $self->received_from->peer->id;
         next unless $connection->protocol->can('announce_block');
         $connection->protocol->announce_block($self);
     }
