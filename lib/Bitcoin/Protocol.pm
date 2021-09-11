@@ -22,7 +22,6 @@ use constant {
     PROTOCOL_VERSION  => 70011,
     #PROTOCOL_FEATURES => 0x409,
     PROTOCOL_FEATURES => 0x1,
-    PORT              => BTC_TESTNET ? 18333 : 8333,
     # https://en.bitcoin.it/wiki/Protocol_documentation#Message_structure
     MAGIC             => pack("V", BTC_TESTNET ? 0x0709110B : 0xD9B4BEF9),
 #    BTC_GENESIS       => scalar reverse pack("H*",

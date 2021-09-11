@@ -2,6 +2,7 @@ package QBitcoin::Peer;
 use warnings;
 use strict;
 
+use Socket;
 use QBitcoin::Config;
 use QBitcoin::Log;
 use QBitcoin::Const;
@@ -44,6 +45,17 @@ sub new {
 sub get_or_create {
     my $class = shift;
     my $args = @_ == 1 ? $_[0] : { @_ };
+    if ($args->{host} && !$args->{ip}) {
+        my ($addr, $port) = split(/:/, $args->{host});
+        $port //= getservbyname(SERVICE_NAME, 'tcp') // ($args->type == PROTOCOL_QBITCOIN ? PORT : BTC_PORT);
+        my $iaddr = inet_aton($addr);
+        if (!$iaddr) {
+            Errf("Unknown host: %s", $addr);
+            return 0;
+        }
+        $args->{ip} = inet_ntoa($iaddr);
+        $args->{port} = $port;
+    }
     if (my ($peer) = $class->find(type => $args->{type}, ip => $args->{ip})) {
         return $peer;
     }

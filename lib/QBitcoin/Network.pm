@@ -50,16 +50,13 @@ sub listen_socket {
 
 sub connect_to {
     my $peer = shift;
-    my ($peer_host) = $peer->host;
-    my ($addr, $port) = split(/:/, $peer_host);
-    $port //= getservbyname(SERVICE_NAME, 'tcp') // $peer->PORT;
-    my $iaddr = inet_aton($addr);
+    my $iaddr = inet_aton($peer->ip);
     if (!$iaddr) {
-        Errf("Unknown host: %s", $addr);
+        Errf("Unknown host: %s", $peer->ip);
         $peer->failed_connect();
         return 0;
     }
-    my $paddr = sockaddr_in($port, $iaddr);
+    my $paddr = sockaddr_in($peer->port, $iaddr);
     my $proto = getprotobyname('tcp');
     socket(my $socket, PF_INET, SOCK_STREAM, $proto)
         or die "Error creating socket: $!\n";
@@ -72,7 +69,7 @@ sub connect_to {
     my $connection = QBitcoin::Connection->new(
         peer      => $peer,
         ip        => inet_ntoa($iaddr),
-        port      => $port,
+        port      => $peer->port,
         addr      => "\x00"x10 . "\xff\xff" . $iaddr,
         socket    => $socket,
         state     => STATE_CONNECTING,
@@ -80,7 +77,7 @@ sub connect_to {
     );
     connect($socket, $paddr);
     QBitcoin::ConnectionList->add($connection);
-    Debugf("Connecting to %s peer %s", $peer->type, $peer_host);
+    Debugf("Connecting to %s peer %s", $peer->type, $peer->ip);
     $peer->update(update_time => time());
     return $connection;
 }
@@ -125,16 +122,16 @@ sub main_loop {
     my $listen_rpc    = $class->bind_rpc_addr;
     foreach my $peer_host ($config->get_all('peer')) {
         my $peer = QBitcoin::Peer->get_or_create(
-            host     => $peer_host,
-            protocol => PROTOCOL_QBITCOIN,
-            pinned   => 1,
+            host   => $peer_host,
+            type   => PROTOCOL_QBITCOIN,
+            pinned => 1,
         );
     }
     foreach my $peer_host ($config->get_all('btcnode')) {
         my $peer = QBitcoin::Peer->get_or_create(
-            host     => $peer_host,
-            protocol => PROTOCOL_BITCOIN,
-            pinned   => 1,
+            host   => $peer_host,
+            type   => PROTOCOL_BITCOIN,
+            pinned => 1,
         );
     }
 

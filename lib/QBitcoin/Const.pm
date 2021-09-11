@@ -7,6 +7,7 @@ use QBitcoin::Script::OpCodes qw(:OPCODES);
 use constant GENESIS_BLOCK_HASH => "1234";
 use constant QBT_SCRIPT_START   => OP_RETURN . "QBTC";
 use constant QBT_BURN_HASH      => pack("H*", "fe5205472fb87124923f4be64292ef289478b06d"); # 1QBitcoin1QBitcoin1QBitcoin1pSAg3e
+use constant BTC_TESTNET        => 1;
 
 use constant QBITCOIN_CONST => {
     VERSION                 => "0.1",
@@ -30,6 +31,8 @@ use constant QBITCOIN_CONST => {
     RPC_ADDR                => '127.0.0.1',
     LISTEN_QUEUE            => 5,
     PEER_RECONNECT_TIME     => 10,
+    BTC_TESTNET             => BTC_TESTNET,
+    BTC_PORT                => BTC_TESTNET ? 18333 : 8333,
     GENESIS_HASH            => pack('H*', GENESIS_BLOCK_HASH),
     GENESIS_HASH_HEX        => GENESIS_BLOCK_HASH,
     MAX_BLOCK_SIZE          => 8*1024*1024,
