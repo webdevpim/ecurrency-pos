@@ -33,7 +33,7 @@ use constant FIELDS => {
     pinned          => NUMERIC,
 };
 
-mk_accessors(keys %{FIELDS()});
+mk_accessors(grep { $_ ne "reputation" } keys %{FIELDS()});
 
 sub new {
     my $class = shift;
@@ -59,7 +59,7 @@ sub add_reputation {
     my $self = shift;
     my $increment = shift // DEFAULT_INCREASE;
 
-    my $reputation = $self->reputation_effective + $increment;
+    my $reputation = $self->reputation + $increment;
     $self->update(update_time => time(), reputation => $reputation);
 }
 
@@ -69,9 +69,49 @@ sub decrease_reputation {
     $self->add_reputation(-$decrement);
 }
 
-sub reputation_effective {
+sub reputation {
     my $self = shift;
-    return $self->reputation * exp(($self->update_time - time()) / (3600*24*14)); # decrease in e time during 2 weeks
+    if (@_) {
+        $self->{reputation} = $_[0];
+    }
+    elsif ($self->{reputation}) {
+        return $self->{reputation} * exp(($self->{update_time} - time()) / (3600*24*14)); # decrease in e times during 2 weeks
+    }
+    else {
+        return 0;
+    }
+}
+
+sub conn_state {
+    my $self = shift;
+    if (my $connection = QBitcoin::ConnectionList->get($self->type, $self->ip)) {
+        return $connection->state;
+    }
+    else {
+        return STATE_DISCONNECTED;
+    }
+}
+
+sub is_connect_allowed {
+    my $self = shift;
+    return 0 if $self->conn_state != STATE_DISCONNECTED;
+    if ($self->failed_connects) {
+        my $period = $self->failed_connects >= 10 ? 10 * 2**10 : 10 * 2**$self->failed_connects;
+        return 0 if time() - $self->update_time < $period;
+    }
+    return 1;
+}
+
+sub failed_connect {
+    my $self = shift;
+    $self->update(failed_connects => $self->failed_connects + 1);
+    # failed connect does not decrease peer reputation, it may be good outgoing peer with limited incoming connections
+}
+
+sub recv_good_command {
+    my $self = shift;
+
+    $self->update(failed_connects => 0) if $self->direction == DIR_OUT && $self->failed_connects;
 }
 
 1;

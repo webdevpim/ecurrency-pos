@@ -52,6 +52,9 @@ use constant QBITCOIN_CONST => {
     CONFIG_DIR              => "/etc",
     CONFIG_NAME             => "qbitcoin.conf",
     ZERO_HASH               => "\x00" x 32,
+    MIN_CONNECTIONS         => 5,
+    MIN_OUT_CONNECTIONS     => 2,
+    MAX_IN_CONNECTIONS      => 8,
 };
 
 use constant STATE_CONST => {
@@ -61,8 +64,8 @@ use constant STATE_CONST => {
 };
 
 use constant DIR_CONST => {
-    DIR_IN  => 'in',
-    DIR_OUT => 'out',
+    DIR_IN  => 0,
+    DIR_OUT => 1,
 };
 
 use constant PROTOCOL_CONST => {
