@@ -151,6 +151,7 @@ sub main_loop {
         vec($rin, fileno($listen_rpc),    1) = 1 if $listen_rpc;
 
         call_qbt_peers();
+        call_btc_peers();
 
         my @connections = QBitcoin::ConnectionList->list;
         foreach my $connection (@connections) {
@@ -351,6 +352,14 @@ sub main_loop {
         }
     }
     return 0;
+}
+
+sub call_btc_peers {
+    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->find(type => PROTOCOL_BITCOIN)
+        or return;
+    foreach my $peer (@peers) {
+        connect_to($peer);
+    }
 }
 
 sub call_qbt_peers {
