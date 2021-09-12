@@ -8,6 +8,7 @@ use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::Protocol;
 use QBitcoin::RPC;
+use QBitcoin::ConnectionList;
 use Bitcoin::Protocol;
 
 mk_accessors(qw(peer ip socket state_time state port my_ip my_port my_addr direction));
@@ -31,6 +32,7 @@ sub new {
     $self->sendbuf = "";
     $self->recvbuf = "";
     $self->socket_fileno = fileno($self->socket) if $self->socket;
+    QBitcoin::ConnectionList->add($self);
     return $self;
 }
 
@@ -59,6 +61,7 @@ sub disconnect {
     $self->sendbuf = "";
     $self->recvbuf = "";
     $self->protocol = undef;
+    QBitcoin::ConnectionList->del($self);
     return 0;
 }
 

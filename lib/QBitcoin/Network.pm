@@ -70,7 +70,6 @@ sub connect_to {
         direction => DIR_OUT,
     );
     connect($socket, $paddr);
-    QBitcoin::ConnectionList->add($connection);
     Debugf("Connecting to %s peer %s:%u", $peer->type, $peer->id, $peer->port);
     $peer->update(update_time => time());
     return $connection;
@@ -153,7 +152,6 @@ sub main_loop {
                 else {
                     Noticef("%s peer %s timeout", $connection->type, $connection->ip);
                     $connection->failed();
-                    QBitcoin::ConnectionList->del($connection);
                     next;
                 }
             }
@@ -201,7 +199,6 @@ sub main_loop {
                     my_addr    => IPV6_V4_PREFIX . $my_addr,
                     direction  => DIR_IN,
                 );
-                QBitcoin::ConnectionList->add($connection);
                 $connection->protocol->startup();
                 push @connections, $connection;
             }
@@ -224,7 +221,6 @@ sub main_loop {
                 port       => $remote_port,
                 direction  => DIR_IN,
             );
-            QBitcoin::ConnectionList->add($connection);
             $connection->protocol->startup();
             push @connections, $connection;
         }
@@ -234,7 +230,6 @@ sub main_loop {
             if (vec($ein, $connection->socket_fileno, 1) == 1) {
                 Warningf("%s peer %s disconnected", $connection->type, $connection->ip) unless $connection->type_id == PROTOCOL_RPC;
                 $connection->failed();
-                QBitcoin::ConnectionList->del($connection);
                 next;
             }
 
@@ -244,20 +239,17 @@ sub main_loop {
                     if ($sig_killed) {
                         Notice("Killed by signal");
                         $connection->disconnect();
-                        QBitcoin::ConnectionList->del($connection);
                         last;
                     }
                     elsif ($connection->state eq STATE_CONNECTING) {
                         Warningf("%s peer %s connection error: %s", $connection->type, $connection->ip, $!);
                         $connection->failed();
-                        QBitcoin::ConnectionList->del($connection);
                         next;
                     }
                     else {
                         Warningf("Read error from %s peer %s", $connection->type, $connection->ip);
                     }
                     $connection->disconnect();
-                    QBitcoin::ConnectionList->del($connection);
                     next;
                 }
                 if ($n > 0) {
@@ -267,7 +259,6 @@ sub main_loop {
                 elsif ($n == 0) {
                     Warningf("%s peer %s closed connection", $connection->type, $connection->ip);
                     $connection->failed();
-                    QBitcoin::ConnectionList->del($connection);
                     next;
                 }
             }
@@ -279,7 +270,6 @@ sub main_loop {
                         local $! = $err;
                         Warningf("Connect to %s peer %s error: %s", $connection->type, $connection->ip, $!);
                         $connection->failed();
-                        QBitcoin::ConnectionList->del($connection);
                         next;
                     }
                     $connection->state = STATE_CONNECTED;
@@ -297,12 +287,10 @@ sub main_loop {
                     if ($sig_killed) {
                         Notice("Interrupted by signal");
                         $connection->disconnect();
-                        QBitcoin::ConnectionList->del($connection);
                         last;
                     }
                     Warningf("Write error to %s peer %s", $connection->type, $connection->ip);
                     $connection->failed();
-                    QBitcoin::ConnectionList->del($connection);
                     next;
                 }
                 elsif ($n > 0) {
@@ -310,7 +298,6 @@ sub main_loop {
                     $was_traffic = 1;
                     if (!$connection->sendbuf && $connection->type_id == PROTOCOL_RPC) {
                         $connection->disconnect();
-                        QBitcoin::ConnectionList->del($connection);
                         next;
                     }
                 }
@@ -321,9 +308,9 @@ sub main_loop {
                 my $ret = $connection->protocol->receive();
                 if ($ret != 0) {
                     $connection->failed();
-                    QBitcoin::ConnectionList->del($connection);
                     next;
                 }
+                next unless $connection->protocol; # RPC can call disconnect() from receive() call
             }
 
             if ($connection->protocol->can('ping_sent') && $connection->protocol->last_recv_time + PEER_RECV_TIMEOUT < $time) {
@@ -334,7 +321,6 @@ sub main_loop {
                 elsif ($connection->protocol->ping_sent + PEER_RECV_TIMEOUT < $time) {
                     Noticef("%s peer %s timeout, closing connection", $connection->type, $connection->ip);
                     $connection->disconnect();
-                    QBitcoin::ConnectionList->del($connection);
                     next;
                 }
             }
@@ -413,7 +399,6 @@ sub call_qbt_peers {
             if ($connection) {
                 Infof("Disconnect from %s peer %s, too many connections", $connection->type, $connection->peer->id);
                 $connection->disconnect;
-                QBitcoin::ConnectionList->del($connection);
             }
         }
     }

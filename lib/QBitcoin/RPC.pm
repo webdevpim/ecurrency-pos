@@ -4,6 +4,7 @@ use strict;
 
 use JSON::XS;
 use Time::HiRes;
+use Scalar::Util qw(weaken);
 use HTTP::Request;
 use HTTP::Response;
 use QBitcoin::Const;
@@ -39,6 +40,8 @@ sub type { PROTOCOL2NAME->{shift->type_id} }
 sub new {
     my $class = shift;
     my $args = @_ == 1 ? $_[0] : { @_ };
+    weaken($args->{connection}) if $args->{connection};
+    $args->{update_time} //= time();
     return bless $args, $class;
 }
 
