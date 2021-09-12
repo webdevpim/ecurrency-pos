@@ -20,13 +20,10 @@ use constant ATTR => qw(
     host
     port
     addr
-    recvbuf
-    sendbuf
-    socket
-    socket_fileno
     command
     state
     update_time
+    connection
 );
 
 mk_accessors(ATTR);
@@ -49,7 +46,7 @@ sub timeout {
     my $self = shift;
     my $timeout = RPC_TIMEOUT + $self->update_time - time();
     if ($timeout < 0) {
-        $self->disconnect;
+        $self->connection->disconnect;
         $timeout = 0;
     }
     return $timeout;
@@ -58,12 +55,12 @@ sub timeout {
 sub receive {
     my $self = shift;
     $self->update_time = time();
-    $self->recvbuf =~ /\n\r?\n/s
+    $self->connection->recvbuf =~ /\n\r?\n/s
         or return 0;
-    my $http_request = HTTP::Request->parse($self->recvbuf);
+    my $http_request = HTTP::Request->parse($self->connection->recvbuf);
     my $length = $http_request->headers->content_length;
     return 0 if defined($length) && length($http_request->content) < $length;
-    $self->recvbuf = "";
+    $self->connection->recvbuf = "";
     my $res = eval { $self->process_rpc($http_request) };
     if ($@) {
         Errf("process_rpc exception: %s", "$@");
@@ -77,8 +74,8 @@ sub send {
     my $self = shift;
     my ($data) = @_;
 
-    if ($self->sendbuf eq '' && $self->socket) {
-        my $n = syswrite($self->socket, $data);
+    if ($self->connection->sendbuf eq '' && $self->connection->socket) {
+        my $n = syswrite($self->connection->socket, $data);
         if (!defined($n)) {
             Errf("Error write to socket: %s", $!);
             return -1;
@@ -88,14 +85,14 @@ sub send {
                 substr($data, 0, $n, "");
             }
             else {
-                $self->disconnect();
+                $self->connection->disconnect();
                 return 0;
             }
         }
-        $self->sendbuf = $data;
+        $self->connection->sendbuf = $data;
     }
     else {
-        $self->sendbuf .= $data;
+        $self->connection->sendbuf .= $data;
     }
     return 0;
 }
@@ -150,7 +147,7 @@ sub process_rpc {
         Warningf("Incorrect rpc method [%s]", $body->{method});
         return $self->response_error("Unknown method", ERR_UNKNOWN_METHOD);
     }
-    Debugf("RPC request %s from %s", $body->{method}, $self->ip);
+    Debugf("RPC request %s from %s", $body->{method}, $self->connection->ip);
     $self->args = $body->{params};
     $self->cmd  = $body->{method};
     $self->validate_args == 0
