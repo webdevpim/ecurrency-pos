@@ -433,7 +433,7 @@ sub coins_created {
         return $self->up ? $self->up->value : 0;
     }
     else {
-        return $self->{coins_created};
+        return $self->{coins_created} // 0;
     }
 }
 
@@ -552,12 +552,14 @@ sub validate_coinbase {
 
 sub validate {
     my $self = shift;
-    if (!@{$self->in}) {
-        return $self->validate_coinbase;
-    }
-    if ($self->coins_created) {
-        Warningf("Mixed input and coinbase in the transaction %s", $self->hash_str);
-        return -1;
+    if (UPGRADE_POW) {
+        if (!@{$self->in}) {
+            return $self->validate_coinbase;
+        }
+        if ($self->coins_created) {
+            Warningf("Mixed input and coinbase in the transaction %s", $self->hash_str);
+            return -1;
+        }
     }
     # Transaction must contains at least one output (can't spend all inputs as fee)
     if (!@{$self->out}) {
@@ -582,7 +584,7 @@ sub validate {
         }
         $input_value += $in->value;
     }
-    if ($input_value <= 0) {
+    if ($input_value + $self->coins_created <= 0) {
         Warningf("Zero input in transaction %s", $self->hash_str);
         return -1;
     }
@@ -613,7 +615,7 @@ sub check_input_script {
     foreach my $num (0 .. $#{$self->in}) {
         my $in = $self->in->[$num];
         if ($in->{txo}->check_script($in->{siglist}, $self, $num) != 0) {
-            Warningf("Unmatched close script for input %s:%u in transaction %s",
+            Warningf("Unmatched check script for input %s:%u in transaction %s",
                 $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
             return -1;
         }
