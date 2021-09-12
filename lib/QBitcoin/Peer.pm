@@ -64,6 +64,7 @@ sub get_or_create {
         ($args->{type_id} == PROTOCOL_QBITCOIN ? PORT : BTC_PORT);
     if (my ($peer) = $class->find(type_id => $args->{type_id}, ip => $args->{ip})) {
         $peer->update(port => $port) if $peer->port != $port;
+        $peer->update(pinned => $args->{pinned}) if defined($args->{pinned}) && $args->{pinned} != $peer->pinned;
         return $peer;
     }
     return $class->create(

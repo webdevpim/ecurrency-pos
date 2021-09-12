@@ -113,20 +113,8 @@ sub main_loop {
 
     my $listen_socket = $class->bind_addr;
     my $listen_rpc    = $class->bind_rpc_addr;
-    foreach my $peer_host ($config->get_all('peer')) {
-        my $peer = QBitcoin::Peer->get_or_create(
-            host    => $peer_host,
-            type_id => PROTOCOL_QBITCOIN,
-            pinned  => 1,
-        );
-    }
-    foreach my $peer_host ($config->get_all('btcnode')) {
-        my $peer = QBitcoin::Peer->get_or_create(
-            host    => $peer_host,
-            type_id => PROTOCOL_BITCOIN,
-            pinned  => 1,
-        );
-    }
+
+    set_pinned_peers();
 
     my ($rin, $win, $ein);
     my $sig_killed;
@@ -353,6 +341,30 @@ sub main_loop {
         }
     }
     return 0;
+}
+
+sub set_pinned_peers {
+    my %pinned_qbtc = map { $_->ip => $_ } QBitcoin::Peer->find(type_id => PROTOCOL_QBITCOIN, pinned => 1);
+    foreach my $peer_host ($config->get_all('peer')) {
+        my $peer = QBitcoin::Peer->get_or_create(
+            host    => $peer_host,
+            type_id => PROTOCOL_QBITCOIN,
+            pinned  => 1,
+        );
+        delete $pinned_qbtc{$peer->ip};
+    }
+    $_->update(pinned => 0) foreach values %pinned_qbtc;
+
+    my %pinned_btc = map { $_->ip => $_ } QBitcoin::Peer->find(type_id => PROTOCOL_BITCOIN, pinned => 1);
+    foreach my $peer_host ($config->get_all('btcnode')) {
+        my $peer = QBitcoin::Peer->get_or_create(
+            host    => $peer_host,
+            type_id => PROTOCOL_BITCOIN,
+            pinned  => 1,
+        );
+        delete $pinned_btc{$peer->ip};
+    }
+    $_->update(pinned => 0) foreach values %pinned_btc;
 }
 
 sub call_btc_peers {
