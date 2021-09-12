@@ -385,6 +385,7 @@ sub process_tx {
         return -1 if $height == -1;
         # $self->request_new_block($height+1);
     }
+    $tx->process_pending($self);
     if ($tx->fee >= 0) {
         if (blockchain_synced() && mempool_synced()) {
             # announce to other peers
@@ -395,7 +396,6 @@ sub process_tx {
         Debugf("Ignore stake transactions %s not related to any known block", $tx->hash_str);
         $tx->drop();
     }
-    $tx->process_pending($self);
     return 0;
 }
 
