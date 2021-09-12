@@ -5,6 +5,7 @@ use strict;
 use Time::HiRes;
 use Socket;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
+use List::Util qw(min);
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Log;
@@ -388,11 +389,30 @@ sub call_qbt_peers {
     foreach my $connection (grep { $_->type_id == PROTOCOL_QBITCOIN } QBitcoin::ConnectionList->list()) {
         $connection->direction == DIR_IN ? $connect_in++ : $connect_out++;
     }
-    if ($connect_in + $connect_out < MIN_CONNECTIONS || $connect_out < MIN_OUT_CONNECTIONS) {
+    if ($connect_in + $connect_out < MIN_CONNECTIONS || $connect_out < MIN_OUT_CONNECTIONS+1) {
         my @peers = sort { $b->reputation <=> $a->reputation } grep { $_->reputation > 0 } @peers;
-        while (@peers && ($connect_in + $connect_out < MIN_CONNECTIONS || $connect_out < MIN_OUT_CONNECTIONS)) {
-            if (connect_to(shift @peers)) {
+        my @connected = grep { $_->type_id == PROTOCOL_QBITCOIN && $_->direction == DIR_OUT && $_->state == STATE_CONNECTED }
+            QBitcoin::ConnectionList->list();
+        my $worst_reputation = min map { $_->peer->reputation } @connected;
+        # If we have disconnected peer with reputation more than worse of our connected -> connect to it
+        while (@peers && ($connect_in + $connect_out <= MIN_CONNECTIONS || $connect_out <= MIN_OUT_CONNECTIONS)) {
+            my $peer = shift @peers;
+            if ($connect_out >= MIN_OUT_CONNECTIONS &&
+                $connect_in + $connect_out >= MIN_CONNECTIONS &&
+                $peer->reputation <= $worst_reputation) {
+                last;
+            }
+            if (connect_to($peer)) {
                 $connect_out++;
+            }
+        }
+        # if we have MIN_OUT_CONNECTION+1 connected peers than disconnect from worst
+        if (@connected > MIN_OUT_CONNECTIONS && $connect_in + $connect_out > MIN_CONNECTIONS) {
+            my ($connection) = grep { $_->peer->reputation <= $worst_reputation } @connected;
+            if ($connection) {
+                Infof("Disconnect from %s peer %s, too many connections", $connection->type, $connection->peer->id);
+                $connection->disconnect;
+                QBitcoin::ConnectionList->del($connection);
             }
         }
     }

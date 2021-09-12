@@ -113,6 +113,7 @@ sub add_reputation {
     my $increment = shift // DEFAULT_INCREASE;
 
     my $reputation = $self->reputation;
+    $self->{reputation_update} = time();
     Infof("Change reputation for peer %s: %f -> %f", $self->id, $reputation, $reputation + $increment);
     $self->update(update_time => time(), reputation => $reputation + $increment);
 }
@@ -129,7 +130,13 @@ sub reputation {
         $self->{reputation} = $_[0];
     }
     elsif ($self->{reputation}) {
-        return $self->{reputation} * exp(($self->{update_time} - time()) / (3600*24*14)); # decrease in e times during 2 weeks
+        my $time = time();
+        if (($self->{reputation_update} // 0) < $time - 300) {
+            $self->{reputation_update} = $time;
+            # decrease in e times during 2 weeks
+            $self->{reputation} = $self->{reputation} * exp(($self->{update_time} - $time) / (3600*24*14));
+        }
+        return $self->{reputation};
     }
     else {
         return 0;
