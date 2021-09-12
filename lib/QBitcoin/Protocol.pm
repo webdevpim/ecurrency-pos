@@ -427,7 +427,11 @@ sub request_new_block {
         $height-- if $height > $current_height;
         if (($self->has_weight // -1) > $best_weight ||
             (($self->has_weight // -1) == $best_weight && $height > $best_height)) {
-            if ($height < $current_height - 5 && ($self->has_weight // -1) >= $best_weight) {
+            # Should we request batch blocks if $self->has_weight == $best_weight?
+            # If yes, it's possible to request the same batch in infinite loop when remote has no new blocks
+            # If no, we will request long chain of empty blocks one-by-one
+            # It seems we should not request_new_block after receiving batch without any new block
+            if ($height < $current_height - 5 && ($self->has_weight // -1) > $best_weight) {
                 $self->request_blocks($height);
                 $self->syncing(1);
             }
