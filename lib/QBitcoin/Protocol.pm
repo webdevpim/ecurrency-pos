@@ -418,7 +418,7 @@ sub request_new_block {
         $height-- if $height > $current_height;
         if (($self->has_weight // -1) > $best_weight ||
             (($self->has_weight // -1) == $best_weight && $height > $best_height)) {
-            if ($height < $current_height - 5 && ($self->has_weight // -1) > $best_weight) {
+            if ($height < $current_height - 5 && ($self->has_weight // -1) >= $best_weight) {
                 $self->request_blocks($height);
                 $self->syncing(1);
             }
