@@ -58,7 +58,7 @@ $transaction_module->mock('coins_created', sub { $_[0]->{coins_created} //= @{$_
 $transaction_module->mock('serialize_coinbase', sub { "\x00" });
 $transaction_module->mock('deserialize_coinbase', sub { unpack("C", shift->get(1)) });
 
-my $peer = QBitcoin::Peer->new(type => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
+my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
 my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
 
 sub mock_self_weight {

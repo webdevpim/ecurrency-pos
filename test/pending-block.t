@@ -64,7 +64,7 @@ sub mock_self_weight {
         $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
 }
 
-my $peer = QBitcoin::Peer->new(type => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
+my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
 my $connection = QBitcoin::Connection->new(peer => $peer, state => STATE_CONNECTED);
 # height, hash, prev_hash, $tx_num, weight [, self_weight]
 send_blocks([ 0, "a0", undef, 0, 50 ]);

@@ -101,7 +101,7 @@ sub announce_btc_block_to_peers {
 
     if (btc_synced()) {
         foreach my $peer (QBitcoin::ConnectionList->connected(PROTOCOL_QBITCOIN)) {
-            next if $peer->id eq $self->peer->id && $self->type == PROTOCOL_QBITCOIN;
+            next if $peer->id eq $self->peer->id && $self->type_id == PROTOCOL_QBITCOIN;
             next unless $peer->can('announce_btc_block');
             $peer->announce_btc_block($block);
         }

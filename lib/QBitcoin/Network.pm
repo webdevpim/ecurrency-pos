@@ -50,7 +50,8 @@ sub listen_socket {
 
 sub connect_to {
     my $peer = shift;
-    my $iaddr = $peer->ip; # TODO: convert IPv6 to IPv4
+    my $iaddr = $peer->ipv4
+        or die "No ipv4 address for peer " . $peer->id . "\n";
     my $paddr = sockaddr_in($peer->port, $iaddr);
     my $proto = getprotobyname('tcp');
     socket(my $socket, PF_INET, SOCK_STREAM, $proto)
@@ -114,16 +115,16 @@ sub main_loop {
     my $listen_rpc    = $class->bind_rpc_addr;
     foreach my $peer_host ($config->get_all('peer')) {
         my $peer = QBitcoin::Peer->get_or_create(
-            host   => $peer_host,
-            type   => PROTOCOL_QBITCOIN,
-            pinned => 1,
+            host    => $peer_host,
+            type_id => PROTOCOL_QBITCOIN,
+            pinned  => 1,
         );
     }
     foreach my $peer_host ($config->get_all('btcnode')) {
         my $peer = QBitcoin::Peer->get_or_create(
-            host   => $peer_host,
-            type   => PROTOCOL_BITCOIN,
-            pinned => 1,
+            host    => $peer_host,
+            type_id => PROTOCOL_BITCOIN,
+            pinned  => 1,
         );
     }
 
@@ -193,9 +194,9 @@ sub main_loop {
                 Infof("Incoming connection from %s", $peer_ip);
                 # TODO: close listen socket if too many incoming connections; open again after disconnect some of them
                 my $peer = QBitcoin::Peer->get_or_create(
-                    ip   => $peer_addr,
-                    host => $peer_ip,
-                    type => PROTOCOL_QBITCOIN,
+                    ipv4    => $peer_addr,
+                    host    => $peer_ip,
+                    type_id => PROTOCOL_QBITCOIN,
                 );
                 # TODO: drop connection from peers with too low reputation (banned)
                 my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($new_socket));
@@ -224,7 +225,7 @@ sub main_loop {
             my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($new_socket));
             my $my_ip = inet_ntoa($my_addr);
             my $connection = QBitcoin::Connection->new(
-                type       => PROTOCOL_RPC,
+                type_id    => PROTOCOL_RPC,
                 socket     => $new_socket,
                 state      => STATE_CONNECTED,
                 state_time => $time,
@@ -242,7 +243,7 @@ sub main_loop {
         foreach my $connection (@connections) {
             my $was_traffic;
             if (vec($ein, $connection->socket_fileno, 1) == 1) {
-                Warningf("%s peer %s disconnected", $connection->type, $connection->ip) unless $connection->type == PROTOCOL_RPC;
+                Warningf("%s peer %s disconnected", $connection->type, $connection->ip) unless $connection->type_id == PROTOCOL_RPC;
                 $connection->disconnect();
                 QBitcoin::ConnectionList->del($connection);
                 next;
@@ -316,7 +317,7 @@ sub main_loop {
                 elsif ($n > 0) {
                     $connection->sendbuf = $n == length($connection->sendbuf) ? "" : substr($connection->sendbuf, $n);
                     $was_traffic = 1;
-                    if (!$connection->sendbuf && $connection->type == PROTOCOL_RPC) {
+                    if (!$connection->sendbuf && $connection->type_id == PROTOCOL_RPC) {
                         $connection->disconnect();
                         QBitcoin::ConnectionList->del($connection);
                         next;
@@ -355,7 +356,7 @@ sub main_loop {
 }
 
 sub call_btc_peers {
-    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->find(type => PROTOCOL_BITCOIN)
+    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->find(type_id => PROTOCOL_BITCOIN)
         or return;
     foreach my $peer (@peers) {
         connect_to($peer);
@@ -363,7 +364,7 @@ sub call_btc_peers {
 }
 
 sub call_qbt_peers {
-    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->find(type => PROTOCOL_QBITCOIN)
+    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->find(type_id => PROTOCOL_QBITCOIN)
         or return;
     my $found_pinned;
     foreach my $peer (grep { $_->pinned } @peers) {
@@ -373,7 +374,7 @@ sub call_qbt_peers {
     @peers = grep { !$_->pinned } @peers if $found_pinned;
     my $connect_in = 0;
     my $connect_out = 0;
-    foreach my $connection (grep { $_->type == PROTOCOL_QBITCOIN } QBitcoin::ConnectionList->list()) {
+    foreach my $connection (grep { $_->type_id == PROTOCOL_QBITCOIN } QBitcoin::ConnectionList->list()) {
         $connection->direction == DIR_IN ? $connect_in++ : $connect_out++;
     }
     if ($connect_in + $connect_out < MIN_CONNECTIONS || $connect_out < MIN_OUT_CONNECTIONS) {

@@ -4,7 +4,7 @@ use strict;
 use feature 'state';
 
 use parent 'QBitcoin::Protocol::Common';
-use QBitcoin::Const qw(GENESIS_TIME BTC_TESTNET QBT_SCRIPT_START QBT_SCRIPT_START_LEN ZERO_HASH);
+use QBitcoin::Const qw(GENESIS_TIME BTC_TESTNET QBT_SCRIPT_START QBT_SCRIPT_START_LEN ZERO_HASH IPV6_V4_PREFIX);
 use QBitcoin::Config;
 use QBitcoin::Log;
 use QBitcoin::Produce;
@@ -39,7 +39,7 @@ use constant {
     REJECT_INVALID => 1,
 };
 
-sub type() { PROTOCOL_BITCOIN }
+sub type_id() { PROTOCOL_BITCOIN }
 
 sub startup {
     my $self = shift;
@@ -56,12 +56,12 @@ sub startup {
 
 sub pack_my_address {
     my $self = shift;
-    return pack("Q<a16n", PROTOCOL_FEATURES, $self->connection->my_addr, $self->connection->my_port);
+    return pack("Q<a16n", PROTOCOL_FEATURES, IPV6_V4_PREFIX . $self->connection->my_addr, $self->connection->my_port);
 }
 
 sub pack_address {
     my $self = shift;
-    return pack("Q<a16n", PROTOCOL_FEATURES, "\x00"x10 . "\xff\xff" . $self->connection->addr, $self->connection->port);
+    return pack("Q<a16n", PROTOCOL_FEATURES, IPV6_V4_PREFIX . $self->connection->addr, $self->connection->port);
 }
 
 sub abort {

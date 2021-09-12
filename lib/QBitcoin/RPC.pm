@@ -35,8 +35,9 @@ mk_accessors(qw( cmd args ));
 my $JSON = JSON::XS->new;
 
 sub direction() { DIR_IN }
-sub type()      { PROTOCOL_RPC }
+sub type_id()   { PROTOCOL_RPC }
 sub startup()   {}
+sub type { PROTOCOL2NAME->{shift->type_id} }
 
 sub new {
     my $class = shift;

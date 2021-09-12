@@ -31,9 +31,11 @@ sub new {
     return $self;
 }
 
-sub type {
+sub type_id {
    die "Unknown peer type " . ref($_[0]) . "\n";
 }
+
+sub type { PROTOCOL2NAME->{shift->type_id} }
 
 sub receive {
     my $self = shift;

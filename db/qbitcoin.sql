@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS `coinbase` (
 CREATE INDEX IF NOT EXISTS `coinbase_tx_out` ON `coinbase` (tx_out);
 
 CREATE TABLE IF NOT EXISTS `peer` (
-  type smallint unsigned NOT NULL,
+  type_id smallint unsigned NOT NULL,
   status smallint unsigned,
   ip binary(16) NOT NULL,
   port smallint unsigned,
@@ -104,6 +104,6 @@ CREATE TABLE IF NOT EXISTS `peer` (
   reputation float NOT NULL DEFAULT 0,
   failed_connects int NOT NULL DEFAULT 0,
   pinned smallint unsigned NOT NULL DEFAULT 0,
-  PRIMARY KEY (type, ip)
+  PRIMARY KEY (type_id, ip)
 );
 CREATE INDEX IF NOT EXISTS `peer_reputation` ON `peer` (reputation);

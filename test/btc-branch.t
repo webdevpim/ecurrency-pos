@@ -49,7 +49,7 @@ send_blocks([
 sub send_blocks {
     my ($blocks, $expect) = @_;
 
-    state $peer = QBitcoin::Peer->get_or_create(type => PROTOCOL_BITCOIN, state => STATE_CONNECTED, ip => 'btc-test-node');
+    state $peer = QBitcoin::Peer->get_or_create(type_id => PROTOCOL_BITCOIN, state => STATE_CONNECTED, ip => 'btc-test-node');
     state $n=1;
     subtest "branch " . $n++ => sub {
         # Create new blockchain from scratch for each send_blocks() call

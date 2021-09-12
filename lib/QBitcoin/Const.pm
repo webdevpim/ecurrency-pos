@@ -55,6 +55,7 @@ use constant QBITCOIN_CONST => {
     CONFIG_DIR              => "/etc",
     CONFIG_NAME             => "qbitcoin.conf",
     ZERO_HASH               => "\x00" x 32,
+    IPV6_V4_PREFIX          => "\x00" x 10 . "\xff" x 2,
     MIN_CONNECTIONS         => 5,
     MIN_OUT_CONNECTIONS     => 2,
     MAX_IN_CONNECTIONS      => 8,
@@ -82,6 +83,10 @@ use constant STATE_CONST;
 use constant DIR_CONST;
 use constant PROTOCOL_CONST;
 
+use constant PROTOCOL2NAME => {
+    map { s/BITCOIN/Bitcoin/r } map { s/PROTOCOL_//r } reverse %{&PROTOCOL_CONST}
+};
+
 sub time_by_height {
     my ($height) = @_;
 
@@ -95,7 +100,7 @@ sub height_by_time {
 }
 
 use Exporter qw(import);
-our @EXPORT = ( keys %{&QBITCOIN_CONST}, keys %{&STATE_CONST}, keys %{&DIR_CONST}, keys %{&PROTOCOL_CONST} );
+our @EXPORT = ( keys %{&QBITCOIN_CONST}, keys %{&STATE_CONST}, keys %{&DIR_CONST}, keys %{&PROTOCOL_CONST}, 'PROTOCOL2NAME' );
 push @EXPORT, qw(time_by_height height_by_time);
 
 1;

@@ -118,7 +118,7 @@ sub send_blocks {
     }
     elsif (defined($pid)) {
         # child
-        my $peer = QBitcoin::Peer->new(type => PROTOCOL_QBITCOIN, ip => "127.0.0.1");
+        my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => "127.0.0.1");
         my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
         foreach my $block_data (@$blocks) {
             my $block = QBitcoin::Block->new(

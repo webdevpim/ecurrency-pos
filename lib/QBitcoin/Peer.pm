@@ -3,6 +3,7 @@ use warnings;
 use strict;
 
 use Socket;
+use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Log;
 use QBitcoin::Const;
@@ -16,7 +17,7 @@ use constant MIN_REPUTATION   => -400; # ban the peer if reputation less than th
 use constant TABLE => 'peer';
 use constant PRIMARY_KEY => qw(ip port);
 use constant FIELDS => {
-    type            => NUMERIC,
+    type_id         => NUMERIC,
     ip              => BINARY,
     port            => NUMERIC,
     create_time     => NUMERIC,
@@ -42,25 +43,27 @@ sub new {
     return bless $attr, $class;
 }
 
+sub type { PROTOCOL2NAME->{shift->type_id} }
+
 sub get_or_create {
     my $class = shift;
     my $args = @_ == 1 ? $_[0] : { @_ };
     if ($args->{host} && !$args->{ip}) {
         my ($addr, $port) = split(/:/, $args->{host});
-        $port //= getservbyname(SERVICE_NAME, 'tcp') // ($args->type == PROTOCOL_QBITCOIN ? PORT : BTC_PORT);
+        $port //= getservbyname(SERVICE_NAME, 'tcp') // ($args->type_id == PROTOCOL_QBITCOIN ? PORT : BTC_PORT);
         my $iaddr = inet_aton($addr);
         if (!$iaddr) {
             Errf("Unknown host: %s", $addr);
             return 0;
         }
-        $args->{ip} = $iaddr; # TODO: convert to ipv6
+        $args->{ip} = IPV6_V4_PREFIX . $iaddr;
         $args->{port} = $port;
     }
-    if (my ($peer) = $class->find(type => $args->{type}, ip => $args->{ip})) {
+    if (my ($peer) = $class->find(type_id => $args->{type_id}, ip => $args->{ip})) {
         return $peer;
     }
     return $class->create(
-        type        => $args->{type},
+        type_id     => $args->{type_id},
         ip          => $args->{ip},
         create_time => time(),
         update_time => time(),
@@ -69,7 +72,14 @@ sub get_or_create {
 
 sub id {
     my $self = shift;
-    return $self->{id} //= inet_ntoa($self->ip);
+    return $self->{id} //= $self->ipv4 ? inet_ntoa($self->ipv4) : unpack("H*", $self->ip); # TODO: ipv6
+}
+
+sub ipv4 {
+    my $self = shift;
+    return substr($self->ip, 0, length(IPV6_V4_PREFIX)) eq IPV6_V4_PREFIX ?
+        substr($self->ip, length(IPV6_V4_PREFIX)) :
+        return undef;
 }
 
 sub add_reputation {
@@ -103,7 +113,7 @@ sub reputation {
 
 sub conn_state {
     my $self = shift;
-    if (my $connection = QBitcoin::ConnectionList->get($self->type, $self->ip)) {
+    if (my $connection = QBitcoin::ConnectionList->get($self->type_id, $self->ip)) {
         return $connection->state;
     }
     else {

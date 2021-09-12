@@ -54,7 +54,7 @@ use constant {
     REJECT_INVALID => 1,
 };
 
-sub type() { PROTOCOL_QBITCOIN }
+sub type_id() { PROTOCOL_QBITCOIN }
 
 sub startup {
     my $self = shift;
@@ -70,8 +70,7 @@ sub pack_my_address {
 
 sub peer_id {
     my $self = shift;
-    use constant IPV6_V4_PREFIX => "\x00" x 10 . "\xff" x 2;
-    return $self->{peer_id} //= IPV6_V4_PREFIX . inet_aton($self->peer->id);
+    return $self->{peer_id} //= $self->peer->ip;
 }
 
 sub cmd_version {
@@ -627,7 +626,7 @@ sub cmd_pong {
 
 sub cmd_reject {
     my $self = shift;
-    Warningf("%s peer %s aborted connection", $self->type, $self->peer->id);
+    Warningf("%s peer %s aborted connection", $self->protocol, $self->peer->id);
     return -1;
 }
 
