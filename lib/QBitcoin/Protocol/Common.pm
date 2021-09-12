@@ -76,7 +76,7 @@ sub receive {
             }
             $self->$func($data) == 0
                 or return -1;
-            $self->peer->recv_good_command();
+            $self->peer->recv_good_command($self->connection->direction);
         }
         else {
             Errf("Unknown command [%s] from %s peer %s", $command, $self->type, $self->peer->id);

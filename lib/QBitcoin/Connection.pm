@@ -35,7 +35,7 @@ sub new {
 }
 
 sub host { shift->peer->host }
-sub addr { shift->peer->addr }
+sub addr { $_[0]->{addr} // $_[0]->peer->ip } # binary packed ipv6
 sub type { PROTOCOL2NAME->{shift->type_id} }
 
 sub disconnect {
@@ -66,7 +66,7 @@ sub send {
     my $self = shift;
     my ($data) = @_;
 
-    if ($self->state == STATE_CONNECTED) {
+    if ($self->state != STATE_CONNECTED) {
         Errf("Attempt to send to %s peer %s with state %s", $self->type, $self->ip // "unknown", $self->state);
         return -1;
     }

@@ -12,7 +12,7 @@ sub list {
 
 sub get {
     my $class = shift;
-    my ($ip, $type) = @_;
+    my ($type, $ip) = @_;
     return $CONNECTIONS{$type}->{$ip};
 }
 
@@ -25,13 +25,13 @@ sub connected {
 sub add {
     my $class = shift;
     my ($connection) = @_;
-    $CONNECTIONS{$connection->type_id}->{$connection->ip} = $connection;
+    $CONNECTIONS{$connection->type_id}->{$connection->addr} = $connection;
 }
 
 sub del {
     my $class = shift;
     my ($connection) = @_;
-    delete $CONNECTIONS{$connection->type_id}->{$connection->ip};
+    delete $CONNECTIONS{$connection->type_id}->{$connection->addr};
 }
 
 1;

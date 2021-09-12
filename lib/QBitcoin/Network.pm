@@ -186,7 +186,7 @@ sub main_loop {
             my $peerinfo = accept(my $new_socket, $listen_socket);
             my ($remote_port, $peer_addr) = unpack_sockaddr_in($peerinfo);
             my $peer_ip = inet_ntoa($peer_addr);
-            if (my $connection = QBitcoin::ConnectionList->get($peer_ip, PROTOCOL_QBITCOIN)) {
+            if (my $connection = QBitcoin::ConnectionList->get(PROTOCOL_QBITCOIN, IPV6_V4_PREFIX . $peer_addr)) {
                 Warningf("Already connected with peer %s, status %s", $peer_ip, $connection->state);
                 close($new_socket);
             }
@@ -209,7 +209,7 @@ sub main_loop {
                     port       => $remote_port,
                     my_ip      => $my_ip,
                     my_port    => $my_port,
-                    my_addr    => "\x00"x10 . "\xff\xff" . $my_addr,
+                    my_addr    => IPV6_V4_PREFIX . $my_addr,
                     direction  => DIR_IN,
                 );
                 QBitcoin::ConnectionList->add($connection);
@@ -230,9 +230,9 @@ sub main_loop {
                 state      => STATE_CONNECTED,
                 state_time => $time,
                 host       => $peer_ip,
-                ip         => $peer_addr,
+                ip         => $peer_ip,
+                addr       => $peer_addr,
                 port       => $remote_port,
-                addr       => "\x00"x10 . "\xff\xff" . $peer_addr,
                 direction  => DIR_IN,
             );
             QBitcoin::ConnectionList->add($connection);
@@ -296,7 +296,7 @@ sub main_loop {
                     my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($connection->socket));
                     $connection->my_ip = inet_ntoa($my_addr);
                     $connection->my_port = $my_port;
-                    $connection->my_addr = "\x00"x10 . "\xff\xff" . $my_addr,
+                    $connection->my_addr = IPV6_V4_PREFIX . $my_addr,
                     Infof("Connected to %s peer %s", $connection->type, $connection->ip);
                     $connection->protocol->startup();
                     next;

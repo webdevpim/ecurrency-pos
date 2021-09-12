@@ -396,7 +396,7 @@ sub process_tx {
         if (blockchain_synced() && mempool_synced()) {
             # announce to other peers
             $tx->announce($self);
-            $self->add_reputation($tx->up ? 100 : 1) if $tx->fee > 0 || $tx->up;
+            $self->peer->add_reputation($tx->up ? 100 : 1) if $tx->fee > 0 || $tx->up;
         }
     }
     elsif (!$tx->in_blocks && !$tx->block_height) {

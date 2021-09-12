@@ -48,6 +48,7 @@ sub type { PROTOCOL2NAME->{shift->type_id} }
 sub get_or_create {
     my $class = shift;
     my $args = @_ == 1 ? $_[0] : { @_ };
+    $args->{ip} //= IPV6_V4_PREFIX . $args->{ipv4} if $args->{ipv4};
     if ($args->{host} && !$args->{ip}) {
         my ($addr, $port) = split(/:/, $args->{host});
         my $iaddr = inet_aton($addr);
@@ -143,8 +144,9 @@ sub failed_connect {
 
 sub recv_good_command {
     my $self = shift;
+    my ($direction) = @_;
 
-    $self->update(failed_connects => 0) if $self->direction == DIR_OUT && $self->failed_connects;
+    $self->update(failed_connects => 0) if $direction == DIR_OUT && $self->failed_connects;
 }
 
 1;
