@@ -50,7 +50,6 @@ sub get_or_create {
     my $args = @_ == 1 ? $_[0] : { @_ };
     if ($args->{host} && !$args->{ip}) {
         my ($addr, $port) = split(/:/, $args->{host});
-        $port //= getservbyname(SERVICE_NAME, 'tcp') // ($args->type_id == PROTOCOL_QBITCOIN ? PORT : BTC_PORT);
         my $iaddr = inet_aton($addr);
         if (!$iaddr) {
             Errf("Unknown host: %s", $addr);
@@ -59,12 +58,17 @@ sub get_or_create {
         $args->{ip} = IPV6_V4_PREFIX . $iaddr;
         $args->{port} = $port;
     }
+    my $port = $args->{port} //
+        getservbyname(lc PROTOCOL2NAME->{$args->{type_id}}, 'tcp') //
+        ($args->{type_id} == PROTOCOL_QBITCOIN ? PORT : BTC_PORT);
     if (my ($peer) = $class->find(type_id => $args->{type_id}, ip => $args->{ip})) {
+        $peer->update(port => $port) if $peer->port != $port;
         return $peer;
     }
     return $class->create(
         type_id     => $args->{type_id},
         ip          => $args->{ip},
+        port        => $port,
         create_time => time(),
         update_time => time(),
     );

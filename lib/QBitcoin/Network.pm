@@ -70,7 +70,7 @@ sub connect_to {
     );
     connect($socket, $paddr);
     QBitcoin::ConnectionList->add($connection);
-    Debugf("Connecting to %s peer %s", $peer->type, $peer->id);
+    Debugf("Connecting to %s peer %s:%u", $peer->type, $peer->id, $peer->port);
     $peer->update(update_time => time());
     return $connection;
 }
