@@ -135,7 +135,7 @@ sub cmd_sendtx {
     my $hash = unpack("a32", $data); # yes, it's copy of $data
     my $tx = QBitcoin::Transaction->get_by_hash($hash);
     if ($tx) {
-        $self->send_message("tx", $tx->serialize . ($tx->received_from->peer->ip // "\x00"x16));
+        $self->send_message("tx", $tx->serialize . ($tx->received_from ? $tx->received_from->peer->ip : "\x00"x16));
     }
     else {
         Warningf("I have no transaction with hash %u requested by peer %s", $hash, $self->peer->id);
