@@ -8,7 +8,7 @@ use QBitcoin::Config;
 use QBitcoin::Log;
 use QBitcoin::Const;
 use QBitcoin::Accessors qw(mk_accessors);
-use QBitcoin::ORM qw(find update create :types);
+use QBitcoin::ORM qw(update create :types);
 
 use constant DEFAULT_INCREASE =>    1; # receive good new message (not empty block or transaction)
 use constant DEFAULT_DECREASE =>  100; # one incorrect message is as 100 correct
@@ -37,6 +37,8 @@ use constant FIELDS => {
 
 mk_accessors(grep { $_ ne "reputation" } keys %{FIELDS()});
 
+my @PEERS; # by type_id and ip
+
 sub new {
     my $class = shift;
     my $attr = @_ == 1 ? $_[0] : { @_ };
@@ -44,6 +46,16 @@ sub new {
 }
 
 sub type { PROTOCOL2NAME->{shift->type_id} }
+
+sub load {
+    my $class = shift;
+    if (!@PEERS) {
+        @PEERS[$_] = {} foreach (PROTOCOL_QBITCOIN, PROTOCOL_BITCOIN);
+        foreach my $peer (QBitcoin::ORM::find($class)) {
+            $PEERS[$peer->type_id]->{$peer->ip} = $peer;
+        }
+    }
+}
 
 sub get_or_create {
     my $class = shift;
@@ -62,18 +74,26 @@ sub get_or_create {
     my $port = $args->{port} //
         getservbyname(lc PROTOCOL2NAME->{$args->{type_id}}, 'tcp') //
         ($args->{type_id} == PROTOCOL_QBITCOIN ? PORT : BTC_PORT);
-    if (my ($peer) = $class->find(type_id => $args->{type_id}, ip => $args->{ip})) {
+    $class->load();
+    if (my $peer = $PEERS[$args->{type_id}]->{$args->{ip}}) {
         $peer->update(port => $port) if $peer->port != $port;
         $peer->update(pinned => $args->{pinned}) if defined($args->{pinned}) && $args->{pinned} != $peer->pinned;
         return $peer;
     }
-    return $class->create(
+    return $PEERS[$args->{type_id}]->{$args->{ip}} = $class->create(
         type_id     => $args->{type_id},
         ip          => $args->{ip},
         port        => $port,
         create_time => time(),
         update_time => time(),
     );
+}
+
+sub get_all {
+    my $class = shift;
+    my ($type_id) = @_;
+    $class->load();
+    return values %{$PEERS[$type_id]};
 }
 
 sub id {

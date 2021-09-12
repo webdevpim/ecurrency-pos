@@ -343,7 +343,7 @@ sub main_loop {
 }
 
 sub set_pinned_peers {
-    my %pinned_qbtc = map { $_->ip => $_ } QBitcoin::Peer->find(type_id => PROTOCOL_QBITCOIN, pinned => 1);
+    my %pinned_qbtc = map { $_->ip => $_ } grep { $_->pinned } QBitcoin::Peer->get_all(PROTOCOL_QBITCOIN);
     foreach my $peer_host ($config->get_all('peer')) {
         my $peer = QBitcoin::Peer->get_or_create(
             host    => $peer_host,
@@ -354,7 +354,7 @@ sub set_pinned_peers {
     }
     $_->update(pinned => 0) foreach values %pinned_qbtc;
 
-    my %pinned_btc = map { $_->ip => $_ } QBitcoin::Peer->find(type_id => PROTOCOL_BITCOIN, pinned => 1);
+    my %pinned_btc = map { $_->ip => $_ } grep { $_->pinned} QBitcoin::Peer->get_all(PROTOCOL_BITCOIN);
     foreach my $peer_host ($config->get_all('btcnode')) {
         my $peer = QBitcoin::Peer->get_or_create(
             host    => $peer_host,
@@ -367,7 +367,7 @@ sub set_pinned_peers {
 }
 
 sub call_btc_peers {
-    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->find(type_id => PROTOCOL_BITCOIN)
+    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->get_all(PROTOCOL_BITCOIN)
         or return;
     foreach my $peer (@peers) {
         connect_to($peer);
@@ -375,7 +375,7 @@ sub call_btc_peers {
 }
 
 sub call_qbt_peers {
-    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->find(type_id => PROTOCOL_QBITCOIN)
+    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->get_all( PROTOCOL_QBITCOIN)
         or return;
     my $found_pinned;
     foreach my $peer (grep { $_->pinned } @peers) {
