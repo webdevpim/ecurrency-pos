@@ -18,7 +18,6 @@ use constant DB_TYPES => {
 use constant DB_TYPES;
 
 use constant DEBUG_ORM => 1;
-use constant BIN_UNHEX => 0; # does not work for sqlite
 
 use parent 'Exporter';
 our @EXPORT_OK = qw(dbh find fetch create replace update delete IGNORE DEBUG_ORM for_log);
@@ -97,14 +96,8 @@ sub fetch {
         $condition .= " AND" if $condition;
         if (ref $value eq 'ARRAY') {
             # "IN()" is sql syntax error, "IN(NULL)" matches nothing
-            if ($type == BINARY && BIN_UNHEX) {
-                $condition .= " `$key` IN (" . (@$value ? join(',', ('UNHEX(?)')x@$value) : "NULL") . ")";
-                push @values, map unpack("H*", $_), @$value;
-            }
-            else {
-                $condition .= " `$key` IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
-                push @values, @$value;
-            }
+            $condition .= " `$key` IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
+            push @values, @$value;
         }
         elsif (ref $value eq 'HASH') {
             my $first = 1;
@@ -115,14 +108,8 @@ sub fetch {
                     $condition .= "`$key` $op $$v ";
                 }
                 elsif (ref $v eq 'ARRAY') { # key => { not => [ 'value1', 'value2 ] }
-                    if ($type == BINARY && BIN_UNHEX) {
-                        $condition .= " `$key` $op IN (" . (@$value ? join(',', ('UNHEX(?)')x@$value) : "NULL") . ")";
-                        push @values, map unpack("H*", $_), @$value;
-                    }
-                    else {
-                        $condition .= " `$key` $op IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
-                        push @values, @$value;
-                    }
+                    $condition .= " `$key` $op IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
+                    push @values, @$value;
                 }
                 elsif (ref $v) {
                     die "Incorrect search value type " . ref($v) . " key $key\n";
@@ -145,14 +132,8 @@ sub fetch {
                 $condition .= " `$key` = FROM_UNIXTIME(?)";
                 push @values, $value;
             }
-            if ($type == BINARY && BIN_UNHEX) {
-                $condition .= " `$key` = UNHEX(?)";
-                push @values, unpack("H*", $value);
-            }
-            else {
-                $condition .= " `$key` = ?";
-                push @values, $value;
-            }
+            $condition .= " `$key` = ?";
+            push @values, $value;
         }
         else {
             $condition .= " `$key` IS NULL";
@@ -218,10 +199,6 @@ sub create {
             push @placeholders, 'FROM_UNIXTIME(?)';
             push(@values, $args->{$key});
         }
-        elsif ($type == BINARY && BIN_UNHEX) {
-            push @placeholders, "UNHEX(?)";
-            push(@values, unpack("H*", $args->{$key}));
-        }
         else {
             push @placeholders, "?";
             push @values, $args->{$key};
@@ -265,10 +242,6 @@ sub replace {
             push @placeholders, "FROM_UNIXTIME(?)";
             push @values, $self->$key;
         }
-        elsif ($type == BINARY && BIN_UNHEX) {
-            push @placeholders, "UNHEX(?)";
-            push @values, unpack("H*", $self->$key);
-        }
         else {
             push @placeholders, "?";
             push @values, $self->$key;
@@ -308,10 +281,6 @@ sub update {
             if ($self->FIELDS->{$key} == TIMESTAMP) {
                 $sql .= "`$key` = FROM_UNIXTIME(?)";
                 push @values, $args->{$key};
-            }
-            elsif ($self->FIELDS->{$key} == BINARY && BIN_UNHEX) {
-                $sql .= "`$key` = UNHEX(?)";
-                push @values, unpack("H*", $args->{$key});
             }
             else {
                 $sql .= "`$key` = ?";
