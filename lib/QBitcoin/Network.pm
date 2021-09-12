@@ -402,6 +402,7 @@ sub call_qbt_peers {
                 $peer->reputation <= $worst_reputation) {
                 last;
             }
+            next unless $peer->ipv4; # TODO
             if (connect_to($peer)) {
                 $connect_out++;
             }

@@ -401,7 +401,7 @@ sub process_tx {
             $tx->announce($self);
             if ($tx->fee > 0 || $tx->up) {
                 $self->peer->add_reputation($tx->up ? 200 : 2);
-                if ($tx->rcvd && $self->peer->ip ne $tx->rcvd) {
+                if ($tx->rcvd && $self->peer->ip ne $tx->rcvd && $tx->rcvd ne "\x00"x16) {
                     my $src_peer = QBitcoin::Peer->get_or_create(type_id => PROTOCOL_QBITCOIN, ip => $tx->rcvd);
                     $src_peer->add_reputation($tx->up ? 100 : 1);
                 }
