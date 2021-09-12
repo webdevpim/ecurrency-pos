@@ -626,7 +626,7 @@ sub check_input_script {
 sub announce {
     my $self = shift;
     my ($received_from) = @_;
-    foreach my $connection (QBitcoin::ConnectionList->connected('QBitcoin')) {
+    foreach my $connection (QBitcoin::ConnectionList->connected(PROTOCOL_QBITCOIN)) {
         next if $received_from && $connection->peer->id eq $received_from->peer->id;
         next unless $connection->protocol->can("announce_tx");
         $connection->protocol->announce_tx($self);
