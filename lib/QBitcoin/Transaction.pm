@@ -109,7 +109,7 @@ sub receive {
 sub process_pending {
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my $self = shift;
-    my ($peer) = @_;
+    my ($protocol) = @_;
     if (my $pending = delete $PENDING_INPUT_TX{$self->hash}) {
         foreach my $hash (keys %$pending) {
             my $tx_data_p = delete $PENDING_TX_INPUT{$hash}->{$self->hash};
@@ -118,8 +118,8 @@ sub process_pending {
                 Debugf("Process transaction %s pending for %s", $self->hash_str($hash), $self->hash_str);
                 my $class = ref $self;
                 my $data = Bitcoin::Serialized->new($$tx_data_p);
-                if (my $tx = $class->deserialize($data, $peer)) {
-                    $peer->process_tx($tx);
+                if (my $tx = $class->deserialize($data, $protocol)) {
+                    $protocol->process_tx($tx);
                 }
             }
         }
@@ -362,7 +362,7 @@ sub deserialize_coinbase {
 
 sub deserialize {
     my $class = shift;
-    my ($data, $peer) = @_;
+    my ($data, $protocol) = @_;
     my $start_index = $data->index;
     my @input  = map { deserialize_input($data)  // return undef } 1 .. ($data->get_varint // return undef);
     my @output = map { deserialize_output($data) // return undef } 1 .. ($data->get_varint // return undef);
@@ -383,7 +383,7 @@ sub deserialize {
         Debugf("Transaction %s already known", $class->hash_str($hash));
         return "";
     }
-    my ($in, $unknown) = $class->load_inputs(\@input, $hash, $peer);
+    my ($in, $unknown) = $class->load_inputs(\@input, $hash, $protocol);
     if (!$in) {
         return undef;
     }
@@ -453,7 +453,7 @@ sub create_outputs {
 
 sub load_inputs {
     my $class = shift;
-    my ($inputs, $hash, $peer) = @_;
+    my ($inputs, $hash, $protocol) = @_;
 
     my @loaded_inputs;
     my @need_load_txo;
@@ -492,7 +492,7 @@ sub load_inputs {
                     Infof("input %s:%u not found in transaction %s",
                         $class->hash_str($in->{tx_out}), $in->{num}, $class->hash_str($hash));
                     if (!$unknown_inputs{$in->{tx_out}} && !$PENDING_TX_INPUT{$in->{tx_out}}) {
-                        $peer->request_tx($in->{tx_out}) if $peer;
+                        $protocol->request_tx($in->{tx_out}) if $protocol;
                     }
                     $unknown_inputs{$in->{tx_out}} = 1;
                 }
