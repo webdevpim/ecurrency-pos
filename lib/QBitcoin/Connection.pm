@@ -62,6 +62,15 @@ sub disconnect {
     return 0;
 }
 
+sub failed {
+    my $self = shift;
+
+    if ($self->peer && !$self->protocol->greeted && $self->direction == DIR_OUT) {
+        $self->peer->failed_connect();
+    }
+    $self->disconnect();
+}
+
 sub send {
     my $self = shift;
     my ($data) = @_;
