@@ -15,7 +15,7 @@ use constant DEFAULT_DECREASE =>  100; # one incorrect message is as 100 correct
 use constant MIN_REPUTATION   => -400; # ban the peer if reputation less than this limit (after 4 bad message)
 
 use constant TABLE => 'peer';
-use constant PRIMARY_KEY => qw(ip port);
+use constant PRIMARY_KEY => qw(type_id ip);
 use constant FIELDS => {
     type_id         => NUMERIC,
     ip              => BINARY,
