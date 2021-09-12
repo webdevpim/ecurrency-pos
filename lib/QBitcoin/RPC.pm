@@ -10,7 +10,6 @@ use QBitcoin::Const;
 use QBitcoin::RPC::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
-use QBitcoin::Peers;
 
 use Role::Tiny::With;
 with 'QBitcoin::RPC::Validate';
@@ -36,31 +35,14 @@ mk_accessors(qw( cmd args ));
 my $JSON = JSON::XS->new;
 
 sub direction() { DIR_IN }
-sub type()      { "RPC"  }
+sub type_id()   { PROTOCOL_RPC }
 sub startup()   {}
+sub type { PROTOCOL2NAME->{shift->type_id} }
 
 sub new {
     my $class = shift;
     my $args = @_ == 1 ? $_[0] : { @_ };
-    my $self = bless $args, $class;
-    $self->sendbuf = "";
-    $self->recvbuf = "";
-    $self->socket_fileno = fileno($self->socket) if $self->socket;
-    $self->update_time = time();
-    return $self;
-}
-
-sub disconnect {
-    my $self = shift;
-    if ($self->socket) {
-        shutdown($self->socket, 2);
-        close($self->socket);
-        $self->socket = undef;
-        $self->socket_fileno = undef;
-    }
-    Debugf("Disconnected RPC API client %s", $self->ip);
-    QBitcoin::Peers->del_peer($self);
-    return 0;
+    return bless $args, $class;
 }
 
 sub timeout {

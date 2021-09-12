@@ -4,7 +4,7 @@ use strict;
 use feature 'state';
 
 use parent 'QBitcoin::Protocol::Common';
-use QBitcoin::Const qw(GENESIS_TIME BTC_TESTNET QBT_SCRIPT_START QBT_SCRIPT_START_LEN ZERO_HASH);
+use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Log;
 use QBitcoin::Produce;
@@ -22,7 +22,6 @@ use constant {
     PROTOCOL_VERSION  => 70011,
     #PROTOCOL_FEATURES => 0x409,
     PROTOCOL_FEATURES => 0x1,
-    PORT              => BTC_TESTNET ? 18333 : 8333,
     # https://en.bitcoin.it/wiki/Protocol_documentation#Message_structure
     MAGIC             => pack("V", BTC_TESTNET ? 0x0709110B : 0xD9B4BEF9),
 #    BTC_GENESIS       => scalar reverse pack("H*",
@@ -40,7 +39,7 @@ use constant {
     REJECT_INVALID => 1,
 };
 
-sub type() { "Bitcoin" }
+sub type_id() { PROTOCOL_BITCOIN }
 
 sub startup {
     my $self = shift;
@@ -57,12 +56,12 @@ sub startup {
 
 sub pack_my_address {
     my $self = shift;
-    return pack("Q<a16n", PROTOCOL_FEATURES, $self->my_addr, $self->my_port);
+    return pack("Q<a16n", PROTOCOL_FEATURES, IPV6_V4_PREFIX . $self->connection->my_addr, $self->connection->my_port);
 }
 
 sub pack_address {
     my $self = shift;
-    return pack("Q<a16n", PROTOCOL_FEATURES, "\x00"x10 . "\xff\xff" . $self->addr, $self->port);
+    return pack("Q<a16n", PROTOCOL_FEATURES, $self->connection->addr, $self->connection->port);
 }
 
 sub abort {
@@ -120,14 +119,14 @@ sub cmd_inv {
     my $self = shift;
     my ($payload) = @_;
     if (length($payload) == 0) {
-        Errf("Incorrect params from peer %s cmd %s data length %u", $self->ip, $self->command, length($payload));
+        Errf("Incorrect params from peer %s cmd %s data length %u", $self->peer->id, $self->command, length($payload));
         $self->abort("incorrect_params");
         return -1;
     }
     my $data = Bitcoin::Serialized->new($payload);
     my $num = $data->get_varint();
     if ($data->length != 36*$num) {
-        Errf("Incorrect params from peer %s cmd %s data length %u, expected %u", $self->ip, $self->command, $data->length, 36*$num);
+        Errf("Incorrect params from peer %s cmd %s data length %u, expected %u", $self->peer->id, $self->command, $data->length, 36*$num);
         $self->abort("incorrect_params");
         return -1;
     }
@@ -144,7 +143,7 @@ sub cmd_inv {
             }
         }
         else {
-            Debugf("Ignore inv type %u from peer %s", $type, $self->ip);
+            Debugf("Ignore inv type %u from peer %s", $type, $self->peer->id);
         }
     }
     return 0;
@@ -154,14 +153,14 @@ sub cmd_headers {
     my $self = shift;
     my ($payload) = @_;
     if (length($payload) == 0) {
-        Errf("Incorrect params from peer %s cmd %s data length %u", $self->ip, $self->command, length($payload));
+        Errf("Incorrect params from peer %s cmd %s data length %u", $self->peer->id, $self->command, length($payload));
         $self->abort("incorrect_params");
         return -1;
     }
     my $data = Bitcoin::Serialized->new($payload);
     my $num = $data->get_varint();
     if ($data->length != $num*81) {
-        Errf("Incorrect params from peer %s cmd %s data length %u expected %u", $self->ip, $self->command, $data->length, $num*81);
+        Errf("Incorrect params from peer %s cmd %s data length %u expected %u", $self->peer->id, $self->command, $data->length, $num*81);
         $self->abort("incorrect_params");
         return -1;
     }
@@ -331,14 +330,14 @@ sub process_transactions {
 
     my $tx_num = $tx_data->get_varint();
     if (!defined($tx_num)) {
-        Warningf("Incorrect input from btc peer %s", $self->ip);
+        Warningf("Incorrect input from %s peer %s", $self->type, $self->peer->id);
         return -1;
     }
     my @transactions;
     for (my $i = 0; $i < $tx_num; $i++) {
         my $tx = Bitcoin::Transaction->deserialize($tx_data);
         if (!defined($tx)) {
-            Warningf("Incorrect input from btc peer %s", $self->ip);
+            Warningf("Incorrect input from %s peer %s", $self->type, $self->peer->id);
             return -1;
         }
         Debugf("process transaction: %s", $tx->hash_hex);
@@ -396,14 +395,14 @@ sub cmd_pong {
 
 sub cmd_reject {
     my $self = shift;
-    Warningf("Peer %s reject our request", $self->ip);
+    Warningf("%s peer %s reject our request", $self->type, $self->peer->id);
     return 0;
 }
 
 sub cmd_alert {
     my $self = shift;
     my ($data) = @_;
-    Warningf("Peer %s sends alert: %s", $self->ip, unpack("H*", $data));
+    Warningf("%s peer %s sends alert: %s", $self->type, $self->peer->id, unpack("H*", $data));
     return 0;
 }
 

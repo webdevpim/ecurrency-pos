@@ -14,7 +14,8 @@ use QBitcoin::Test::ORM;
 use QBitcoin::Const;
 BEGIN { no warnings 'redefine'; *QBitcoin::Const::UPGRADE_POW = sub () { 0 } };
 use QBitcoin::Config;
-use QBitcoin::Protocol;
+use QBitcoin::Peer;
+use QBitcoin::Connection;
 use QBitcoin::Block;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
@@ -53,7 +54,8 @@ $block_module->mock('calculate_hash', sub { $block_hash });
 $block_module->mock('serialize', \&mock_block_serialize);
 $block_module->mock('deserialize', \&mock_block_deserialize);
 
-my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED, ip => "127.0.0.1");
+my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => IPV6_V4_PREFIX . pack("C4", split(/\./, "127.0.0.1")));
+my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
 
 sub mock_self_weight {
     my $self = shift;
@@ -96,7 +98,7 @@ sub send_block {
     $block->merkle_root = $block->calculate_merkle_root();
     my $block_data = $block->serialize;
     $block_hash = $block->hash;
-    $peer->cmd_block($block_data);
+    $connection->protocol->cmd_block($block_data);
 }
 
 my $stake_tx = make_tx(undef, -2);
@@ -104,12 +106,12 @@ my $test_tx = make_tx($stake_tx, 2);
 my $tx = make_tx;
 # height, hash, prev_hash, weight, $tx
 send_block(0, "a0", undef, 50, $tx);
-$peer->cmd_tx($tx->serialize);
-$peer->cmd_tx($test_tx->serialize);
-$peer->cmd_tx($stake_tx->serialize);
+$connection->protocol->cmd_tx($tx->serialize);
+$connection->protocol->cmd_tx($test_tx->serialize);
+$connection->protocol->cmd_tx($stake_tx->serialize);
 send_block(1, "a1", "a0", 100, $stake_tx, $test_tx);
-$peer->cmd_tx($stake_tx->serialize);
-$peer->cmd_tx($test_tx->serialize);
+$connection->protocol->cmd_tx($stake_tx->serialize);
+$connection->protocol->cmd_tx($test_tx->serialize);
 
 my $height = QBitcoin::Block->blockchain_height;
 my $weight = QBitcoin::Block->best_weight;

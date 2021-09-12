@@ -7,6 +7,7 @@ use QBitcoin::Script::OpCodes qw(:OPCODES);
 use constant GENESIS_BLOCK_HASH => "1234";
 use constant QBT_SCRIPT_START   => OP_RETURN . "QBTC";
 use constant QBT_BURN_HASH      => pack("H*", "fe5205472fb87124923f4be64292ef289478b06d"); # 1QBitcoin1QBitcoin1QBitcoin1pSAg3e
+use constant BTC_TESTNET        => 1;
 
 use constant QBITCOIN_CONST => {
     VERSION                 => "0.1",
@@ -30,6 +31,8 @@ use constant QBITCOIN_CONST => {
     RPC_ADDR                => '127.0.0.1',
     LISTEN_QUEUE            => 5,
     PEER_RECONNECT_TIME     => 10,
+    BTC_TESTNET             => BTC_TESTNET,
+    BTC_PORT                => BTC_TESTNET ? 18333 : 8333,
     GENESIS_HASH            => pack('H*', GENESIS_BLOCK_HASH),
     GENESIS_HASH_HEX        => GENESIS_BLOCK_HASH,
     MAX_BLOCK_SIZE          => 8*1024*1024,
@@ -52,22 +55,37 @@ use constant QBITCOIN_CONST => {
     CONFIG_DIR              => "/etc",
     CONFIG_NAME             => "qbitcoin.conf",
     ZERO_HASH               => "\x00" x 32,
+    IPV6_V4_PREFIX          => "\x00" x 10 . "\xff" x 2,
+    MIN_CONNECTIONS         => 5,
+    MIN_OUT_CONNECTIONS     => 2,
+    MAX_IN_CONNECTIONS      => 8,
 };
 
 use constant STATE_CONST => {
-    STATE_CONNECTED    => 'connected',
-    STATE_CONNECTING   => 'connecting',
-    STATE_DISCONNECTED => 'disconnected',
+    STATE_CONNECTED    => 1,
+    STATE_CONNECTING   => 2,
+    STATE_DISCONNECTED => 3,
 };
 
 use constant DIR_CONST => {
-    DIR_IN  => 'in',
-    DIR_OUT => 'out',
+    DIR_IN  => 0,
+    DIR_OUT => 1,
+};
+
+use constant PROTOCOL_CONST => {
+    PROTOCOL_QBITCOIN => 1,
+    PROTOCOL_BITCOIN  => 2,
+    PROTOCOL_RPC      => 3,
 };
 
 use constant QBITCOIN_CONST;
 use constant STATE_CONST;
 use constant DIR_CONST;
+use constant PROTOCOL_CONST;
+
+use constant PROTOCOL2NAME => {
+    map { s/BITCOIN/Bitcoin/r } map { s/PROTOCOL_//r } reverse %{&PROTOCOL_CONST}
+};
 
 sub time_by_height {
     my ($height) = @_;
@@ -82,7 +100,7 @@ sub height_by_time {
 }
 
 use Exporter qw(import);
-our @EXPORT = ( keys %{&QBITCOIN_CONST}, keys %{&STATE_CONST}, keys %{&DIR_CONST} );
+our @EXPORT = ( keys %{&QBITCOIN_CONST}, keys %{&STATE_CONST}, keys %{&DIR_CONST}, keys %{&PROTOCOL_CONST}, 'PROTOCOL2NAME' );
 push @EXPORT, qw(time_by_height height_by_time);
 
 1;

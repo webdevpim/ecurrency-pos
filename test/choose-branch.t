@@ -4,14 +4,16 @@ use strict;
 use feature 'state';
 
 use FindBin '$Bin';
-use lib "$Bin/../lib";
+use lib ("$Bin/../lib", "$Bin/lib");
 
 use Test::More;
 use Test::MockModule;
 use JSON::XS;
+use QBitcoin::Test::ORM;
 use QBitcoin::Const;
 use QBitcoin::Config;
-use QBitcoin::Protocol;
+use QBitcoin::Peer;
+use QBitcoin::Connection;
 use QBitcoin::Block;
 use Bitcoin::Serialized;
 
@@ -116,7 +118,8 @@ sub send_blocks {
     }
     elsif (defined($pid)) {
         # child
-        my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED, ip => "127.0.0.1");
+        my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => "127.0.0.1");
+        my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
         foreach my $block_data (@$blocks) {
             my $block = QBitcoin::Block->new(
                 height       => $block_data->[0],
@@ -129,7 +132,7 @@ sub send_blocks {
             );
             my $block_data = $block->serialize;
             $block_hash = $block->hash;
-            $peer->cmd_block($block_data);
+            $connection->protocol->cmd_block($block_data);
         }
         my $height = QBitcoin::Block->blockchain_height;
         my $weight = QBitcoin::Block->best_weight;

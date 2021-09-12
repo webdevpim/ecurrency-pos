@@ -13,7 +13,8 @@ use JSON::XS;
 use QBitcoin::Test::ORM;
 use QBitcoin::Const;
 use QBitcoin::Config;
-use QBitcoin::Protocol;
+use QBitcoin::Peer;
+use QBitcoin::Connection;
 use QBitcoin::Block;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
@@ -57,7 +58,8 @@ $transaction_module->mock('coins_created', sub { $_[0]->{coins_created} //= @{$_
 $transaction_module->mock('serialize_coinbase', sub { "\x00" });
 $transaction_module->mock('deserialize_coinbase', sub { unpack("C", shift->get(1)) });
 
-my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED, ip => '127.0.0.1');
+my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
+my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
 
 sub mock_self_weight {
     my $self = shift;
@@ -76,7 +78,7 @@ sub make_tx {
     $value += 10;
     $tx_num++;
     $tx->calculate_hash;
-    $peer->cmd_tx($tx->serialize);
+    $connection->protocol->cmd_tx($tx->serialize);
     return $tx;
 }
 
@@ -93,7 +95,7 @@ sub send_block {
     $block->merkle_root = $block->calculate_merkle_root();
     my $block_data = $block->serialize;
     $block_hash = $block->hash;
-    $peer->cmd_block($block_data);
+    $connection->protocol->cmd_block($block_data);
 }
 
 my $test_tx = make_tx;

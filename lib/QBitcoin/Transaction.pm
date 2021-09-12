@@ -14,7 +14,7 @@ use QBitcoin::ORM qw(find fetch create delete :types);
 use QBitcoin::Crypto qw(hash256);
 use QBitcoin::TXO;
 use QBitcoin::Coinbase;
-use QBitcoin::Peers;
+use QBitcoin::ConnectionList;
 use Bitcoin::Serialized;
 
 use Role::Tiny::With;
@@ -626,10 +626,10 @@ sub check_input_script {
 sub announce {
     my $self = shift;
     my ($received_from) = @_;
-    foreach my $peer (QBitcoin::Peers->connected('QBitcoin')) {
-        next if $received_from && $peer->ip eq $received_from->ip;
-        next unless $peer->can("announce_tx");
-        $peer->announce_tx($self);
+    foreach my $connection (QBitcoin::ConnectionList->connected(PROTOCOL_QBITCOIN)) {
+        next if $received_from && $connection->peer->id eq $received_from->peer->id;
+        next unless $connection->protocol->can("announce_tx");
+        $connection->protocol->announce_tx($self);
     }
 }
 

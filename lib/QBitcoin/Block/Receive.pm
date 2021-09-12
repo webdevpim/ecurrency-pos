@@ -7,7 +7,7 @@ use QBitcoin::Log;
 use QBitcoin::Config;
 use QBitcoin::TXO;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
-use QBitcoin::Peers;
+use QBitcoin::ConnectionList;
 use QBitcoin::Generate::Control;
 use Role::Tiny; # This is role for QBitcoin::Block;
 
@@ -93,14 +93,16 @@ sub receive {
 
     return 0 if $block_pool[$self->height]->{$self->hash};
     if (my $err = $self->validate()) {
-        Warningf("Incorrect block %s from %s: %s", $self->hash_str, $self->received_from ? $self->received_from->ip : "me", $err);
+        Warningf("Incorrect block %s from %s: %s", $self->hash_str, $self->received_from ? $self->received_from->peer->id : "me", $err);
         # Incorrect block
         # NB! Incorrect hash is not this case, hash must be checked earlier
         # Drop descendants, it's not possible to receive correct block with the same hash
         $self->free_block();
         if ($self->received_from) {
-            $self->received_from->decrease_reputation();
-            $self->received_from->abort("invalid_block");
+            $self->received_from->peer->decrease_reputation();
+            if ($self->received_from->connection) {
+                $self->received_from->abort("invalid_block");
+            }
         }
         return -1;
     }
@@ -126,7 +128,7 @@ sub receive {
         ($self->weight == $best_block[$HEIGHT]->weight && $self->branch_height <= $HEIGHT))) {
         my $has_weight = $self->received_from ? ($self->received_from->has_weight // -1) : -1;
         Debugf("Received block %s height %u from %s has too low weight for us: %Lu < %Lu",
-            $self->hash_str, $self->height, $self->received_from ? $self->received_from->ip : "me",
+            $self->hash_str, $self->height, $self->received_from ? $self->received_from->peer->id : "me",
             $self->weight, $best_block[$HEIGHT]->weight);
         return 0;
     }
@@ -176,7 +178,7 @@ sub receive {
                     # double-spend; drop this branch, return to old best branch and decrease reputation for peer $b->received_from
                     Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %s, block from %s",
                         $txo->tx_in_str, $txo->num, $txo->tx_out_str, $tx->hash_str,
-                        $b->received_from ? $b->received_from->ip : "me");
+                        $b->received_from ? $b->received_from->peer->id : "me");
                     $fail_tx = $tx->hash;
                     last;
                 }
@@ -186,7 +188,7 @@ sub receive {
                     if (!defined($tx_in->block_height)) {
                         Warningf("Unconfirmed input %s:%u for transaction %s, block from %s",
                             $txo->tx_in_str, $txo->num, $tx->hash_str,
-                            $b->received_from ? $b->received_from->ip : "me");
+                            $b->received_from ? $b->received_from->peer->id : "me");
                         $fail_tx = $tx->hash;
                         last;
                     }
@@ -251,8 +253,10 @@ sub receive {
             }
             $b->drop_branch();
             if ($self->received_from) {
-                $self->received_from->decrease_reputation();
-                $self->received_from->abort("incorrect_block");
+                $self->received_from->peer->decrease_reputation();
+                if ($self->received_from->connection) {
+                    $self->received_from->abort("incorrect_block");
+                }
             }
             return -1;
         }
@@ -271,6 +275,10 @@ sub receive {
     }
     for (my $b = $new_best; $b; $b = $b->next_block) {
         $best_block[$b->height] = $b;
+    }
+
+    if ($self->received_from && $self->self_weight) {
+        $self->received_from->peer->add_reputation(blockchain_synced() ? 1 : 0.01);
     }
 
     if (defined($HEIGHT) && $new_best->height <= $HEIGHT) {
@@ -454,10 +462,10 @@ sub check_synced {
 sub announce_to_peers {
     my $self = shift;
 
-    foreach my $peer (QBitcoin::Peers->connected('QBitcoin')) {
-        next if $self->received_from && $peer->ip eq $self->received_from->ip;
-        next unless $peer->can('announce_block');
-        $peer->announce_block($self);
+    foreach my $connection (QBitcoin::ConnectionList->connected(PROTOCOL_QBITCOIN)) {
+        next if $self->received_from && $connection->peer->id eq $self->received_from->peer->id;
+        next unless $connection->protocol->can('announce_block');
+        $connection->protocol->announce_block($self);
     }
 }
 
