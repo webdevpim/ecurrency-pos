@@ -49,7 +49,7 @@ sub make_tx {
         $out->num = $num++;
     }
     $peer->command = "tx";
-    $peer->cmd_tx($tx->serialize);
+    $peer->cmd_tx($tx->serialize . "\x00"x16);
     return QBitcoin::Transaction->get($tx->hash);
 }
 

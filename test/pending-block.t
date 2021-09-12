@@ -108,7 +108,7 @@ sub send_blocks {
     }
     foreach my $tx (@pool_tx) {
         my $tx_data = $tx->serialize;
-        $connection->protocol->cmd_tx($tx_data);
+        $connection->protocol->cmd_tx($tx_data . "\x00"x16);
     }
 }
 

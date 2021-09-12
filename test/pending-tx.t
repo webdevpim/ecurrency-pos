@@ -106,12 +106,13 @@ my $test_tx = make_tx($stake_tx, 2);
 my $tx = make_tx;
 # height, hash, prev_hash, weight, $tx
 send_block(0, "a0", undef, 50, $tx);
-$connection->protocol->cmd_tx($tx->serialize);
-$connection->protocol->cmd_tx($test_tx->serialize);
-$connection->protocol->cmd_tx($stake_tx->serialize);
+my $zero_ip = "\x00"x16;
+$connection->protocol->cmd_tx($tx->serialize . $zero_ip);
+$connection->protocol->cmd_tx($test_tx->serialize . $zero_ip);
+$connection->protocol->cmd_tx($stake_tx->serialize . $zero_ip);
 send_block(1, "a1", "a0", 100, $stake_tx, $test_tx);
-$connection->protocol->cmd_tx($stake_tx->serialize);
-$connection->protocol->cmd_tx($test_tx->serialize);
+$connection->protocol->cmd_tx($stake_tx->serialize . $zero_ip);
+$connection->protocol->cmd_tx($test_tx->serialize . $zero_ip);
 
 my $height = QBitcoin::Block->blockchain_height;
 my $weight = QBitcoin::Block->best_weight;

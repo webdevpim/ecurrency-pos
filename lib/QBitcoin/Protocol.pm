@@ -39,6 +39,7 @@ use QBitcoin::Log;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use QBitcoin::Block;
 use QBitcoin::Transaction;
+use QBitcoin::Peer;
 use Bitcoin::Serialized;
 
 use Role::Tiny::With;
@@ -134,7 +135,7 @@ sub cmd_sendtx {
     my $hash = unpack("a32", $data); # yes, it's copy of $data
     my $tx = QBitcoin::Transaction->get_by_hash($hash);
     if ($tx) {
-        $self->send_message("tx", $tx->serialize);
+        $self->send_message("tx", $tx->serialize . ($tx->received_from->peer->ip // "\x00"x16));
     }
     else {
         Warningf("I have no transaction with hash %u requested by peer %s", $hash, $self->peer->id);
@@ -363,7 +364,7 @@ sub cmd_tx {
     my ($tx_data) = @_;
     my $data = Bitcoin::Serialized->new($tx_data);
     my $tx = QBitcoin::Transaction->deserialize($data, $self);
-    if (!defined $tx || $data->length) {
+    if (!defined $tx || $data->length != 16) {
         $self->abort("bad_tx_data");
         return -1;
     }
@@ -371,6 +372,8 @@ sub cmd_tx {
         # Ignore (skip) but do not drop connection, for example transaction already exists or has unknown input
         return 0;
     }
+    $tx->rcvd = $data->get(16);
+    $tx->received_from = $self;
     if ($self->process_tx($tx) == -1) {
         $self->abort("bad_tx_data");
         return -1;
@@ -396,7 +399,13 @@ sub process_tx {
         if (blockchain_synced() && mempool_synced()) {
             # announce to other peers
             $tx->announce($self);
-            $self->peer->add_reputation($tx->up ? 100 : 1) if $tx->fee > 0 || $tx->up;
+            if ($tx->fee > 0 || $tx->up) {
+                $self->peer->add_reputation($tx->up ? 200 : 2);
+                if ($tx->rcvd && $self->peer->ip ne $tx->rcvd) {
+                    my $src_peer = QBitcoin::Peer->get_or_create(type_id => PROTOCOL_QBITCOIN, ip => $tx->rcvd);
+                    $src_peer->add_reputation($tx->up ? 100 : 1);
+                }
+            }
         }
     }
     elsif (!$tx->in_blocks && !$tx->block_height) {

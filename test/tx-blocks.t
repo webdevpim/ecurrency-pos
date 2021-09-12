@@ -78,7 +78,7 @@ sub make_tx {
     $value += 10;
     $tx_num++;
     $tx->calculate_hash;
-    $connection->protocol->cmd_tx($tx->serialize);
+    $connection->protocol->cmd_tx($tx->serialize . "\x00"x16);
     return $tx;
 }
 

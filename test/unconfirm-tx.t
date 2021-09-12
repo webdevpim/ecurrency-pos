@@ -87,7 +87,7 @@ sub send_blocks {
             );
             $value += 10;
             $tx->calculate_hash;
-            $connection->protocol->cmd_tx($tx->serialize);
+            $connection->protocol->cmd_tx($tx->serialize . "\x00"x16);
             push @tx, $tx;
         }
 

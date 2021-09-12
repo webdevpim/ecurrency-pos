@@ -28,6 +28,7 @@ use constant FIELDS => {
 use constant ATTR => qw(
     next_block
     received_from
+    rcvd
 );
 
 mk_accessors(keys %{&FIELDS});

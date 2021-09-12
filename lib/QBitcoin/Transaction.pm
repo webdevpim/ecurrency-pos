@@ -32,11 +32,13 @@ use constant TABLE => 'transaction';
 
 use constant ATTR => qw(
     received_time
+    received_from
     in
     out
     up
     blocks
     block_sign_data
+    rcvd
 );
 
 mk_accessors(keys %{&FIELDS}, ATTR);

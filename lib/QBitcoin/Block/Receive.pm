@@ -9,6 +9,7 @@ use QBitcoin::TXO;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::ConnectionList;
 use QBitcoin::Generate::Control;
+use QBitcoin::Peer;
 use Role::Tiny; # This is role for QBitcoin::Block;
 
 # @block_pool - array (by height) of hashes, block by block->hash
@@ -278,7 +279,11 @@ sub receive {
     }
 
     if ($self->received_from && $self->self_weight) {
-        $self->received_from->peer->add_reputation(blockchain_synced() ? 1 : 0.01);
+        $self->received_from->peer->add_reputation(blockchain_synced() ? 2 : 0.02);
+        if ($self->rcvd && $self->rcvd ne $self->received_from->peer->ip) {
+            my $src_peer = QBitcoin::Peer->get_or_create(type_id => $self->type_id, ip => $self->rcvd);
+            $src_peer->add_reputation(blockchain_synced() ? 1 : 0.01);
+        }
     }
 
     if (defined($HEIGHT) && $new_best->height <= $HEIGHT) {

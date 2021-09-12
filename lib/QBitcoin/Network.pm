@@ -375,7 +375,7 @@ sub call_btc_peers {
 }
 
 sub call_qbt_peers {
-    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->get_all( PROTOCOL_QBITCOIN)
+    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->get_all(PROTOCOL_QBITCOIN)
         or return;
     my $found_pinned;
     foreach my $peer (grep { $_->pinned } @peers) {
@@ -389,7 +389,7 @@ sub call_qbt_peers {
         $connection->direction == DIR_IN ? $connect_in++ : $connect_out++;
     }
     if ($connect_in + $connect_out < MIN_CONNECTIONS || $connect_out < MIN_OUT_CONNECTIONS) {
-        my @peers = sort { $b->reputation <=> $a->reputation } @peers;
+        my @peers = sort { $b->reputation <=> $a->reputation } grep { $_->reputation > 0 } @peers;
         while (@peers && ($connect_in + $connect_out < MIN_CONNECTIONS || $connect_out < MIN_OUT_CONNECTIONS)) {
             if (connect_to(shift @peers)) {
                 $connect_out++;
