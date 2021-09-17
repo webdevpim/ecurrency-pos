@@ -10,6 +10,9 @@ use QBitcoin::Block;
 use QBitcoin::Coinbase;
 use QBitcoin::Transaction;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
+use QBitcoin::Transaction;
+use QBitcoin::TXO;
+use QBitcoin::Address qw(scripthash_by_address);
 use Bitcoin::Block;
 
 my %PARAMS;
@@ -394,6 +397,56 @@ sub cmd_getrawtransaction {
         $res->{confirm_weight} = -1;
     }
     return $self->response_ok($res);
+}
+
+$PARAMS{createrawtransaction} = "inputs outputs";
+$HELP{createrawtransaction} = qq(
+createrawtransaction [{"txid":"hex","vout":n},...] [{"address":amount},...]
+
+Create a transaction spending the given inputs and creating new outputs.
+Outputs can be addresses or data.
+Returns hex-encoded raw transaction.
+Note that the transaction's inputs are not signed, and
+it is not stored in the wallet or transmitted to the network.
+
+Arguments:
+1. inputs                      (json array, required) The inputs
+     [
+       {                       (json object)
+         "txid": "hex",        (string, required) The transaction id
+         "vout": n,            (numeric, required) The output number
+       },
+       ...
+     ]
+2. outputs                     (json array, required) The outputs (key-value pairs)
+     [
+       {                       (json object)
+         "address": amount,    (numeric or string, required) A key-value pair. The key (string) is the bitcoin address, the value (float or string) is the amount in BTC
+       },
+       ...
+     ]
+
+Result:
+"hex"    (string) hex string of the transaction
+
+Examples:
+> bitcoin-cli createrawtransaction '[{"txid":"myid","vout":0}]' '[{"address":0.01}]'
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "createrawtransaction", "params": ['[{"txid":"myid","vout":0}]', '[{"address":0.01}]"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_createrawtransaction {
+    my $self = shift;
+    my $inputs  = $self->args->[0];
+    my $outputs = $self->args->[1];
+    my @in  = map {{ txo => QBitcoin::TXO->new_txo(tx_in => pack("H*", $_->{txid}), num => $_->{vout}+0) }} @$inputs;
+    my @out;
+    foreach my $out (@$outputs) {
+        push @out, map { QBitcoin::TXO->new_txo(value => $out->{$_} * DENOMINATOR, scripthash => scripthash_by_address($_)) } keys %$out;
+    }
+    my $tx = QBitcoin::Transaction->new(
+        in  => \@in,
+        out => \@out,
+    );
+    return $self->response_ok(unpack("H*", $tx->serialize_unsigned));
 }
 
 # getmempoolinfo
