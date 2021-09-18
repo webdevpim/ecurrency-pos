@@ -363,17 +363,20 @@ sub cmd_tx {
     my $self = shift;
     my ($tx_data) = @_;
     my $data = Bitcoin::Serialized->new($tx_data);
-    my $tx = QBitcoin::Transaction->deserialize($data, $self);
-    if (!defined $tx || $data->length != 16) {
+    my $tx = QBitcoin::Transaction->deserialize($data);
+    if (!$tx || $data->length != 16) {
         $self->abort("bad_tx_data");
         return -1;
     }
-    elsif (!$tx) {
-        # Ignore (skip) but do not drop connection, for example transaction already exists or has unknown input
-        return 0;
-    }
     $tx->rcvd = $data->get(16);
     $tx->received_from = $self;
+    if (!$tx->load_txo()) {
+        $self->abort("bad_tx_data");
+        return -1;
+    }
+    if ($tx->is_pending || $tx->is_known) {
+        return 0;
+    }
     if ($self->process_tx($tx) == -1) {
         $self->abort("bad_tx_data");
         return -1;
@@ -385,6 +388,8 @@ sub process_tx {
     my $self = shift;
     my ($tx) = @_;
 
+    $tx->validate_hash() == 0
+        or return -1;
     $tx->validate() == 0
         or return -1;
     $tx->receive() == 0
