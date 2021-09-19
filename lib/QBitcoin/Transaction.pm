@@ -290,6 +290,17 @@ sub serialize {
     return $data;
 }
 
+sub serialize_unsigned {
+    my $self = shift;
+
+    my $data = varint(scalar @{$self->in});
+    $data .= serialize_input_unsigned($_) foreach @{$self->in};
+    $data .= varint(scalar @{$self->out});
+    $data .= serialize_output($_) foreach @{$self->out};
+    $data .= varstr($self->data);
+    return $data;
+}
+
 sub sign_data {
     my $self = shift;
 
@@ -338,6 +349,11 @@ sub input_as_hashref {
 sub serialize_siglist {
     my $siglist = shift;
     return varint(scalar @$siglist) . join("", map { varstr($_) } @$siglist);
+}
+
+sub serialize_input_unsigned {
+    my $in = shift;
+    return $in->{txo}->tx_in . varint($in->{txo}->num) . serialize_siglist($in->{siglist} // []) . varstr($in->{txo}->redeem_script // "");
 }
 
 sub serialize_input {
