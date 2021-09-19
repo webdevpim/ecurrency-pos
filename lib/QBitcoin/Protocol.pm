@@ -639,7 +639,7 @@ sub cmd_pong {
 
 sub cmd_reject {
     my $self = shift;
-    Warningf("%s peer %s aborted connection", $self->protocol, $self->peer->id);
+    Warningf("%s peer %s aborted connection", $self->type, $self->peer->id);
     return -1;
 }
 
