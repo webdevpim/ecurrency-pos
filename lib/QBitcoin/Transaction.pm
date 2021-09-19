@@ -145,6 +145,7 @@ sub add_pending_tx {
         }
         if (!%{$self->{input_pending}}) {
             delete $self->{input_pending};
+            $self->in = [ sort { _cmp_inputs($a, $b) } @{$self->in} ];
         }
     }
     return $self;
@@ -552,7 +553,7 @@ sub load_inputs {
             }
         }
     }
-    $self->in = \@loaded_inputs;
+    $self->in = [ sort { _cmp_inputs($a, $b) } @loaded_inputs ];
     $self->input_pending = \%unknown_inputs if %unknown_inputs;
     return $self;
 }
