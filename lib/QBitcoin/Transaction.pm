@@ -298,9 +298,9 @@ sub sign_data {
 sub as_hashref {
     my $self = shift;
     return {
-        hash => unpack("H*", $self->hash),
-        fee  => $self->fee / DENOMINATOR,
-        size => length($self->serialize),
+        $self->hash ? ( hash => unpack("H*", $self->hash) ) : (),
+        defined ($self->fee) ? ( fee  => $self->fee / DENOMINATOR ) : (),
+        size => $self->size //= length($self->serialize),
         in   => [ map { input_as_hashref($_)  } @{$self->in}  ],
         out  => [ map { output_as_hashref($_) } @{$self->out} ],
         $self->up ? ( up => $self->up->as_hashref ) : (),
