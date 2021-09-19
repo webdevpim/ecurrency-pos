@@ -37,7 +37,7 @@ sub make_sign {
     my $redeem_script = QBitcoin::MyAddress->script_by_hash($in->{txo}->scripthash)
         or die "Can't get redeem script by hash " . unpack("H*", $in->{txo}->scripthash);
     my $signature = signature($self->sign_data($input_num), $address->privkey);
-    $in->{txo}->redeem_script = $redeem_script;
+    $in->{txo}->set_redeem_script($redeem_script);
     my $script_type = QBitcoin::RedeemScript->script_type($redeem_script);
     if ($script_type eq "P2PKH") {
         $in->{siglist} = [ $signature, $address->pubkey ];

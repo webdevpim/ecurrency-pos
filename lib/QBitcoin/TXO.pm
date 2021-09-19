@@ -26,7 +26,6 @@ use constant TABLE => "txo";
 use constant TRANSACTION_TABLE => "transaction";
 
 mk_accessors(keys %{&FIELDS});
-mk_accessors(qw(redeem_script));
 
 # hash by tx and out-num
 my %TXO;
@@ -271,22 +270,41 @@ sub spent_list {
     return $self->{spent} ? values %{$self->{spent}} : ();
 }
 
+sub set_redeem_script {
+    my $self = shift;
+    my ($script) = @_;
+
+    if ($self->redeem_script) {
+        $script eq $self->redeem_script
+            or return -1;
+        return 0;
+    }
+    my $scripthash;
+    my $hashlength = length($self->scripthash);
+    if ($hashlength == 20) {
+        $scripthash = hash160($script);
+    }
+    elsif ($hashlength == 32) {
+        $scripthash = hash256($script);
+    }
+    else {
+        return -1;
+    }
+    $scripthash eq $self->scripthash
+        or return -1;
+    $self->{redeem_script} = $script;
+    return 0;
+}
+
+sub redeem_script {
+    my $self = shift;
+    die "Can't set redeem_script by accessor" if @_;
+    return $self->{redeem_script};
+}
+
 sub check_script {
     my $self = shift;
     my ($siglist, $tx, $input_num) = @_;
-    my $hashlength = length($self->scripthash);
-    my $scripthash;
-    if ($hashlength == 20) {
-        $scripthash = hash160($self->redeem_script);
-    }
-    elsif ($hashlength == 32) {
-        $scripthash = hash256($self->redeem_script);
-    }
-    else {
-        return 0;
-    }
-    $scripthash eq $self->scripthash
-        or return 0;
     return QBitcoin::RedeemScript->check_input($siglist, $self->redeem_script, $tx, $input_num);
 }
 

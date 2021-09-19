@@ -107,6 +107,7 @@ my $tx = make_tx;
 # height, hash, prev_hash, weight, $tx
 send_block(0, "a0", undef, 50, $tx);
 my $zero_ip = "\x00"x16;
+$connection->protocol->command = "tx";
 $connection->protocol->cmd_tx($tx->serialize . $zero_ip);
 $connection->protocol->cmd_tx($test_tx->serialize . $zero_ip);
 $connection->protocol->cmd_tx($stake_tx->serialize . $zero_ip);

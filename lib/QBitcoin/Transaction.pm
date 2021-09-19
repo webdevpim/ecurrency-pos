@@ -117,7 +117,7 @@ sub process_pending {
             $tx->add_pending_tx($self)
                 or next;
             if (!$tx->is_pending) {
-                Debugf("Process transaction %s pending for %s", $self->hash, $self->hash_str);
+                Debugf("Process transaction %s pending for %s", $tx->hash_str, $self->hash_str);
                 $tx->calculate_fee();
                 $protocol->process_tx($tx);
             }
@@ -137,7 +137,10 @@ sub add_pending_tx {
                     $self->hash_str($in->{tx_out}), $in->{num}, $self->hash_str);
                 return undef;
             }
-            $txo->redeem_script = $in->{redeem_script};
+            if ($txo->set_redeem_script($in->{redeem_script}) != 0) {
+                Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
+                return undef;
+            }
             push @{$self->in}, { txo => $txo, siglist => $in->{siglist} };
         }
         if (!%{$self->{input_pending}}) {
@@ -505,7 +508,10 @@ sub load_inputs {
     my $inputs = delete $self->{in_raw};
     foreach my $in (@$inputs) {
         if (my $txo = QBitcoin::TXO->get($in)) {
-            $txo->redeem_script = $in->{redeem_script};
+            if ($txo->set_redeem_script($in->{redeem_script}) != 0) {
+                Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
+                return undef;
+            }
             push @loaded_inputs, {
                 txo     => $txo,
                 siglist => $in->{siglist},
@@ -523,7 +529,10 @@ sub load_inputs {
         my $class = ref $self;
         foreach my $in (@need_load_txo) {
             if (my $txo = QBitcoin::TXO->get($in)) {
-                $txo->redeem_script = $in->{redeem_script};
+                if ($txo->set_redeem_script($in->{redeem_script}) != 0) {
+                    Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
+                    return undef;
+                }
                 push @loaded_inputs, {
                     txo     => $txo,
                     siglist => $in->{siglist},
