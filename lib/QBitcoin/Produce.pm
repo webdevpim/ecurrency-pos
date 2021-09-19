@@ -134,7 +134,7 @@ sub _produce_tx {
     @txo = shuffle @txo;
     @txo = splice(@txo, 0, 2);
     $_->save foreach grep { !$_->is_cached } @txo;
-    $_->redeem_script = $redeem_script foreach @txo;
+    $_->set_redeem_script($redeem_script) foreach @txo;
     my $amount = sum map { $_->value } @txo;
     my $fee = int($amount * $fee_part);
     my $siglist = [ "\x01", "\x01" ];

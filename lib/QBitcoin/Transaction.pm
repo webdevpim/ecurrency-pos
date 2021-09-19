@@ -36,6 +36,7 @@ use constant ATTR => qw(
     in
     out
     up
+    input_pending
     blocks
     block_sign_data
     rcvd
@@ -46,9 +47,8 @@ mk_accessors(keys %{&FIELDS}, ATTR);
 my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
 
 my %TRANSACTION;      # in-memory cache transaction objects by tx_hash
-my %PENDING_INPUT_TX; # 2-level hash $pending_hash => $hash; value 1
-my %PENDING_TX_INPUT; # 2-level hash $hash => $pending_hash; value - pointer to serialized transaction data
-tie(%PENDING_TX_INPUT, 'Tie::IxHash'); # Ordered by age, to remove oldest
+my %PENDING_INPUT_TX; # 2-level hash $pending_hash => $hash; value - transaction object
+tie(%PENDING_INPUT_TX, 'Tie::IxHash'); # Ordered by age, to remove oldest
 
 END {
     # Free all references to txo for graceful free %TXO hash
@@ -113,19 +113,42 @@ sub process_pending {
     my $self = shift;
     my ($protocol) = @_;
     if (my $pending = delete $PENDING_INPUT_TX{$self->hash}) {
-        foreach my $hash (keys %$pending) {
-            my $tx_data_p = delete $PENDING_TX_INPUT{$hash}->{$self->hash};
-            if (!%{$PENDING_TX_INPUT{$hash}}) {
-                delete $PENDING_TX_INPUT{$hash};
-                Debugf("Process transaction %s pending for %s", $self->hash_str($hash), $self->hash_str);
-                my $class = ref $self;
-                my $data = Bitcoin::Serialized->new($$tx_data_p);
-                if (my $tx = $class->deserialize($data, $protocol)) {
-                    $protocol->process_tx($tx);
-                }
+        foreach my $tx (values %$pending) {
+            $tx->add_pending_tx($self)
+                or next;
+            if (!$tx->is_pending) {
+                Debugf("Process transaction %s pending for %s", $tx->hash_str, $self->hash_str);
+                $tx->calculate_fee();
+                $protocol->process_tx($tx);
             }
         }
     }
+}
+
+sub add_pending_tx {
+    my $self = shift;
+    my ($tx) = @_;
+
+    if ($self->{input_pending} && (my $tx_in = delete $self->{input_pending}->{$tx->hash})) {
+        foreach my $in (values %$tx_in) {
+            my $txo = QBitcoin::TXO->get($in);
+            if (!$txo) {
+                Warningf("Transaction %s has no output %u for tx %s input",
+                    $self->hash_str($in->{tx_out}), $in->{num}, $self->hash_str);
+                return undef;
+            }
+            if ($txo->set_redeem_script($in->{redeem_script}) != 0) {
+                Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
+                return undef;
+            }
+            push @{$self->in}, { txo => $txo, siglist => $in->{siglist} };
+        }
+        if (!%{$self->{input_pending}}) {
+            delete $self->{input_pending};
+            $self->in = [ sort { _cmp_inputs($a, $b) } @{$self->in} ];
+        }
+    }
+    return $self;
 }
 
 sub add_to_block {
@@ -276,9 +299,9 @@ sub sign_data {
 sub as_hashref {
     my $self = shift;
     return {
-        hash => unpack("H*", $self->hash),
-        fee  => $self->fee / DENOMINATOR,
-        size => length($self->serialize),
+        $self->hash ? ( hash => unpack("H*", $self->hash) ) : (),
+        defined ($self->fee) ? ( fee  => $self->fee / DENOMINATOR ) : (),
+        size => $self->size //= length($self->serialize),
         in   => [ map { input_as_hashref($_)  } @{$self->in}  ],
         out  => [ map { output_as_hashref($_) } @{$self->out} ],
         $self->up ? ( up => $self->up->as_hashref ) : (),
@@ -364,7 +387,7 @@ sub deserialize_coinbase {
 
 sub deserialize {
     my $class = shift;
-    my ($data, $protocol) = @_;
+    my ($data) = @_;
     my $start_index = $data->index;
     my @input  = map { deserialize_input($data)  // return undef } 1 .. ($data->get_varint // return undef);
     my @output = map { deserialize_output($data) // return undef } 1 .. ($data->get_varint // return undef);
@@ -377,38 +400,9 @@ sub deserialize {
     $data->index = $start_index;
     my $tx_raw_data = $data->get($end_index - $start_index);
     my $hash = tx_data_hash($tx_raw_data);
-    if ($PENDING_TX_INPUT{$hash}) {
-        Debugf("Transaction %s already pending", $class->hash_str($hash));
-        return "";
-    }
-    if ($class->check_by_hash($hash)) {
-        Debugf("Transaction %s already known", $class->hash_str($hash));
-        return "";
-    }
-    my ($in, $unknown) = $class->load_inputs(\@input, $hash, $protocol);
-    if (!$in) {
-        return undef;
-    }
-    if (@$unknown) {
-        # put the transaction into separate "waiting" pull (limited size) and reprocess it by each received transaction
-        foreach my $tx_in (@$unknown) {
-            Debugf("Save transaction %s as pending for %s", $class->hash_str($hash), $class->hash_str($tx_in));
-            $PENDING_INPUT_TX{$tx_in}->{$hash} = 1;
-            $PENDING_TX_INPUT{$hash}->{$tx_in} = \$tx_raw_data;
-        }
-        if (keys %PENDING_TX_INPUT > MAX_PENDING_TX) {
-            my ($oldest_hash) = keys %PENDING_TX_INPUT;
-            foreach my $tx_in (keys %{$PENDING_TX_INPUT{$oldest_hash}}) {
-                delete $PENDING_INPUT_TX{$tx_in}->{$oldest_hash};
-            }
-            Debugf("Drop transaction %s from pending pool", $class->hash_str($oldest_hash));
-            delete $PENDING_TX_INPUT{$oldest_hash};
-        }
-        return ""; # Ignore transactions with unknown inputs
-    }
 
     my $self = $class->new(
-        in            => $in,
+        in_raw        => \@input,
         out           => create_outputs(\@output, $hash),
         $up ? UPGRADE_POW ? ( up => $up ) : ( coins_created => $up ) : (),
         # data          => $tx_data, # TODO
@@ -416,16 +410,65 @@ sub deserialize {
         size          => $end_index - $start_index,
         received_time => time(),
     );
+    return $self;
+}
 
-    $self->calculate_hash; # this is just for check that received data is equal to serialized created transaction
-    if ($self->hash ne $hash) {
-        Warningf("Incorrect serialized transaction has different hash: %s: %s", $self->hash_str, $self->hash_str($hash));
-        return undef;
+sub is_pending {
+    my $self = shift;
+    return $self->input_pending;
+}
+
+sub is_known {
+    my $self = shift;
+    my $class = ref($self);
+    return $class->check_by_hash($self->hash);
+}
+
+sub load_txo {
+    my $self = shift;
+
+    if ($self->is_pending) {
+        Debugf("Transaction %s already pending", $self->hash_str);
+        return $self;
+    }
+    if ($self->is_known) {
+        Debugf("Transaction %s already known", $self->hash_str);
+        return $self;
+    }
+    $self->load_inputs
+        or return undef; # transaction has no such output
+    $_->save foreach @{$self->out};
+    if ($self->input_pending) {
+        # put the transaction into separate "waiting" pull (limited size) and reprocess it by each received transaction
+        foreach my $tx_in (keys %{$self->input_pending}) {
+            Debugf("Save transaction %s as pending for %s", $self->hash_str, $self->hash_str($tx_in));
+            # request pending inputs
+            if (!$PENDING_INPUT_TX{$tx_in}) {
+                $self->received_from->request_tx($tx_in) if $self->received_from;
+            }
+            $PENDING_INPUT_TX{$tx_in}->{$self->hash} = $self;
+        }
+        if (keys %PENDING_INPUT_TX > MAX_PENDING_TX) {
+            my ($oldest_hash) = keys %PENDING_INPUT_TX;
+            foreach my $tx (values %{$PENDING_INPUT_TX{$oldest_hash}}) {
+                foreach my $tx_in (keys %{$tx->input_pending}) {
+                    delete $PENDING_INPUT_TX{$tx_in}->{$tx->hash};
+                    delete $PENDING_INPUT_TX{$tx_in} unless %{$PENDING_INPUT_TX{$tx_in}};
+                }
+                Debugf("Drop transaction %s pending for %s from pending pool", $tx->hash_str, $self->hash_str($oldest_hash));
+            }
+        }
+        return $self;
     }
 
-    $self->fee = sum0(map { $_->{txo}->value } @$in) + $self->coins_created - sum0(map { $_->{value} } @output);
-
+    $self->calculate_fee();
     return $self;
+}
+
+sub calculate_fee {
+    my $self = shift;
+
+    $self->fee = sum0(map { $_->{txo}->value } @{$self->in}) + $self->coins_created - sum0(map { $_->value } @{$self->out});
 }
 
 sub coins_created {
@@ -442,26 +485,34 @@ sub coins_created {
 sub create_outputs {
     my ($outputs, $hash) = @_;
     my @txo;
+    my $num = 0;
     foreach my $out (@$outputs) {
         my $txo = QBitcoin::TXO->new_txo({
             value      => $out->{value},
             scripthash => $out->{scripthash},
+            tx_in      => $hash,
+            num        => $num++,
         });
         push @txo, $txo;
     }
-    QBitcoin::TXO->save_all($hash, \@txo);
     return \@txo;
 }
 
+# get inputs as hashes from $self->in_raw
+# and save them to $self->in and $self->input_pending
+# request input_pending from remote ($self->received_from)
 sub load_inputs {
-    my $class = shift;
-    my ($inputs, $hash, $protocol) = @_;
+    my $self = shift;
 
     my @loaded_inputs;
     my @need_load_txo;
+    my $inputs = delete $self->{in_raw};
     foreach my $in (@$inputs) {
         if (my $txo = QBitcoin::TXO->get($in)) {
-            $txo->redeem_script = $in->{redeem_script};
+            if ($txo->set_redeem_script($in->{redeem_script}) != 0) {
+                Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
+                return undef;
+            }
             push @loaded_inputs, {
                 txo     => $txo,
                 siglist => $in->{siglist},
@@ -476,9 +527,13 @@ sub load_inputs {
     if (@need_load_txo) {
         # var @txo here needed to prevent free txo objects as unused just after load
         my @txo = QBitcoin::TXO->load(@need_load_txo);
+        my $class = ref $self;
         foreach my $in (@need_load_txo) {
             if (my $txo = QBitcoin::TXO->get($in)) {
-                $txo->redeem_script = $in->{redeem_script};
+                if ($txo->set_redeem_script($in->{redeem_script}) != 0) {
+                    Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
+                    return undef;
+                }
                 push @loaded_inputs, {
                     txo     => $txo,
                     siglist => $in->{siglist},
@@ -487,21 +542,20 @@ sub load_inputs {
             else {
                 if ($class->check_by_hash($in->{tx_out})) {
                     Warningf("Transaction %s has no output %u for tx %s input",
-                        $class->hash_str($in->{tx_out}), $in->{num}, $class->hash_str($hash));
+                        $self->hash_str($in->{tx_out}), $in->{num}, $self->hash_str);
                     return undef;
                 }
                 else {
                     Infof("input %s:%u not found in transaction %s",
-                        $class->hash_str($in->{tx_out}), $in->{num}, $class->hash_str($hash));
-                    if (!$unknown_inputs{$in->{tx_out}} && !$PENDING_TX_INPUT{$in->{tx_out}}) {
-                        $protocol->request_tx($in->{tx_out}) if $protocol;
-                    }
-                    $unknown_inputs{$in->{tx_out}} = 1;
+                        $self->hash_str($in->{tx_out}), $in->{num}, $self->hash_str);
+                    $unknown_inputs{$in->{tx_out}}->{$in->{num}} = $in;
                 }
             }
         }
     }
-    return(\@loaded_inputs, [ keys %unknown_inputs ]);
+    $self->in = [ sort { _cmp_inputs($a, $b) } @loaded_inputs ];
+    $self->input_pending = \%unknown_inputs if %unknown_inputs;
+    return $self;
 }
 
 sub _cmp_inputs {
@@ -552,8 +606,21 @@ sub validate_coinbase {
     return 0;
 }
 
+sub validate_hash {
+    my $self = shift;
+
+    my $hash = $self->hash;
+    $self->calculate_hash;
+    if ($self->hash ne $hash) {
+        Warningf("Incorrect serialized transaction has different hash: %s != %s", $self->hash_str, $self->hash_str($hash));
+        return -1;
+    }
+    return 0;
+}
+
 sub validate {
     my $self = shift;
+
     if (UPGRADE_POW) {
         if (!@{$self->in}) {
             return $self->validate_coinbase;
