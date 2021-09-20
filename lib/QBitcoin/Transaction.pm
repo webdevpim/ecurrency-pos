@@ -109,10 +109,23 @@ sub save {
     return 0;
 }
 
+sub receive {
+    my $self = shift;
+
+    $self->validate_hash() == 0
+        or return -1;
+    $self->validate() == 0
+        or return -1;
+    $self->save() == 0
+        or return -1;
+    Debugf("Process tx %s fee %i size %u", $self->hash_str, $self->fee, $self->size);
+    $self->process_pending();
+    return 0;
+}
+
 sub process_pending {
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my $self = shift;
-    my ($protocol) = @_;
     if (my $pending = delete $PENDING_INPUT_TX{$self->hash}) {
         foreach my $tx (values %$pending) {
             $tx->add_pending_tx($self)
@@ -120,7 +133,7 @@ sub process_pending {
             if (!$tx->is_pending) {
                 Debugf("Process transaction %s pending for %s", $tx->hash_str, $self->hash_str);
                 $tx->calculate_fee();
-                $protocol->process_tx($tx);
+                $tx->received_from->process_tx($tx);
             }
         }
     }
@@ -690,9 +703,9 @@ sub check_input_script {
 
 sub announce {
     my $self = shift;
-    my ($received_from) = @_;
+    my $recv_peer = $self->received_from && $self->received_from->can('peer') ? $self->received_from->peer : undef;
     foreach my $connection (QBitcoin::ConnectionList->connected(PROTOCOL_QBITCOIN)) {
-        next if $received_from && $connection->peer->id eq $received_from->peer->id;
+        next if $recv_peer && $connection->peer->id eq $recv_peer->id;
         next unless $connection->protocol->can("announce_tx");
         $connection->protocol->announce_tx($self);
     }
