@@ -11,6 +11,7 @@ use QBitcoin::Const;
 use QBitcoin::RPC::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
+use QBitcoin::Block;
 
 use Role::Tiny::With;
 with 'QBitcoin::RPC::Validate';
@@ -167,6 +168,28 @@ sub validate_args {
     }
     else {
         Warningf("No params specification for RPC command [%s]", $self->cmd);
+    }
+    return 0;
+}
+
+# Called from $tx->process_pending() for transactions received by "sendrawtransaction"
+sub process_tx {
+    my $self = shift;
+    my ($tx) = @_;
+
+    $tx->receive() == 0
+        or return -1;
+    if (defined(my $height = QBitcoin::Block->recv_pending_tx($tx))) {
+        return -1 if $height == -1;
+        # $self->request_new_block($height+1);
+    }
+    if ($tx->fee >= 0) {
+        # announce to other peers
+        $tx->announce();
+    }
+    elsif (!$tx->in_blocks && !$tx->block_height) {
+        Debugf("Ignore stake transactions %s not related to any known block", $tx->hash_str);
+        $tx->drop();
     }
     return 0;
 }

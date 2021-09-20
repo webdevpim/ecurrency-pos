@@ -13,6 +13,7 @@ use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
 use QBitcoin::Address qw(scripthash_by_address);
+use Bitcoin::Serialized;
 use Bitcoin::Block;
 
 my %PARAMS;
@@ -447,6 +448,59 @@ sub cmd_createrawtransaction {
         out => \@out,
     );
     return $self->response_ok(unpack("H*", $tx->serialize_unsigned));
+}
+
+$PARAMS{sendrawtransaction} = "hexstring";
+$HELP{sendrawtransaction} = qq(
+sendrawtransaction "hexstring"
+
+Submit a raw transaction (serialized, hex-encoded) to local node and network.
+
+Also see createrawtransaction and signrawtransactionwithkey calls.
+
+Arguments:
+1. hexstring     (string, required) The hex string of the raw transaction
+
+Result:
+"hex"    (string) The transaction hash in hex
+
+Examples:
+
+Create a transaction
+> bitcoin-cli createrawtransaction "[{\"txid\" : \"mytxid\",\"vout\":0}]" "{\"myaddress\":0.01}"
+Sign the transaction, and get back the hex
+> bitcoin-cli signrawtransactionwithwallet "myhex"
+
+Send the transaction (signed hex)
+> bitcoin-cli sendrawtransaction "signedhex"
+
+As a JSON-RPC call
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "sendrawtransaction", "params": ["signedhex"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_sendrawtransaction {
+    my $self = shift;
+    my $data = Bitcoin::Serialized->new(pack("H*", $self->args->[0]));
+    my $tx = QBitcoin::Transaction->deserialize($data);
+    if (!$tx || $data->length) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "TX decode failed.");
+    }
+    $tx->received_from = $self;
+    if (QBitcoin::Transaction->has_pending($tx->hash)) {
+        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction already published.");
+    }
+    if (QBitcoin::Transaction->check_by_hash($tx->hash)) {
+        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction already published.");
+    }
+    if (!$tx->load_txo()) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "Incorrect transaction data.");
+    }
+    if ($tx->is_pending) {
+        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Some inputs unknown.");
+    }
+    if ($self->process_tx($tx) != 0) {
+        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction failed.");
+    }
+    return $self->response_ok(unpack("H*", $tx->hash));
 }
 
 # getmempoolinfo

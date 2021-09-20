@@ -21,6 +21,7 @@ my %SPEC = (
     txid      => qr/^[0-9a-f]{64}\z/,
     command   => qr/^[a-z]{2,64}\z/,
     verbosity => qr/^[12]\z/,
+    hexstring => qr/^(?:[0-9a-f][0-9a-f])+\z/,
     verbose   => \&validate_boolean,
     address   => \&validate_address,
     inputs    => \&validate_inputs,
