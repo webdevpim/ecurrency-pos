@@ -405,7 +405,7 @@ sub process_tx {
         or return -1;
     $tx->validate() == 0
         or return -1;
-    $tx->receive() == 0
+    $tx->save() == 0
         or return -1;
     Debugf("Process tx %s fee %i size %u", $tx->hash_str, $tx->fee, $tx->size);
     if (defined(my $height = QBitcoin::Block->recv_pending_tx($tx))) {

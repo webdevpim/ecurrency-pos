@@ -88,7 +88,7 @@ sub get { # only cached
     return $TRANSACTION{$tx_hash};
 }
 
-sub receive {
+sub save {
     my $self = shift;
 
     if ($TRANSACTION{$self->hash}) {
@@ -850,7 +850,7 @@ sub new_coinbase {
     }
     else {
         QBitcoin::TXO->save_all($self->hash, $self->out);
-        $self->receive(); # Add coinbase tx to mempool
+        $self->save(); # Add coinbase tx to mempool
         $coinbase->tx_hash = $self->hash;
         Infof("Generated new coinbase transaction %s for btc output %s:%u",
             $self->hash_str, $class->hash_str($coinbase->btc_tx_hash), $coinbase->btc_out_num);
