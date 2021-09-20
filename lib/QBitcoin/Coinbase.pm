@@ -279,6 +279,7 @@ sub deserialize {
     if (!$scripthash) {
         Warningf("Incorrect btc upgrade transaction %s output open_script", $transaction->hash_str);
         return undef unless $config->{fake_coinbase};
+        $scripthash = ZERO_HASH;
     }
 
     return $class->new({
