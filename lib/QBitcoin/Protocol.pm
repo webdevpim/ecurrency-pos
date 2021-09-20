@@ -173,9 +173,14 @@ sub cmd_block {
         return -1;
     }
     if (QBitcoin::Block->block_pool($block->height, $block->hash)) {
-        Debugf("Received block %s already in block_pool, skip", $block->hash_str);
+        Debugf("Received block %s already in block_pool", $block->hash_str);
         $self->syncing(0);
-        $self->request_new_block();
+        if ($block->hash eq QBitcoin::Block->best_block($block->height)) {
+            $self->request_new_block();
+        }
+        else {
+            $self->request_new_block($block->height);
+        }
         return 0;
     }
     if ($block->is_pending) {
