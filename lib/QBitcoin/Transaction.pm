@@ -49,6 +49,7 @@ my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
 my %TRANSACTION;      # in-memory cache transaction objects by tx_hash
 my %PENDING_INPUT_TX; # 2-level hash $pending_hash => $hash; value - transaction object
 tie(%PENDING_INPUT_TX, 'Tie::IxHash'); # Ordered by age, to remove oldest
+my %PENDING_TX_INPUT; # hash of pending transaction objects by tx_hash
 
 END {
     # Free all references to txo for graceful free %TXO hash
@@ -145,6 +146,7 @@ sub add_pending_tx {
         }
         if (!%{$self->{input_pending}}) {
             delete $self->{input_pending};
+            delete $PENDING_TX_INPUT{$self->hash};
             $self->in = [ sort { _cmp_inputs($a, $b) } @{$self->in} ];
         }
     }
@@ -418,23 +420,15 @@ sub is_pending {
     return $self->input_pending;
 }
 
-sub is_known {
-    my $self = shift;
-    my $class = ref($self);
-    return $class->check_by_hash($self->hash);
+sub has_pending {
+    my $class = shift;
+    my ($hash) = @_;
+    return exists $PENDING_TX_INPUT{$hash};
 }
 
 sub load_txo {
     my $self = shift;
 
-    if ($self->is_pending) {
-        Debugf("Transaction %s already pending", $self->hash_str);
-        return $self;
-    }
-    if ($self->is_known) {
-        Debugf("Transaction %s already known", $self->hash_str);
-        return $self;
-    }
     $self->load_inputs
         or return undef; # transaction has no such output
     $_->save foreach @{$self->out};
@@ -448,6 +442,7 @@ sub load_txo {
             }
             $PENDING_INPUT_TX{$tx_in}->{$self->hash} = $self;
         }
+        $PENDING_TX_INPUT{$self->hash} = $self;
         if (keys %PENDING_INPUT_TX > MAX_PENDING_TX) {
             my ($oldest_hash) = keys %PENDING_INPUT_TX;
             foreach my $tx (values %{$PENDING_INPUT_TX{$oldest_hash}}) {
@@ -455,6 +450,7 @@ sub load_txo {
                     delete $PENDING_INPUT_TX{$tx_in}->{$tx->hash};
                     delete $PENDING_INPUT_TX{$tx_in} unless %{$PENDING_INPUT_TX{$tx_in}};
                 }
+                delete $PENDING_TX_INPUT{$tx->hash};
                 Debugf("Drop transaction %s pending for %s from pending pool", $tx->hash_str, $self->hash_str($oldest_hash));
             }
         }

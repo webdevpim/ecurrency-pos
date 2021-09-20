@@ -373,13 +373,21 @@ sub cmd_tx {
         $self->abort("bad_tx_data");
         return -1;
     }
+    if (QBitcoin::Transaction->has_pending($tx->hash)) {
+        Debugf("Transaction %s already pending", $tx->hash_str);
+        return 0;
+    }
+    if (QBitcoin::Transaction->check_by_hash($tx->hash)) {
+        Debugf("Transaction %s already known", $tx->hash_str);
+        return 0;
+    }
     $tx->rcvd = $data->get(16);
     $tx->received_from = $self;
     if (!$tx->load_txo()) {
         $self->abort("bad_tx_data");
         return -1;
     }
-    if ($tx->is_pending || $tx->is_known) {
+    if ($tx->is_pending) {
         return 0;
     }
     if ($self->process_tx($tx) == -1) {
