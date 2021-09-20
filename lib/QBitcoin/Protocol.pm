@@ -401,25 +401,22 @@ sub process_tx {
     my $self = shift;
     my ($tx) = @_;
 
-    $tx->validate_hash() == 0
-        or return -1;
-    $tx->validate() == 0
-        or return -1;
     $tx->receive() == 0
         or return -1;
-    Debugf("Process tx %s fee %i size %u", $tx->hash_str, $tx->fee, $tx->size);
     if (defined(my $height = QBitcoin::Block->recv_pending_tx($tx))) {
         return -1 if $height == -1;
         # $self->request_new_block($height+1);
     }
-    $tx->process_pending($self);
     if ($tx->fee >= 0) {
         if (blockchain_synced() && mempool_synced()) {
             # announce to other peers
-            $tx->announce($self);
+            $tx->announce();
             if ($tx->fee > 0 || $tx->up) {
-                $self->peer->add_reputation($tx->up ? 200 : 2);
-                if ($tx->rcvd && $self->peer->ip ne $tx->rcvd && $tx->rcvd ne "\x00"x16) {
+                my $recv_peer = $tx->received_from && $tx->received_from->can('peer') ? $tx->received_from->peer : undef;
+                if ($recv_peer) {
+                    $recv_peer->add_reputation($tx->up ? 200 : 2);
+                }
+                if ($tx->rcvd && $tx->rcvd ne "\x00"x16 && (!$recv_peer || $recv_peer->ip ne $tx->rcvd)) {
                     my $src_peer = QBitcoin::Peer->get_or_create(type_id => PROTOCOL_QBITCOIN, ip => $tx->rcvd);
                     $src_peer->add_reputation($tx->up ? 100 : 1);
                 }

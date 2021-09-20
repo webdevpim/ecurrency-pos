@@ -104,7 +104,7 @@ sub _produce_my_utxo {
         Errf("Produced incorrect coinbase transaction");
         return;
     }
-    $tx->receive();
+    $tx->save();
     Noticef("Produced coinbase transaction %s", $tx->hash_str);
     $tx->announce();
     return $tx;
@@ -160,7 +160,7 @@ sub _produce_tx {
         Errf("Produced incorrect transaction");
         die "Produced incorrect transaction\n";
     }
-    $tx->receive();
+    $tx->save();
     Noticef("Produced transaction %s with fee %i", $tx->hash_str, $tx->fee);
     Debugf("Produced transaction inputs:");
     Debugf("  tx_in: %s, num: %u", $_->tx_in_str, $_->num) foreach @txo;

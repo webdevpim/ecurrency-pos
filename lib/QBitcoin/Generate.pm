@@ -92,7 +92,7 @@ sub generate {
         QBitcoin::TXO->save_all($stake_tx->hash, $stake_tx->out);
         $stake_tx->validate() == 0
             or die "Incorrect generated stake transaction\n";
-        $stake_tx->receive() == 0
+        $stake_tx->save() == 0
             or die "Incorrect generated stake transaction\n";
         unshift @transactions, $stake_tx;
     }
