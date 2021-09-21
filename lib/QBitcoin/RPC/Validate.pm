@@ -8,7 +8,7 @@ use Scalar::Util qw(looks_like_number);
 use QBitcoin::Const;
 use QBitcoin::RPC::Const;
 use QBitcoin::Config;
-use QBitcoin::Address;
+use QBitcoin::Address qw(ADDRESS_RE ADDRESS_TESTNET_RE wif_to_pk);
 use QBitcoin::Accessors qw(mk_accessors);
 
 mk_accessors(qw(validate_message));
@@ -16,16 +16,17 @@ mk_accessors(qw(validate_message));
 my $JSON = JSON::XS->new;
 
 my %SPEC = (
-    height    => qr/^(?:0|[1-9][0-9]{0,9})\z/,
-    blockhash => qr/^[0-9a-f]{64}\z/,
-    txid      => qr/^[0-9a-f]{64}\z/,
-    command   => qr/^[a-z]{2,64}\z/,
-    verbosity => qr/^[12]\z/,
-    hexstring => qr/^(?:[0-9a-f][0-9a-f])+\z/,
-    verbose   => \&validate_boolean,
-    address   => \&validate_address,
-    inputs    => \&validate_inputs,
-    outputs   => \&validate_outputs,
+    height      => qr/^(?:0|[1-9][0-9]{0,9})\z/,
+    blockhash   => qr/^[0-9a-f]{64}\z/,
+    txid        => qr/^[0-9a-f]{64}\z/,
+    command     => qr/^[a-z]{2,64}\z/,
+    verbosity   => qr/^[12]\z/,
+    hexstring   => qr/^(?:[0-9a-f][0-9a-f])+\z/,
+    verbose     => \&validate_boolean,
+    address     => \&validate_address,
+    inputs      => \&validate_inputs,
+    outputs     => \&validate_outputs,
+    privatekeys => \&validate_privkeys,
 );
 
 sub validate {
@@ -96,7 +97,7 @@ sub validate_boolean {
 }
 
 sub validate_address {
-    $_[0] =~ ($config->{testnet} ? QBitcoin::Address->ADDRESS_TESTNET_RE : QBitcoin::Address->ADDRESS_RE);
+    $_[0] =~ ($config->{testnet} ? ADDRESS_TESTNET_RE : ADDRESS_RE);
 }
 
 sub is_amount {
@@ -155,6 +156,22 @@ sub validate_outputs {
     }
     $_[0] = $outputs;
     return 1;
+}
+
+sub validate_privkeys {
+    my $value = shift;
+    my $privkeys = eval { $JSON->decode($value) };
+    if (!$privkeys || ref($privkeys) ne "ARRAY") {
+        return 0;
+    }
+    my @pk;
+    foreach my $privkey (@$privkeys) {
+        ref($privkey) eq "" or return 0;
+        my $pk = eval { wif_to_pk($privkey) }
+            or return 0;
+        push @pk, $pk;
+    }
+    $_[0] = \@pk;
 }
 
 sub incorrect_params {

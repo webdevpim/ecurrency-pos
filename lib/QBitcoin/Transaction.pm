@@ -467,7 +467,7 @@ sub load_txo {
             Debugf("Save transaction %s as pending for %s", $self->hash_str, $self->hash_str($tx_in));
             # request pending inputs
             if (!$PENDING_INPUT_TX{$tx_in}) {
-                $self->received_from->request_tx($tx_in) if $self->received_from;
+                $self->received_from->request_tx($tx_in) if $self->received_from && $self->received_from->can('request_tx');
             }
             $PENDING_INPUT_TX{$tx_in}->{$self->hash} = $self;
         }

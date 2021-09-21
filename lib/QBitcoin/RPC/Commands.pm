@@ -503,6 +503,90 @@ sub cmd_sendrawtransaction {
     return $self->response_ok(unpack("H*", $tx->hash));
 }
 
+$PARAMS{signrawtransactionwithkey} = "hexstring privatekeys";
+$HELP{signrawtransactionwithkey} = qq(
+signrawtransactionwithkey "hexstring" ["privatekey",...]
+
+Sign inputs for raw transaction (serialized, hex-encoded).
+The second argument is an array of base58-encoded private
+keys that will be the only keys used to sign the transaction.
+
+Arguments:
+1. hexstring                        (string, required) The transaction hex string
+2. privkeys                         (json array, required) The base58-encoded private keys for signing
+     [
+       "privatekey",                (string) private key in base58-encoding
+       ...
+     ]
+
+Result:
+{                             (json object)
+  "hex" : "hex",              (string) The hex-encoded raw transaction with signature(s)
+  "complete" : true|false,    (boolean) If the transaction has a complete set of signatures
+  "errors" : [                (json array, optional) Script verification errors (if there are any)
+    {                         (json object)
+      "txid" : "hex",         (string) The hash of the referenced, previous transaction
+      "vout" : n,             (numeric) The index of the output to spent and used as input
+      "scriptSig" : "hex",    (string) The hex-encoded signature script
+      "error" : "str"         (string) Verification or signing error related to the input
+    },
+    ...
+  ]
+}
+
+Examples:
+> bitcoin-cli signrawtransactionwithkey "myhex" "[\"key1\",\"key2\"]"
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "signrawtransactionwithkey", "params": ["myhex", "[\"key1\",\"key2\"]"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_signrawtransactionwithkey {
+    my $self = shift;
+    my $data = Bitcoin::Serialized->new(pack("H*", $self->args->[0]));
+    my $privkeys = $self->args->[1];
+    my $tx = QBitcoin::Transaction->deserialize($data);
+    if (!$tx || $data->length) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "TX decode failed.");
+    }
+    $tx->received_from = $self;
+    if (!$tx->load_inputs()) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "Incorrect transaction data.");
+    }
+    if ($tx->is_pending) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "Some inputs unknown.");
+    }
+    if ($tx->is_known) {
+        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction already published.");
+    }
+    my @address = map { QBitoin::MyAddress->new(private_key => $_) } @$privkeys;
+    my @errors;
+    foreach my $num (0 .. $#{$tx->in}) {
+        my $in = $tx->in->[$num];
+        my ($address, $script);
+        foreach my $addr (@address) {
+            if ($script = $addr->script_by_hash($in->{txo}->scripthash)) {
+                $address = $addr;
+                last;
+            }
+        }
+        if ($address) {
+            $tx->make_sign($in, $address, $num);
+        }
+        else {
+            push @errors, {
+                txid       => $in->{txo}->tx_in,
+                vout       => $in->{txo}->num,
+                scripthash => $in->{txo}->scripthash,
+                error      => "Unknown scripthash",
+            };
+        }
+    }
+    $tx->calculate_hash;
+    return $self->response_ok({
+        hex      => unpack("H*", $tx->serialize_unsigned),
+        complete => @errors ? FALSE : TRUE,
+        errors   => \@errors,
+    });
+}
+
 # getmempoolinfo
 # getrawmempool
 # getmemoryinfo
