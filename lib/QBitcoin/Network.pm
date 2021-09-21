@@ -375,7 +375,7 @@ sub call_qbt_peers {
         $connection->direction == DIR_IN ? $connect_in++ : $connect_out++;
     }
     if ($connect_in + $connect_out < MIN_CONNECTIONS || $connect_out < MIN_OUT_CONNECTIONS+1) {
-        my @peers = sort { $b->reputation <=> $a->reputation } grep { $_->reputation > 0 } @peers;
+        @peers = sort { $b->reputation <=> $a->reputation } grep { $_->reputation > 0 } @peers;
         my @connected = grep { $_->type_id == PROTOCOL_QBITCOIN && $_->direction == DIR_OUT && $_->state == STATE_CONNECTED }
             QBitcoin::ConnectionList->list();
         my $worst_reputation = min map { $_->peer->reputation } @connected;
