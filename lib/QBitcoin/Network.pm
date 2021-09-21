@@ -61,8 +61,6 @@ sub connect_to {
         or die "socket get fcntl error: $!\n";
     fcntl($socket, F_SETFL, $flags | O_NONBLOCK)
         or die "socket set fcntl error: $!\n";
-    setsockopt($socket, SOL_SOCKET, O_NONBLOCK, 1)
-        or die "setsockopt error: $!\n";
     my $connection = QBitcoin::Connection->new(
         peer      => $peer,
         socket    => $socket,
