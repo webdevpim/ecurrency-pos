@@ -40,6 +40,7 @@ use constant ATTR => qw(
     blocks
     block_sign_data
     rcvd
+    in_raw
 );
 
 mk_accessors(keys %{&FIELDS}, ATTR);
@@ -294,7 +295,12 @@ sub serialize_unsigned {
     my $self = shift;
 
     my $data = varint(scalar @{$self->in});
-    $data .= serialize_input_unsigned($_) foreach @{$self->in};
+    if ($self->in_raw) {
+        $data .= serialize_input_raw($_) foreach @{$self->in_raw};
+    }
+    else {
+        $data .= serialize_input_unsigned($_) foreach @{$self->in};
+    }
     $data .= varint(scalar @{$self->out});
     $data .= serialize_output($_) foreach @{$self->out};
     $data .= varstr($self->data);
@@ -328,7 +334,7 @@ sub as_hashref {
         $self->hash ? ( hash => unpack("H*", $self->hash) ) : (),
         defined ($self->fee) ? ( fee  => $self->fee / DENOMINATOR ) : (),
         size => $self->size //= length($self->serialize),
-        in   => [ map { input_as_hashref($_)  } @{$self->in}  ],
+        in   => $self->in_raw ? [ map { inputraw_as_hashref($_) } @{$self->in_raw} ] : [ map { input_as_hashref($_) } @{$self->in} ],
         out  => [ map { output_as_hashref($_) } @{$self->out} ],
         $self->up ? ( up => $self->up->as_hashref ) : (),
         !UPGRADE_POW && $self->coins_created ? ( coins_created => $self->coins_created / DENOMINATOR ) : (),
@@ -339,10 +345,21 @@ sub input_as_hashref {
     my $in = shift;
     $in->{siglist} or die "Undefined siglist during input_as_hashref";
     return {
-        tx_out        => unpack("H*", $in->{txo}->tx_in),
+        txid          => unpack("H*", $in->{txo}->tx_in),
         num           => $in->{txo}->num+0,
         siglist       => [ map { unpack("H*", $_) } @{$in->{siglist}} ],
         redeem_script => unpack("H*", $in->{txo}->redeem_script // die "Undefined redeem_script during input_as_hashref"),
+    };
+}
+
+sub inputraw_as_hashref {
+    my $in = shift;
+    $in->{siglist} or die "Undefined siglist during input_as_hashref";
+    return {
+        txid          => unpack("H*", $in->{tx_out}),
+        num           => $in->{num}+0,
+        siglist       => [ map { unpack("H*", $_) } @{$in->{siglist} // []} ],
+        redeem_script => unpack("H*", $in->{redeem_script} // ""),
     };
 }
 
@@ -354,6 +371,11 @@ sub serialize_siglist {
 sub serialize_input_unsigned {
     my $in = shift;
     return $in->{txo}->tx_in . varint($in->{txo}->num) . serialize_siglist($in->{siglist} // []) . varstr($in->{txo}->redeem_script // "");
+}
+
+sub serialize_input_raw {
+    my $in = shift;
+    return $in->{tx_out} . varint($in->{num}) . serialize_siglist($in->{siglist} // []) . varstr($in->{redeem_script} // "");
 }
 
 sub serialize_input {
@@ -401,8 +423,8 @@ sub deserialize_output {
 sub output_as_hashref {
     my $out = shift;
     return {
-        value      => $out->value / DENOMINATOR,
-        scripthash => unpack("H*", $out->scripthash),
+        value   => $out->value / DENOMINATOR,
+        address => $out->address,
     };
 }
 

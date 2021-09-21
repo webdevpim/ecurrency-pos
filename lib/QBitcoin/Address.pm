@@ -23,6 +23,7 @@ our @EXPORT_OK = qw(
     wallet_import_format
     wif_to_pk
     address_by_pubkey
+    address_by_hash
     validate_address
     pubhash_by_address
     script_by_pubkey

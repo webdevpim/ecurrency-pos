@@ -587,6 +587,55 @@ sub cmd_signrawtransactionwithkey {
     });
 }
 
+$PARAMS{decoderawtransaction} = "hexstring";
+$HELP{decoderawtransaction} = qq(
+decoderawtransaction "hexstring"
+
+Return a JSON object representing the serialized, hex-encoded transaction.
+
+Arguments:
+1. hexstring    (string, required) The transaction hex string
+
+Result:
+{                           (json object)
+  "txid" : "hex",           (string) The transaction id
+  "size" : n,               (numeric) The transaction size
+  "weight" : n,             (numeric) The transaction's weight (between vsize*4 - 3 and vsize*4)
+  "vin" : [                 (json array)
+    {                       (json object)
+      "txid" : "hex",       (string) The transaction id
+      "vout" : n,           (numeric) The output number
+      "script" : {          (json object) The script
+        "hex" : "hex"       (string) hex
+      },
+    },
+    ...
+  ],
+  "vout" : [                (json array)
+    {                       (json object)
+      "value" : n,          (numeric) The amount
+      "n" : n,              (numeric) index
+      "address" : "str"     (string) address
+    },
+    ...
+  ]
+}
+
+Examples:
+> bitcoin-cli decoderawtransaction "hexstring"
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "decoderawtransaction", "params": ["hexstring"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_decoderawtransaction {
+    my $self = shift;
+    my $data = Bitcoin::Serialized->new(pack("H*", $self->args->[0]));
+
+    my $tx = QBitcoin::Transaction->deserialize($data);
+    if (!$tx || $data->length) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "TX decode failed.");
+    }
+    return $self->response_ok($tx->as_hashref);
+}
+
 # getmempoolinfo
 # getrawmempool
 # getmemoryinfo

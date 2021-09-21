@@ -7,6 +7,7 @@ use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ORM qw(:types dbh find DEBUG_ORM for_log);
 use QBitcoin::Crypto qw(hash160 hash256);
 use QBitcoin::RedeemScript;
+use QBitcoin::Address qw(address_by_hash);
 use Bitcoin::Serialized;
 
 use Role::Tiny::With;
@@ -316,6 +317,11 @@ sub tx_in_str {
 sub tx_out_str {
     my $self = shift;
     return unpack("H*", substr($self->tx_out, 0, 4));
+}
+
+sub address {
+    my $self = shift;
+    return address_by_hash($self->scripthash);
 }
 
 1;
