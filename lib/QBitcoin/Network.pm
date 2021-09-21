@@ -331,9 +331,10 @@ sub set_pinned_peers {
     my %pinned_qbtc = map { $_->ip => $_ } grep { $_->pinned } QBitcoin::Peer->get_all(PROTOCOL_QBITCOIN);
     foreach my $peer_host ($config->get_all('peer')) {
         my $peer = QBitcoin::Peer->get_or_create(
-            host    => $peer_host,
-            type_id => PROTOCOL_QBITCOIN,
-            pinned  => 1,
+            host       => $peer_host,
+            type_id    => PROTOCOL_QBITCOIN,
+            pinned     => 1,
+            reputation => 1000,
         );
         delete $pinned_qbtc{$peer->ip};
     }
