@@ -77,8 +77,8 @@ CREATE TABLE IF NOT EXISTS `coinbase` (
   merkle_path blob(512) NOT NULL, -- 16-level btree with 32-byte (256-bit) hashes
   btc_tx_data longblob NOT NULL, -- or 'blob' for sqlite
   value bigint unsigned NOT NULL,
-  scripthash int NOT NULL,
-  tx_out int unsigned DEFAULT NULL,
+  scripthash integer NOT NULL,
+  tx_out integer DEFAULT NULL,
   PRIMARY KEY (btc_tx_hash, btc_out_num),
   FOREIGN KEY (btc_block_height) REFERENCES `btc_block`     (height) ON DELETE RESTRICT, -- should never happens
   FOREIGN KEY (tx_out)           REFERENCES `transaction`   (id)     ON DELETE SET NULL,
