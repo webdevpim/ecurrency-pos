@@ -36,9 +36,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS `redeem_script_hash` ON `redeem_script` (hash)
 CREATE TABLE IF NOT EXISTS `txo` (
   value      bigint unsigned NOT NULL,
   num           int unsigned NOT NULL,
-  tx_in         int unsigned NOT NULL,
-  tx_out        int unsigned DEFAULT NULL,
-  scripthash    int NOT NULL,
+  tx_in         integer NOT NULL,
+  tx_out        integer DEFAULT NULL,
+  scripthash    integer NOT NULL,
   siglist      blob DEFAULT NULL,
   PRIMARY KEY (tx_in, num),
   FOREIGN KEY (tx_in)      REFERENCES `transaction`   (id) ON DELETE CASCADE,
