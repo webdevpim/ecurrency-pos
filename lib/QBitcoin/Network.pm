@@ -153,8 +153,8 @@ sub main_loop {
                     next;
                 }
             }
-            vec($rin, $connection->socket_fileno, 1) = 1 if length($connection->recvbuf) < READ_BUFFER_SIZE && $connection->state ne STATE_CONNECTING;
-            vec($win, $connection->socket_fileno, 1) = 1 if $connection->sendbuf || $connection->state eq STATE_CONNECTING;
+            vec($rin, $connection->socket_fileno, 1) = 1 if length($connection->recvbuf) < READ_BUFFER_SIZE && $connection->state != STATE_CONNECTING;
+            vec($win, $connection->socket_fileno, 1) = 1 if $connection->sendbuf || $connection->state == STATE_CONNECTING;
         }
 
         $ein = $rin | $win;
@@ -239,7 +239,7 @@ sub main_loop {
                         $connection->disconnect();
                         last;
                     }
-                    elsif ($connection->state eq STATE_CONNECTING) {
+                    elsif ($connection->state == STATE_CONNECTING) {
                         Warningf("%s peer %s connection error: %s", $connection->type, $connection->ip, $!);
                         $connection->failed();
                         next;
@@ -261,7 +261,7 @@ sub main_loop {
                 }
             }
             if (vec($win, $connection->socket_fileno, 1) == 1) {
-                if ($connection->state eq STATE_CONNECTING) {
+                if ($connection->state == STATE_CONNECTING) {
                     my $res = getsockopt($connection->socket, SOL_SOCKET, SO_ERROR);
                     my $err = unpack("I", $res);
                     if ($err != 0) {
@@ -311,7 +311,8 @@ sub main_loop {
                 next unless $connection->protocol; # RPC can call disconnect() from receive() call
             }
 
-            if ($connection->protocol->can('ping_sent') && $connection->protocol->last_recv_time + PEER_RECV_TIMEOUT < $time) {
+            if ($connection->state == STATE_CONNECTED &&
+                $connection->protocol->can('ping_sent') && $connection->protocol->last_recv_time + PEER_RECV_TIMEOUT < $time) {
                 if (!$connection->protocol->ping_sent) {
                     $connection->protocol->send_message("ping", pack("Q", $time));
                     $connection->protocol->ping_sent = $time;
