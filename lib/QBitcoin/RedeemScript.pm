@@ -4,7 +4,6 @@ use strict;
 
 use QBitcoin::Accessors qw(new mk_accessors);
 use QBitcoin::ORM qw(find create :types);
-use QBitcoin::Address qw(pubhash_by_address);
 use QBitcoin::Script qw(script_eval op_pushdata);
 use QBitcoin::Script::OpCodes qw(:OPCODES);
 

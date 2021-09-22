@@ -25,7 +25,6 @@ our @EXPORT_OK = qw(
     address_by_pubkey
     address_by_hash
     validate_address
-    pubhash_by_address
     script_by_pubkey
     script_by_pubkeyhash
     scripthash_by_address
