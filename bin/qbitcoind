@@ -98,6 +98,7 @@ sub usage {
     }
     print "   -b, --bind <addr[:port]>    - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT . "),\n";
     print "   -J, --rpc <addr[:port]>     - respond to JSON RPC API on <address> and <port> (default " . RPC_ADDR . ":" . RPC_PORT . "),\n";
+    print "   -D, --daemonize             - daemonize,\n";
     print "   -g, --generate              - generate blocks (private key must be stored in the database),\n";
     print "   -G, --genesis               - run as genesis node, do not need to synchronize with other nodes for authoritative answers,\n";
     print "   --log <file>                - write log to <file>, 'syslog' for syslog (default),\n";
