@@ -141,7 +141,7 @@ sub process_rpc {
         return $self->response_error("Incorrect request body", ERR_INVALID_REQUEST);
     }
     # {"jsonrpc":"2.0","id":1,"method":"getblockchaininfo","params":[]}';
-    if (!$body->{jsonrpc} || !$body->{method} || !$body->{params} ||
+    if (!$body->{method} || !$body->{params} ||
         ref($body->{method}) || ref($body->{params}) ne 'ARRAY') {
         Warningf("Incorrect rpc request: [%s]", $http_request->decoded_content);
         return $self->response_error("Incorrect request", ERR_INVALID_REQUEST);
