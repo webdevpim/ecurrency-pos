@@ -653,11 +653,6 @@ sub cmd_decoderawtransaction {
 # listbanned
 # setban
 
-# createrawtransaction
-# sendrawtransaction
-# signrawtransactionwithkey
-# decoderawtransaction
-
 # signmessagewithprivkey
 # validateaddress
 # verifymessage
