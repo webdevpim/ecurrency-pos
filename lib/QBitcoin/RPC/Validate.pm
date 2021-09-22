@@ -84,7 +84,7 @@ sub validate_boolean {
 }
 
 sub validate_address {
-    $_[0] =~ $config->{testnet} ? QBitcoin::Address->ADDRESS_TESTNET_RE : QBitcoin::Address->ADDRESS_RE;
+    $_[0] =~ ($config->{testnet} ? QBitcoin::Address->ADDRESS_TESTNET_RE : QBitcoin::Address->ADDRESS_RE);
 }
 
 sub incorrect_params {
