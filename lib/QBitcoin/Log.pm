@@ -46,7 +46,7 @@ sub Logf {
         }
         else {
             open my $fh, '>>', $log
-                or die "Can't open log file [$log]\n";
+                or die "Can't open log file [$log]: $!\n";
             my $t = Time::HiRes::time();
             printf $fh "%s.%03d %s$format\n", strftime("%F %T", localtime($t)), ($t-int($t)) * 1000, $indent[$prio], @args;
             close $fh;

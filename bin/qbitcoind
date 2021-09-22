@@ -51,8 +51,6 @@ sub main {
     $config->set(peer    => @peer_hosts) if @peer_hosts;
     $config->set(btcnode => @btc_hosts)  if @btc_hosts;
 
-    QBitcoin::Log->init();
-
     if ($config->{daemonize}) {
         if ($opts{verbose}) {
             print STDERR "Options -D (daemonize) and -v (verbose) are mutually exclusive\n";
@@ -65,6 +63,8 @@ sub main {
         $config->set(verbose => 0);
         daemonize();
     }
+
+    QBitcoin::Log->init();
 
     return QBitcoin::Network->main_loop();
 }
