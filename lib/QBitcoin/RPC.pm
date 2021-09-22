@@ -131,7 +131,7 @@ sub http_response {
 sub process_rpc {
     my $self = shift;
     my ($http_request) = @_;
-    if (lc($http_request->headers->content_type) ne "application/json") {
+    if ($http_request->headers->content_type && lc($http_request->headers->content_type) ne "application/json") {
         Warningf("Incorrect content-type: [%s]", $http_request->headers->content_type // "");
         return $self->response_error("Incorrect content-type", ERR_INVALID_REQUEST);
     }
