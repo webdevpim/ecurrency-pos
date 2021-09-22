@@ -3,6 +3,7 @@ use warnings;
 use strict;
 
 use Role::Tiny;
+use List::Util qw(sum0);
 use QBitcoin::Const;
 use QBitcoin::RPC::Const;
 use QBitcoin::ORM qw(dbh);
@@ -636,8 +637,70 @@ sub cmd_decoderawtransaction {
     return $self->response_ok($tx->as_hashref);
 }
 
-# getmempoolinfo
-# getrawmempool
+$PARAMS{getmempoolinfo} = "";
+$HELP{getmempoolinfo} = qq(
+getmempoolinfo
+
+Returns details on the active state of the TX memory pool.
+
+Result:
+{                            (json object)
+  "loaded" : true|false,     (boolean) True if the mempool is fully loaded
+  "size" : n,                (numeric) Current tx count
+  "bytes" : n,               (numeric) Sum of all transaction sizes
+}
+
+Examples:
+> bitcoin-cli getmempoolinfo
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getmempoolinfo", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_getmempoolinfo {
+    my $self = shift;
+
+    my @mempool = QBitcoin::Transaction->mempool_list();
+    return $self->response_ok({
+        loaded => mempool_synced() ? TRUE : FALSE,
+        size   => scalar(@mempool),
+        bytes  => sum0(map { $_->size } @mempool),
+    });
+}
+
+$PARAMS{getrawmempool} = "verbose?";
+$HELP{getrawmempool} = qq(
+getrawmempool ( verbose )
+
+Returns all transaction ids in memory pool as a json array of string transaction ids.
+
+Arguments:
+1. verbose             (boolean, optional, default=false) True for a json object, false for array of transaction ids
+
+Result (for verbose = false):
+[           (json array)
+  "hex",    (string) The transaction id
+  ...
+]
+
+Result (for verbose = true):
+{                                         (json object)
+  "transactionid" : {                     (json object)
+    "size" : n,                           (numeric) transaction size
+    "fee" : n,                            (numeric) transaction fee
+    "time" : xxx,                         (numeric) local time transaction entered pool in seconds since 1 Jan 1970 GMT
+  },
+  ...
+}
+
+Examples:
+> bitcoin-cli getrawmempool true
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getrawmempool", "params": [true]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_getrawmempool {
+    my $self = shift;
+    my $verbose = $self->args->[0] // FALSE;
+
+    return $self->response_ok([ map { $verbose ? $_->as_hashref : unpack("H*", $_->hash) } QBitcoin::Transaction->mempool_list() ]);
+}
+
 # getmemoryinfo
 # getrpcinfo
 # stop

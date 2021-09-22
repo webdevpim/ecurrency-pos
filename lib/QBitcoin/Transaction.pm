@@ -338,6 +338,7 @@ sub as_hashref {
         out  => [ map { output_as_hashref($_) } @{$self->out} ],
         $self->up ? ( up => $self->up->as_hashref ) : (),
         !UPGRADE_POW && $self->coins_created ? ( coins_created => $self->coins_created / DENOMINATOR ) : (),
+        $self->received_time ? ( time => $self->received_time ) : (),
     };
 }
 
