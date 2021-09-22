@@ -14,6 +14,8 @@ use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
 use QBitcoin::Address qw(scripthash_by_address);
+use QBitcoin::Protocol;
+use QBitcoin::ConnectionList;
 use Bitcoin::Serialized;
 use Bitcoin::Block;
 
@@ -732,6 +734,56 @@ sub cmd_validateaddress {
     else {
         return $self->response_ok({ isvalid => FALSE });
     }
+}
+
+$PARAMS{getnetworkinfo} = "";
+$HELP{getnetworkinfo} = qq(
+getnetworkinfo
+Returns an object containing various state info regarding P2P networking.
+
+Result:
+{                                                    (json object)
+  "version" : n,                                     (numeric) the server version
+  "protocolversion" : n,                             (numeric) the protocol version
+  "connections" : n,                                 (numeric) the total number of connections
+  "connections_in" : n,                              (numeric) the number of inbound connections
+  "connections_out" : n,                             (numeric) the number of outbound connections
+  "networkactive" : true|false,                      (boolean) whether p2p networking is enabled
+  "networks" : [                                     (json array) information per network
+    {                                                (json object)
+      "name" : "str",                                (string) network (ipv4, ipv6 or onion)
+      "limited" : true|false,                        (boolean) is the network limited using -onlynet?
+      "reachable" : true|false,                      (boolean) is the network reachable?
+      "proxy" : "str",                               (string) ("host:port") the proxy that is used for this network, or empty if none
+      "proxy_randomize_credentials" : true|false     (boolean) Whether randomized credentials are used
+    },
+    ...
+  ],
+}
+
+Examples:
+> bitcoin-cli getnetworkinfo
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getnetworkinfo", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_getnetworkinfo {
+    my $self = shift;
+    my $connect_in = 0;
+    my $connect_out = 0;
+    foreach my $connection (grep { $_->type_id == PROTOCOL_QBITCOIN } QBitcoin::ConnectionList->list()) {
+        $connection->direction == DIR_IN ? $connect_in++ : $connect_out++;
+    }
+    return $self->response_ok({
+        version         => VERSION,
+        protocolversion => QBitcoin::Protocol->PROTOCOL_VERSION,
+        connections_in  => $connect_in,
+        connections_out => $connect_out,
+        connections     => $connect_in + $connect_out,
+        networkactive   => TRUE,
+        networks        => [{
+            name      => "ipv4",
+            reachable => TRUE,
+        }],
+    });
 }
 
 # getmemoryinfo
