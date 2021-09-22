@@ -7,13 +7,14 @@ use strict;
 # Validate all transactions
 # Amount of all commissions should be 0
 
+use Time::HiRes;
 use QBitcoin::Const;
 use Role::Tiny;
 
 sub validate {
     my $block = shift;
 
-    my $now = time();
+    my $now = Time::HiRes::time();
     $now >= time_by_height($block->height)
         or return "Block height " . $block->height . " is too early for now";
     if ($block->height == 0) {
