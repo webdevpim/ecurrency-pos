@@ -11,24 +11,27 @@ use QBitcoin::Crypto qw(hash160 checksum32);
 use QBitcoin::Script qw(op_pushdata);
 use QBitcoin::Script::OpCodes qw(:OPCODES);
 
-use Exporter qw(import);
-our @EXPORT_OK = qw(
-    wallet_import_format
-    wif_to_pk
-    address_by_pubkey
-    validate_address
-    pubhash_by_address
-    script_by_pubkey
-    script_by_pubkeyhash
-    scripthash_by_address
-);
-
 use constant MAGIC              => "1234";
 use constant MAGIC_TESTNET      => "1235";
 use constant MAGIC_LEN          => length(MAGIC);
 use constant CHECKSUM_LEN       => 4;
 use constant ADDRESS_RE         => qr/.*/; # TODO
 use constant ADDRESS_TESTNET_RE => qr/.*/; # TODO
+
+use Exporter qw(import);
+our @EXPORT_OK = qw(
+    wallet_import_format
+    wif_to_pk
+    address_by_pubkey
+    address_by_hash
+    validate_address
+    pubhash_by_address
+    script_by_pubkey
+    script_by_pubkeyhash
+    scripthash_by_address
+    ADDRESS_RE
+    ADDRESS_TESTNET_RE
+);
 
 # https://en.bitcoin.it/wiki/Wallet_import_format
 sub address_version() {

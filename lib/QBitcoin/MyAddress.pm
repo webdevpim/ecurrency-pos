@@ -87,19 +87,16 @@ sub get_by_hash {
 }
 
 sub script_by_hash {
-    my $class = shift;
-    my ($hash) = @_;
-    state $script_hashes;
-    if (!$script_hashes) {
-        $script_hashes = {};
-        foreach my $address (my_address()) {
-            foreach my $redeem_script ($address->redeem_script) {
-                $script_hashes->{hash160($redeem_script)} = $redeem_script;
-                $script_hashes->{hash256($redeem_script)} = $redeem_script;
-            }
+    my $self = shift;
+    my ($scripthash) = @_;
+    if (!$self->{script}) {
+        $self->{script} = {};
+        foreach my $redeem_script ($self->redeem_script) {
+            $self->{script}->{hash160($redeem_script)} = $redeem_script;
+            $self->{script}->{hash256($redeem_script)} = $redeem_script;
         }
     }
-    return $script_hashes->{$hash};
+    return $self->{script}->{$scripthash};
 }
 
 1;

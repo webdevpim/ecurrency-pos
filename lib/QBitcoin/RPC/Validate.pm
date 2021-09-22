@@ -3,18 +3,30 @@ use warnings;
 use strict;
 
 use Role::Tiny;
+use JSON::XS;
+use Scalar::Util qw(looks_like_number);
+use QBitcoin::Const;
 use QBitcoin::RPC::Const;
 use QBitcoin::Config;
-use QBitcoin::Address;
+use QBitcoin::Address qw(ADDRESS_RE ADDRESS_TESTNET_RE wif_to_pk);
+use QBitcoin::Accessors qw(mk_accessors);
+
+mk_accessors(qw(validate_message));
+
+my $JSON = JSON::XS->new;
 
 my %SPEC = (
-    height    => qr/^(?:0|[1-9][0-9]{0,9})\z/,
-    blockhash => qr/^[0-9a-f]{64}\z/,
-    txid      => qr/^[0-9a-f]{64}\z/,
-    command   => qr/^[a-z]{2,64}\z/,
-    verbosity => qr/^[12]\z/,
-    verbose   => \&validate_boolean,
-    address   => \&validate_address,
+    height      => qr/^(?:0|[1-9][0-9]{0,9})\z/,
+    blockhash   => qr/^[0-9a-f]{64}\z/,
+    txid        => qr/^[0-9a-f]{64}\z/,
+    command     => qr/^[a-z]{2,64}\z/,
+    verbosity   => qr/^[12]\z/,
+    hexstring   => qr/^(?:[0-9a-f][0-9a-f])+\z/,
+    verbose     => \&validate_boolean,
+    address     => \&validate_address,
+    inputs      => \&validate_inputs,
+    outputs     => \&validate_outputs,
+    privatekeys => \&validate_privkeys,
 );
 
 sub validate {
@@ -46,8 +58,9 @@ sub validate {
                     or return $self->incorrect_params("Incorrect parameter '$arg_name'", \@spec);
             }
             elsif (ref($rule) eq 'CODE') {
-                $rule->($args->[$i]) # arg may be modified by validation function
-                    or return $self->incorrect_params("Incorrect parameter '$arg_name'", \@spec);
+                $self->validate_message = undef;
+                $rule->($args->[$i], $self) # arg may be modified by validation function
+                    or return $self->incorrect_params($self->validate_message // "Incorrect parameter '$arg_name'", \@spec);
             }
             else {
                 Warningf("Unknown type of validation rule for [%s]", $spec_arg);
@@ -84,7 +97,81 @@ sub validate_boolean {
 }
 
 sub validate_address {
-    $_[0] =~ ($config->{testnet} ? QBitcoin::Address->ADDRESS_TESTNET_RE : QBitcoin::Address->ADDRESS_RE);
+    $_[0] =~ ($config->{testnet} ? ADDRESS_TESTNET_RE : ADDRESS_RE);
+}
+
+sub is_amount {
+    my $amount = shift;
+    looks_like_number($amount) or return 0;
+    int($amount * DENOMINATOR) >= 1 or return 0;
+    $amount * DENOMINATOR <= MAX_VALUE or return 0;
+    return 1;
+}
+
+sub validate_txid {
+    my $value = $_[0];
+    $value =~ /^[0-9a-f]{64}\z/
+        or return 0;
+    return 1;
+}
+
+sub validate_vout {
+    my $value = $_[0];
+    $value =~ /^(?:0|[1-9][0-9]{0,5})\z/
+        or return 0;
+    $value <= 65535
+        or return 0;
+    return 1;
+}
+
+sub validate_inputs {
+    my $value = $_[0];
+    my $inputs = eval { $JSON->decode($value) };
+    if (!$inputs || ref($inputs) ne "ARRAY") {
+        return 0;
+    }
+    foreach my $in (@$inputs) {
+        ($in->{txid} && !ref($in->{txid}) && validate_txid($in->{txid})) or return 0;
+        ($in->{vout} && !ref($in->{vout}) && validate_vout($in->{vout})) or return 0;
+        keys(%$in) == 2 or return 0;
+    }
+    $_[0] = $inputs;
+    return 1;
+}
+
+sub validate_outputs {
+    my $value = $_[0];
+    my $outputs = eval { $JSON->decode($value) };
+    if (!$outputs || (ref($outputs) ne "ARRAY" && ref($outputs) ne "HASH")) {
+        return 0;
+    }
+    $outputs = [ $outputs ] if ref($outputs) eq "HASH";
+    foreach my $out (@$outputs) {
+        ref($out) eq "HASH" or return 0;
+        foreach my $address (keys %$out) {
+            validate_address($address) or return 0;
+            ($out->{$address} && !ref($out->{$address}) && is_amount($out->{$address}))
+                or return 0;
+        }
+    }
+    $_[0] = $outputs;
+    return 1;
+}
+
+sub validate_privkeys {
+    my $value = shift;
+    my $privkeys = eval { $JSON->decode($value) };
+    if (!$privkeys || ref($privkeys) ne "ARRAY") {
+        return 0;
+    }
+    my @pk;
+    foreach my $privkey (@$privkeys) {
+        ref($privkey) eq "" or return 0;
+        my $pk = eval { wif_to_pk($privkey) }
+            or return 0;
+        push @pk, $pk;
+    }
+    $_[0] = \@pk;
 }
 
 sub incorrect_params {

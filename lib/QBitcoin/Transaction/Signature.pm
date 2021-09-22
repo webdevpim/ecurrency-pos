@@ -34,7 +34,7 @@ sub make_sign {
     my $self = shift;
     my ($in, $address, $input_num) = @_;
 
-    my $redeem_script = QBitcoin::MyAddress->script_by_hash($in->{txo}->scripthash)
+    my $redeem_script = $address->script_by_hash($in->{txo}->scripthash)
         or die "Can't get redeem script by hash " . unpack("H*", $in->{txo}->scripthash);
     my $signature = signature($self->sign_data($input_num), $address->privkey);
     $in->{txo}->set_redeem_script($redeem_script);

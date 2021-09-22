@@ -10,6 +10,10 @@ use QBitcoin::Block;
 use QBitcoin::Coinbase;
 use QBitcoin::Transaction;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
+use QBitcoin::Transaction;
+use QBitcoin::TXO;
+use QBitcoin::Address qw(scripthash_by_address);
+use Bitcoin::Serialized;
 use Bitcoin::Block;
 
 my %PARAMS;
@@ -396,6 +400,242 @@ sub cmd_getrawtransaction {
     return $self->response_ok($res);
 }
 
+$PARAMS{createrawtransaction} = "inputs outputs";
+$HELP{createrawtransaction} = qq(
+createrawtransaction [{"txid":"hex","vout":n},...] [{"address":amount},...]
+
+Create a transaction spending the given inputs and creating new outputs.
+Outputs can be addresses or data.
+Returns hex-encoded raw transaction.
+Note that the transaction's inputs are not signed, and
+it is not stored in the wallet or transmitted to the network.
+
+Arguments:
+1. inputs                      (json array, required) The inputs
+     [
+       {                       (json object)
+         "txid": "hex",        (string, required) The transaction id
+         "vout": n,            (numeric, required) The output number
+       },
+       ...
+     ]
+2. outputs                     (json array, required) The outputs (key-value pairs)
+     [
+       {                       (json object)
+         "address": amount,    (numeric or string, required) A key-value pair. The key (string) is the bitcoin address, the value (float or string) is the amount in BTC
+       },
+       ...
+     ]
+
+Result:
+"hex"    (string) hex string of the transaction
+
+Examples:
+> bitcoin-cli createrawtransaction '[{"txid":"myid","vout":0}]' '[{"address":0.01}]'
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "createrawtransaction", "params": ['[{"txid":"myid","vout":0}]', '[{"address":0.01}]"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_createrawtransaction {
+    my $self = shift;
+    my $inputs  = $self->args->[0];
+    my $outputs = $self->args->[1];
+    my @in  = map {{ txo => QBitcoin::TXO->new_txo(tx_in => pack("H*", $_->{txid}), num => $_->{vout}+0) }} @$inputs;
+    my @out;
+    foreach my $out (@$outputs) {
+        push @out, map { QBitcoin::TXO->new_txo(value => $out->{$_} * DENOMINATOR, scripthash => scripthash_by_address($_)) } keys %$out;
+    }
+    my $tx = QBitcoin::Transaction->new(
+        in  => \@in,
+        out => \@out,
+    );
+    return $self->response_ok(unpack("H*", $tx->serialize_unsigned));
+}
+
+$PARAMS{sendrawtransaction} = "hexstring";
+$HELP{sendrawtransaction} = qq(
+sendrawtransaction "hexstring"
+
+Submit a raw transaction (serialized, hex-encoded) to local node and network.
+
+Also see createrawtransaction and signrawtransactionwithkey calls.
+
+Arguments:
+1. hexstring     (string, required) The hex string of the raw transaction
+
+Result:
+"hex"    (string) The transaction hash in hex
+
+Examples:
+
+Create a transaction
+> bitcoin-cli createrawtransaction "[{\"txid\" : \"mytxid\",\"vout\":0}]" "{\"myaddress\":0.01}"
+Sign the transaction, and get back the hex
+> bitcoin-cli signrawtransactionwithwallet "myhex"
+
+Send the transaction (signed hex)
+> bitcoin-cli sendrawtransaction "signedhex"
+
+As a JSON-RPC call
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "sendrawtransaction", "params": ["signedhex"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_sendrawtransaction {
+    my $self = shift;
+    my $data = Bitcoin::Serialized->new(pack("H*", $self->args->[0]));
+    my $tx = QBitcoin::Transaction->deserialize($data);
+    if (!$tx || $data->length) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "TX decode failed.");
+    }
+    $tx->received_from = $self;
+    if (QBitcoin::Transaction->has_pending($tx->hash)) {
+        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction already published.");
+    }
+    if (QBitcoin::Transaction->check_by_hash($tx->hash)) {
+        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction already published.");
+    }
+    if (!$tx->load_txo()) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "Incorrect transaction data.");
+    }
+    if ($tx->is_pending) {
+        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Some inputs unknown.");
+    }
+    if ($self->process_tx($tx) != 0) {
+        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction failed.");
+    }
+    return $self->response_ok(unpack("H*", $tx->hash));
+}
+
+$PARAMS{signrawtransactionwithkey} = "hexstring privatekeys";
+$HELP{signrawtransactionwithkey} = qq(
+signrawtransactionwithkey "hexstring" ["privatekey",...]
+
+Sign inputs for raw transaction (serialized, hex-encoded).
+The second argument is an array of base58-encoded private
+keys that will be the only keys used to sign the transaction.
+
+Arguments:
+1. hexstring                        (string, required) The transaction hex string
+2. privkeys                         (json array, required) The base58-encoded private keys for signing
+     [
+       "privatekey",                (string) private key in base58-encoding
+       ...
+     ]
+
+Result:
+{                             (json object)
+  "hex" : "hex",              (string) The hex-encoded raw transaction with signature(s)
+  "complete" : true|false,    (boolean) If the transaction has a complete set of signatures
+  "errors" : [                (json array, optional) Script verification errors (if there are any)
+    {                         (json object)
+      "txid" : "hex",         (string) The hash of the referenced, previous transaction
+      "vout" : n,             (numeric) The index of the output to spent and used as input
+      "scriptSig" : "hex",    (string) The hex-encoded signature script
+      "error" : "str"         (string) Verification or signing error related to the input
+    },
+    ...
+  ]
+}
+
+Examples:
+> bitcoin-cli signrawtransactionwithkey "myhex" "[\"key1\",\"key2\"]"
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "signrawtransactionwithkey", "params": ["myhex", "[\"key1\",\"key2\"]"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_signrawtransactionwithkey {
+    my $self = shift;
+    my $data = Bitcoin::Serialized->new(pack("H*", $self->args->[0]));
+    my $privkeys = $self->args->[1];
+    my $tx = QBitcoin::Transaction->deserialize($data);
+    if (!$tx || $data->length) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "TX decode failed.");
+    }
+    $tx->received_from = $self;
+    if (!$tx->load_inputs()) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "Incorrect transaction data.");
+    }
+    if ($tx->is_pending) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "Some inputs unknown.");
+    }
+    if ($tx->is_known) {
+        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction already published.");
+    }
+    my @address = map { QBitoin::MyAddress->new(private_key => $_) } @$privkeys;
+    my @errors;
+    foreach my $num (0 .. $#{$tx->in}) {
+        my $in = $tx->in->[$num];
+        my ($address, $script);
+        foreach my $addr (@address) {
+            if ($script = $addr->script_by_hash($in->{txo}->scripthash)) {
+                $address = $addr;
+                last;
+            }
+        }
+        if ($address) {
+            $tx->make_sign($in, $address, $num);
+        }
+        else {
+            push @errors, {
+                txid       => $in->{txo}->tx_in,
+                vout       => $in->{txo}->num,
+                scripthash => $in->{txo}->scripthash,
+                error      => "Unknown scripthash",
+            };
+        }
+    }
+    $tx->calculate_hash;
+    return $self->response_ok({
+        hex      => unpack("H*", $tx->serialize_unsigned),
+        complete => @errors ? FALSE : TRUE,
+        errors   => \@errors,
+    });
+}
+
+$PARAMS{decoderawtransaction} = "hexstring";
+$HELP{decoderawtransaction} = qq(
+decoderawtransaction "hexstring"
+
+Return a JSON object representing the serialized, hex-encoded transaction.
+
+Arguments:
+1. hexstring    (string, required) The transaction hex string
+
+Result:
+{                           (json object)
+  "txid" : "hex",           (string) The transaction id
+  "size" : n,               (numeric) The transaction size
+  "weight" : n,             (numeric) The transaction's weight (between vsize*4 - 3 and vsize*4)
+  "vin" : [                 (json array)
+    {                       (json object)
+      "txid" : "hex",       (string) The transaction id
+      "vout" : n,           (numeric) The output number
+      "script" : {          (json object) The script
+        "hex" : "hex"       (string) hex
+      },
+    },
+    ...
+  ],
+  "vout" : [                (json array)
+    {                       (json object)
+      "value" : n,          (numeric) The amount
+      "n" : n,              (numeric) index
+      "address" : "str"     (string) address
+    },
+    ...
+  ]
+}
+
+Examples:
+> bitcoin-cli decoderawtransaction "hexstring"
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "decoderawtransaction", "params": ["hexstring"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_decoderawtransaction {
+    my $self = shift;
+    my $data = Bitcoin::Serialized->new(pack("H*", $self->args->[0]));
+
+    my $tx = QBitcoin::Transaction->deserialize($data);
+    if (!$tx || $data->length) {
+        return $self->response_error("", ERR_DESERIALIZATION_ERROR, "TX decode failed.");
+    }
+    return $self->response_ok($tx->as_hashref);
+}
+
 # getmempoolinfo
 # getrawmempool
 # getmemoryinfo
@@ -412,11 +652,6 @@ sub cmd_getrawtransaction {
 # getpeerinfo
 # listbanned
 # setban
-
-# createrawtransaction
-# sendrawtransaction
-# signrawtransactionwithkey
-# decoderawtransaction
 
 # signmessagewithprivkey
 # validateaddress
