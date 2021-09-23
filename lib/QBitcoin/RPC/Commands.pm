@@ -3,7 +3,7 @@ use warnings;
 use strict;
 
 use Role::Tiny;
-use List::Util qw(sum0);
+use List::Util qw(sum0 sum min max);
 use QBitcoin::Const;
 use QBitcoin::RPC::Const;
 use QBitcoin::ORM qw(dbh);
@@ -77,6 +77,7 @@ sub cmd_getblockchaininfo {
         initialblockdownload => blockchain_synced() ? FALSE : TRUE,
         # size_on_disk         => # TODO
     };
+    $response->{headers} = $response->{blocks}; # satisfy explorers
     if (UPGRADE_POW) {
         my ($btc_block) = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1);
         my $btc_scanned;
@@ -171,14 +172,8 @@ sub cmd_getblockheader {
     my $self = shift;
     my $hash = pack("H*", $self->args->[0]);
     my $best_height = QBitcoin::Block->blockchain_height;
-    my $block = QBitcoin::Block->find(hash => $hash);
-    if (!$block) {
-        for (my $height = QBitcoin::Block->min_incore_height; $height <= $best_height; $height++) {
-            last if $block = QBitcoin::Block->block_pool($height, $hash);
-        }
-        $block
-            or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
-    }
+    my $block = $self->get_block_by_hash($hash)
+        or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
     my $best_block = QBitcoin::Block->best_block($best_height);
     my $next_block = QBitcoin::Block->best_block($block->height + 1) // QBitcoin::Block->find(height => $block->height + 1);
 
@@ -261,14 +256,8 @@ sub cmd_getblock {
     my $verbosity = $self->args->[1] // 1;
 
     my $best_height = QBitcoin::Block->blockchain_height;
-    my $block = QBitcoin::Block->find(hash => $hash);
-    if (!$block) {
-        for (my $height = QBitcoin::Block->min_incore_height; $height <= $best_height; $height++) {
-            last if $block = QBitcoin::Block->block_pool($height, $hash);
-        }
-        $block
-            or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
-    }
+    my $block = $self->get_block_by_hash($hash)
+        or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
     my $best_block = QBitcoin::Block->best_block($best_height);
     my $next_block = QBitcoin::Block->best_block($block->height + 1) // QBitcoin::Block->find(height => $block->height + 1);
 
@@ -319,6 +308,8 @@ sub cmd_getblockhash {
 
 $PARAMS{getrawtransaction} = "txid verbose?";
 $HELP{getrawtransaction} = qq(
+getrawtransaction "txid" ( verbose )
+
 Return the raw transaction data.
 
 If verbose is 'true', returns an Object with information about 'txid'.
@@ -774,6 +765,7 @@ sub cmd_getnetworkinfo {
     }
     return $self->response_ok({
         version         => VERSION,
+        subversion      => "/QBitcoinCore:0.1/",
         protocolversion => QBitcoin::Protocol->PROTOCOL_VERSION,
         connections_in  => $connect_in,
         connections_out => $connect_out,
@@ -786,6 +778,216 @@ sub cmd_getnetworkinfo {
     });
 }
 
+# Just to satisfy btc explorer
+$PARAMS{getindexinfo} = "";
+$HELP{getindexinfo} = qq(
+getindexinfo
+
+Returns the status of all available indices currently running in the node.
+
+Result:
+{                               (json object)
+  "name" : {                    (json object) The name of the index
+    "synced" : true|false,      (boolean) Whether the index is synced or not
+    "best_block_height" : n     (numeric) The block height to which the index is synced
+  }
+}
+
+Examples:
+> bitcoin-cli getindexinfo
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getindexinfo", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_getindexinfo {
+    my $self = shift;
+    return $self->response_ok({
+        txindex => {
+            synced => TRUE,
+        },
+    });
+}
+
+$PARAMS{getchaintxstats} = "nblocks? blockhash?";
+$HELP{getchaintxstats} = qq(
+getchaintxstats ( nblocks "blockhash" )
+
+Compute statistics about the total number and rate of transactions in the chain.
+
+Arguments:
+1. nblocks      (numeric, optional, default=one month) Size of the window in number of blocks
+2. blockhash    (string, optional, default=chain tip) The hash of the block that ends the window.
+
+Result:
+{                                       (json object)
+  "time" : xxx,                         (numeric) The timestamp for the final block in the window, expressed in UNIX epoch time
+  "txcount" : n,                        (numeric) The total number of transactions in the chain up to that point
+  "window_final_block_hash" : "hex",    (string) The hash of the final block in the window
+  "window_final_block_height" : n,      (numeric) The height of the final block in the window.
+  "window_block_count" : n,             (numeric) Size of the window in number of blocks
+  "window_tx_count" : n,                (numeric) The number of transactions in the window. Only returned if "window_block_count" is > 0
+  "window_interval" : n,                (numeric) The elapsed time in the window in seconds. Only returned if "window_block_count" is > 0
+  "txrate" : n                          (numeric) The average rate of transactions per second in the window. Only returned if "window_interval" is > 0
+}
+
+Examples:
+> bitcoin-cli getchaintxstats
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getchaintxstats", "params": [2016]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_getchaintxstats {
+    my $self = shift;
+    my $nblocks = $self->args->[0] // 30*24*3600/BLOCK_INTERVAL;
+    my $last_block;
+    if (my $blockhash = $self->args->[1]) {
+        $last_block = $self->get_block_by_hash(pack("H*", $blockhash))
+            or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
+    }
+    else {
+        my $best_height = QBitcoin::Block->blockchain_height;
+        $last_block = QBitcoin::Block->best_block($best_height)
+            or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
+    }
+    my $start_height = $last_block->height - $nblocks + 1;
+    $start_height = 0 if $start_height < 0;
+    # TODO: count via QBitcoin::Transaction->fetch(..., -func => { count => 'count(*)' });
+    my ($count) = dbh->selectraw_array(
+        "SELECT COUNT(*) FROM `" . QBitcoin::Transaction->TABLE . "` WHERE block_height >= ? AND block_height <= ?",
+        undef, $start_height, $last_block->height);
+
+    return $self->response_ok({
+        time                      => time_by_height($last_block->height),
+        window_final_block_hash   => unpack("H*", $last_block->hash),
+        window_final_block_height => $last_block->height,
+        window_block_count        => $last_block->height - $start_height + 1,
+        window_tx_count           => $count,
+        window_interval           => ($last_block->height - $start_height) * BLOCK_INTERVAL,
+        $last_block->height > $start_height ? ( txrate => $count * BLOCK_INTERVAL / ($last_block->height - $start_height) ) : (),
+    });
+}
+
+$PARAMS{getblockstats} = "hash_or_height";
+$HELP{getblockstats} = qq(
+getblockstats hash_or_height
+
+Compute per block statistics for a given window. All amounts are in satoshis.
+
+Arguments:
+1. hash_or_height    (string or numeric, required) The block hash or height of the target block
+
+Result:
+{                              (json object)
+  "avgfee" : n,                (numeric) Average fee in the block
+  "avgfeerate" : n,            (numeric) Average feerate (in satoshis per virtual byte)
+  "avgtxsize" : n,             (numeric) Average transaction size
+  "blockhash" : "hex",         (string) The block hash (to check for potential reorgs)
+  "feerate_percentiles" : [    (json array) Feerates at the 10th, 25th, 50th, 75th, and 90th percentile weight unit (in satoshis per virtual byte)
+    n,                         (numeric) The 10th percentile feerate
+    n,                         (numeric) The 25th percentile feerate
+    n,                         (numeric) The 50th percentile feerate
+    n,                         (numeric) The 75th percentile feerate
+    n                          (numeric) The 90th percentile feerate
+  ],
+  "height" : n,                (numeric) The height of the block
+  "ins" : n,                   (numeric) The number of inputs (excluding coinbase)
+  "maxfee" : n,                (numeric) Maximum fee in the block
+  "maxfeerate" : n,            (numeric) Maximum feerate (in satoshis per virtual byte)
+  "maxtxsize" : n,             (numeric) Maximum transaction size
+  "medianfee" : n,             (numeric) Truncated median fee in the block
+  "mediantime" : n,            (numeric) The block median time past
+  "mediantxsize" : n,          (numeric) Truncated median transaction size
+  "minfee" : n,                (numeric) Minimum fee in the block
+  "minfeerate" : n,            (numeric) Minimum feerate (in satoshis per virtual byte)
+  "mintxsize" : n,             (numeric) Minimum transaction size
+  "outs" : n,                  (numeric) The number of outputs
+  "subsidy" : n,               (numeric) The block subsidy
+  "time" : n,                  (numeric) The block time
+  "total_out" : n,             (numeric) Total amount in all outputs (excluding coinbase and thus reward [ie subsidy + totalfee])
+  "total_size" : n,            (numeric) Total size of all non-coinbase transactions
+  "total_weight" : n,          (numeric) Total weight of all non-coinbase transactions
+  "totalfee" : n,              (numeric) The fee total
+  "txs" : n,                   (numeric) The number of transactions (including coinbase)
+  "utxo_increase" : n,         (numeric) The increase/decrease in the number of unspent outputs
+  "utxo_size_inc" : n          (numeric) The increase/decrease in size for the utxo index (not discounting op_return and similar)
+}
+
+Examples:
+> bitcoin-cli getblockstats '"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"'
+> bitcoin-cli getblockstats 1000
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockstats", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockstats", "params": [1000]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_getblockstats {
+    my $self = shift;
+    my $hash_or_height = $self->args->[0];
+
+    my $block;
+    if (length($hash_or_height) == 64) {
+        $block = $self->get_block_by_hash(pack("H*", $hash_or_height));
+    }
+    else {
+        $block = QBitcoin::Block->best_block($hash_or_height) // QBitcoin::Block->find(height => $hash_or_height);
+    }
+    $block or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Block not found");
+    my @tx = sort { $a->fee/$a->size <=> $b->fee/$b->size } grep { $_->fee >= 0 } @{$block->transactions};
+    my $res = {
+        blockhash  => unpack("H*", $block->hash),
+        height     => $block->height,
+        ins        => sum0(map { scalar @{$_->in} } @{$block->transactions}),
+        outs       => sum0(map { scalar @{$_->out} } @{$block->transactions}),
+        subsidy    => 0,
+        time       => time_by_height($block->height),
+        total_out  => sum0(map { $_->value } map { @{$_->out} } @{$block->transactions}),
+        total_size => sum0(map { $_->size } @{$block->transactions}),
+        txs        => scalar(@{$block->transactions}),
+        totalfee   => 0,
+    };
+    $res->{utxo_increase} = $res->{outs} - $res->{ins};
+    if (@tx) {
+        $res->{avgfee}       = sum(map { $_->fee } @tx) / @tx;
+        $res->{avgfeerate}   = sum(map { $_->fee/$_->size } @tx) / @tx;
+        $res->{avgtxsize}    = sum(map { $_->size } @{$block->transactions}) / @{$block->transactions};
+        $res->{maxfee}       = max(map { $_->fee } @tx);
+        $res->{maxfeerate}   = $tx[-1]->fee/$tx[-1]->size;
+        $res->{maxtxsize}    = max(map { $_->size } @{$block->transactions});
+        $res->{medianfee}    = (sort { $a->fee <=> $b->fee } @tx)[@tx/2]->fee;
+        $res->{mediantxsize} = (sort { $a->size <=> $b->size } @{$block->transactions})[@{$block->transactions}/2]->size;
+        $res->{minfee}       = min(map { $_->fee } @tx);
+        $res->{minfeerate}   = $tx[0]->fee/$tx[0]->size;
+        $res->{mintxsize}    = min(map { $_->size } @{$block->transactions});
+        $res->{subsidy}      = -$block->transactions->[0]->fee;
+        $res->{totalfee}     = -$block->transactions->[0]->fee;
+        $res->{feerate_percentiles} = [ map { $tx[@tx*$_/100]->fee/$tx[@tx*$_/100]->size } qw(10 25 50 75 90) ];
+    }
+    return $self->response_ok($res);
+}
+
+$PARAMS{getmempoolentry} = "txid verbose?";
+$HELP{getmempoolentry} = qq(
+getmempoolentry "txid"
+
+Returns mempool data for given transaction
+
+Arguments:
+1. txid    (string, required) The transaction id (must be in mempool)
+
+Result:
+{                                       (json object)
+  "size" : n,                           (numeric) virtual transaction size as defined in BIP 141. This is different from actual serialized size for witness transactions as witness data is discounted.
+  "fee" : n,                            (numeric) transaction fee in BTC (DEPRECATED)
+  "time" : xxx,                         (numeric) local time transaction entered pool in seconds since 1 Jan 1970 GMT
+}
+
+Examples:
+> bitcoin-cli getmempoolentry "mytxid"
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getmempoolentry", "params": ["mytxid"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_getmempoolentry {
+    my $self = shift;
+    my $hash = pack("H*", $self->args->[0]);
+    my $verbose = $self->args->[1] // TRUE;
+    my $tx = QBitcoin::Transaction->get($hash)
+        or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "No such mempool");
+    return $self->response_ok($tx->as_hashref);
+}
+
 # getmemoryinfo
 # getrpcinfo
 # stop
@@ -796,7 +998,6 @@ sub cmd_getnetworkinfo {
 # disconnectnode
 # getaddednodeinfo
 # getconnectioncount
-# getnetworkinfo
 # getpeerinfo
 # listbanned
 # setban

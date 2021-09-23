@@ -198,4 +198,18 @@ sub process_tx {
     return 0;
 }
 
+sub get_block_by_hash {
+    my $self = shift;
+    my ($hash) = @_;
+
+    my $block = QBitcoin::Block->find(hash => $hash);
+    if (!$block) {
+        my $best_height = QBitcoin::Block->blockchain_height;
+        for (my $height = QBitcoin::Block->min_incore_height; $height <= $best_height; $height++) {
+            last if $block = QBitcoin::Block->block_pool($height, $hash);
+        }
+    }
+    return $block;
+}
+
 1;

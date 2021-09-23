@@ -16,17 +16,19 @@ mk_accessors(qw(validate_message));
 my $JSON = JSON::XS->new;
 
 my %SPEC = (
-    height      => qr/^(?:0|[1-9][0-9]{0,9})\z/,
-    blockhash   => qr/^[0-9a-f]{64}\z/,
-    txid        => qr/^[0-9a-f]{64}\z/,
-    command     => qr/^[a-z]{2,64}\z/,
-    verbosity   => qr/^[12]\z/,
-    hexstring   => qr/^(?:[0-9a-f][0-9a-f])+\z/,
-    verbose     => \&validate_boolean,
-    address     => \&validate_address,
-    inputs      => \&validate_inputs,
-    outputs     => \&validate_outputs,
-    privatekeys => \&validate_privkeys,
+    height         => qr/^(?:0|[1-9][0-9]{0,9})\z/,
+    blockhash      => qr/^[0-9a-f]{64}\z/,
+    txid           => qr/^[0-9a-f]{64}\z/,
+    command        => qr/^[a-z]{2,64}\z/,
+    verbosity      => qr/^[12]\z/,
+    hexstring      => qr/^(?:[0-9a-f][0-9a-f])+\z/,
+    nblocks        => qr/^[1-9][0-9]{0,9}\z/,
+    hash_or_height => qr/^(?:0|[1-9][0-9]{0,9}|[0-9a-f]{64})\z/,
+    verbose        => \&validate_boolean,
+    address        => \&validate_address,
+    inputs         => \&validate_inputs,
+    outputs        => \&validate_outputs,
+    privatekeys    => \&validate_privkeys,
 );
 
 sub validate {
