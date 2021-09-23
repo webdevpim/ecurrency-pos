@@ -11,7 +11,7 @@ use QBitcoin::RPC;
 use QBitcoin::ConnectionList;
 use Bitcoin::Protocol;
 
-mk_accessors(qw(peer ip socket state_time state port my_ip my_port my_addr direction));
+mk_accessors(qw(peer ip socket id state_time state port my_ip my_port my_addr direction));
 mk_accessors(qw(protocol type_id sendbuf recvbuf socket_fileno));
 
 use constant MODULE_BY_TYPE => {
@@ -25,20 +25,21 @@ sub new {
     my $attr = @_ == 1 ? $_[0] : { @_ };
     my $self = bless $attr, $class;
     $attr->{type_id} //= $attr->{peer}->type_id if $attr->{peer};
-    $attr->{ip}   //= inet_ntoa($attr->{peer}->ipv4) if $attr->{peer} && $attr->{peer}->ipv4;
+    $attr->{ip} //= inet_ntoa($attr->{peer}->ipv4) if $attr->{peer} && $attr->{peer}->ipv4;
     my $protocol_module = MODULE_BY_TYPE->{$attr->{type_id}}
         or die "Unknown connection type [$attr->{type_id}]";
     $self->protocol = $protocol_module->new(connection => $self);
     $self->sendbuf = "";
     $self->recvbuf = "";
     $self->socket_fileno = fileno($self->socket) if $self->socket;
+    $self->id = $self->protocol->id;
     QBitcoin::ConnectionList->add($self);
     return $self;
 }
 
-sub host { shift->peer->host }
+sub host { $_[0]->peer->host }
 sub addr { $_[0]->{addr} // $_[0]->peer->ip } # binary packed ipv6
-sub type { PROTOCOL2NAME->{shift->type_id} }
+sub type { PROTOCOL2NAME->{$_[0]->type_id} }
 
 sub disconnect {
     my $self = shift;
@@ -54,7 +55,7 @@ sub disconnect {
             # TODO: update peer data
         }
         elsif ($self->type_id == PROTOCOL_RPC) {
-            Debugf("Disconnected from RPC API client %s", $self->ip);
+            Debugf("Disconnected from RPC API client %s:%u", $self->ip, $self->port);
         }
     }
     $self->state = STATE_DISCONNECTED;

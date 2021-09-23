@@ -205,7 +205,7 @@ sub main_loop {
             my $peerinfo = accept(my $new_socket, $listen_rpc);
             my ($remote_port, $peer_addr) = unpack_sockaddr_in($peerinfo);
             my $peer_ip = inet_ntoa($peer_addr);
-            Debugf("Incoming RPC connection from %s", $peer_ip);
+            Debugf("Incoming RPC connection from %s:%u", $peer_ip, $remote_port);
             my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($new_socket));
             my $my_ip = inet_ntoa($my_addr);
             my $connection = QBitcoin::Connection->new(

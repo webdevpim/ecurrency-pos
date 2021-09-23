@@ -25,13 +25,13 @@ sub connected {
 sub add {
     my $class = shift;
     my ($connection) = @_;
-    $CONNECTIONS{$connection->type_id}->{$connection->addr} = $connection;
+    $CONNECTIONS{$connection->type_id}->{$connection->id} = $connection;
 }
 
 sub del {
     my $class = shift;
     my ($connection) = @_;
-    delete $CONNECTIONS{$connection->type_id}->{$connection->addr};
+    delete $CONNECTIONS{$connection->type_id}->{$connection->id};
 }
 
 1;

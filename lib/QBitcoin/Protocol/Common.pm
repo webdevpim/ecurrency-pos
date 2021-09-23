@@ -17,6 +17,7 @@ use constant ATTR => qw(
     connection
     peer
     last_recv_time
+    id
 );
 
 mk_accessors(ATTR);
@@ -28,6 +29,7 @@ sub new {
     my $self = bless $args, $class;
     $self->peer //= $self->connection->peer if $self->connection;
     $self->last_recv_time = time();
+    $self->id = $self->connection->addr;
     return $self;
 }
 

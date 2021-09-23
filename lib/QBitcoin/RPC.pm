@@ -26,6 +26,7 @@ use constant ATTR => qw(
     state
     update_time
     connection
+    id
 );
 
 mk_accessors(ATTR);
@@ -36,13 +37,14 @@ my $JSON = JSON::XS->new;
 sub direction() { DIR_IN }
 sub type_id()   { PROTOCOL_RPC }
 sub startup()   {}
-sub type { PROTOCOL2NAME->{shift->type_id} }
+sub type        { PROTOCOL2NAME->{shift->type_id} }
 
 sub new {
     my $class = shift;
     my $args = @_ == 1 ? $_[0] : { @_ };
     weaken($args->{connection}) if $args->{connection};
     $args->{update_time} //= time();
+    $args->{id} = $args->{connection}->addr . pack("v", $args->{connection}->port);
     return bless $args, $class;
 }
 
@@ -50,6 +52,7 @@ sub timeout {
     my $self = shift;
     my $timeout = RPC_TIMEOUT + $self->update_time - time();
     if ($timeout < 0) {
+        Infof("RPC client timeout");
         $self->connection->disconnect;
         $timeout = 0;
     }
@@ -78,6 +81,7 @@ sub send {
     my $self = shift;
     my ($data) = @_;
 
+    $data =~ s/\n/\r\n/gs;
     if ($self->connection->sendbuf eq '' && $self->connection->socket) {
         my $n = syswrite($self->connection->socket, $data);
         if (!defined($n)) {
@@ -151,7 +155,7 @@ sub process_rpc {
         Warningf("Incorrect rpc method [%s]", $body->{method});
         return $self->response_error("Unknown method", ERR_UNKNOWN_METHOD);
     }
-    Debugf("RPC request %s from %s", $body->{method}, $self->connection->ip);
+    Debugf("RPC request %s from %s:%u", $body->{method}, $self->connection->ip, $self->connection->port);
     $self->args = $body->{params};
     $self->cmd  = $body->{method};
     $self->validate_args == 0
