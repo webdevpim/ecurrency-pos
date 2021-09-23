@@ -81,7 +81,7 @@ sub send {
     my $self = shift;
     my ($data) = @_;
 
-    $data =~ s/\n/\r\n/gs;
+    $data =~ s/\n/\r\n/gs; # Warning: this includes http body and affects content-length, it does not matter for single-line json
     if ($self->connection->sendbuf eq '' && $self->connection->socket) {
         my $n = syswrite($self->connection->socket, $data);
         if (!defined($n)) {
@@ -125,7 +125,7 @@ sub http_response {
     my $headers = HTTP::Headers->new(
         Content_Type   => 'application/json',
         Content_Length => length($body),
-        Connection     => 'close',
+        #Connection     => 'close',
     );
     my $response = HTTP::Response->new($code, $message, $headers, $body);
     $response->protocol("HTTP/1.1");
@@ -145,6 +145,13 @@ sub process_rpc {
         return $self->response_error("Incorrect request body", ERR_INVALID_REQUEST);
     }
     # {"jsonrpc":"2.0","id":1,"method":"getblockchaininfo","params":[]}';
+    if (ref($body) eq "ARRAY") {
+        $body = $body->[0]; # Some explorers send such requests
+    }
+    if (ref($body) ne "HASH") {
+        Warningf("Incorrect json request, not hashref: [%s]", $http_request->decoded_content);
+        return $self->response_error("Incorrect request body", ERR_INVALID_REQUEST);
+    }
     if (!$body->{method} || !$body->{params} ||
         ref($body->{method}) || ref($body->{params}) ne 'ARRAY') {
         Warningf("Incorrect rpc request: [%s]", $http_request->decoded_content);
