@@ -848,7 +848,7 @@ sub cmd_getchaintxstats {
     my $start_height = $last_block->height - $nblocks + 1;
     $start_height = 0 if $start_height < 0;
     # TODO: count via QBitcoin::Transaction->fetch(..., -func => { count => 'count(*)' });
-    my ($count) = dbh->selectraw_array(
+    my ($count) = dbh->selectrow_array(
         "SELECT COUNT(*) FROM `" . QBitcoin::Transaction->TABLE . "` WHERE block_height >= ? AND block_height <= ?",
         undef, $start_height, $last_block->height);
 
