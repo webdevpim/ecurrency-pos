@@ -273,7 +273,7 @@ sub cmd_getblock {
         confirm_weight    => $best_block->weight - $block->weight,
     };
     if ($verbosity == 1) {
-        $res->{tx} = [ map { unpack("H*", $_->hash) } @{$block->transactions} ];
+        $res->{tx} = [ map { unpack("H*", $_) } @{$block->tx_hashes} ];
     }
     else {
         $res->{tx} = [ map { $_->as_hashref } @{$block->transactions} ];
