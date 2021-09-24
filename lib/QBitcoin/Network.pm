@@ -119,18 +119,21 @@ sub main_loop {
     $SIG{TERM} = $SIG{INT} = sub { $sig_killed = 1 };
 
     while () {
-        QBitcoin::Produce->produce() if $config->{produce} && mempool_synced() && blockchain_synced();
         my $timeout = SELECT_TIMEOUT;
-        if ($config->{generate} && mempool_synced() && blockchain_synced()) {
-            my $now = Time::HiRes::time();
-            my $blockchain_height = QBitcoin::Block->blockchain_height // -1;
-            my $time_next_block = time_by_height($blockchain_height + 1);
-            if ($now + $timeout > $time_next_block) {
-                $timeout = $time_next_block > $now ? $time_next_block - $now : 0;
-            }
-            my $generated_height = QBitcoin::Generate->generated_height;
-            if (!$generated_height || $now >= time_by_height($generated_height + 1)) {
-                QBitcoin::Generate->generate($now >= $time_next_block ? $blockchain_height + 1 : $blockchain_height);
+        if (mempool_synced() && blockchain_synced()) {
+            QBitcoin::Transaction->cleanup_mempool();
+            QBitcoin::Produce->produce() if $config->{produce};
+            if ($config->{generate}) {
+                my $now = Time::HiRes::time();
+                my $blockchain_height = QBitcoin::Block->blockchain_height // -1;
+                my $time_next_block = time_by_height($blockchain_height + 1);
+                if ($now + $timeout > $time_next_block) {
+                    $timeout = $time_next_block > $now ? $time_next_block - $now : 0;
+                }
+                my $generated_height = QBitcoin::Generate->generated_height;
+                if (!$generated_height || $now >= time_by_height($generated_height + 1)) {
+                    QBitcoin::Generate->generate($now >= $time_next_block ? $blockchain_height + 1 : $blockchain_height);
+                }
             }
         }
         $rin = $win = $ein = '';

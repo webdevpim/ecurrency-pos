@@ -43,16 +43,6 @@ sub choose_for_block {
         my $skip = 0;
         foreach my $in (@{$mempool[$i]->in}) {
             my $txo = $in->{txo};
-            if ($txo->tx_out) {
-                # Already confirmed spent
-                if (!$mempool[$i]->in_blocks) {
-                    Infof("Drop mempool tx %s b/c input %s:%u was already spent in %s",
-                        $mempool[$i]->hash_str, $txo->tx_in_str, $txo->num, $mempool[$i]->hash_str($txo->tx_out));
-                    $mempool[$i]->drop;
-                }
-                $skip = 1;
-                last;
-            }
             if (exists $spent{$txo->tx_in . $txo->num}) {
                 # Spent in previous mempool transaction
                 $skip = 1;

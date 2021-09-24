@@ -13,6 +13,8 @@ use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
+use QBitcoin::Peer;
+use QBitcoin::Connection;
 use QBitcoin::Protocol;
 use QBitcoin::Mempool;
 use QBitcoin::Crypto qw(hash160);
@@ -27,7 +29,8 @@ $transaction_module->mock('coins_created', sub { $_[0]->{coins_created} //= @{$_
 $transaction_module->mock('serialize_coinbase', sub { "\x00" });
 $transaction_module->mock('deserialize_coinbase', sub { unpack("C", shift->get(1)) });
 
-my $peer = QBitcoin::Protocol->new(state => STATE_CONNECTED, ip => '127.0.0.1');
+my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
+my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
 
 sub make_tx {
     my @in = @_;
@@ -48,8 +51,8 @@ sub make_tx {
         $out->tx_in = $tx->hash;
         $out->num = $num++;
     }
-    $peer->command = "tx";
-    $peer->cmd_tx($tx->serialize . "\x00"x16);
+    $connection->protocol->command = "tx";
+    $connection->protocol->cmd_tx($tx->serialize . "\x00"x16);
     return QBitcoin::Transaction->get($tx->hash);
 }
 
@@ -63,6 +66,8 @@ $tx1->block_height = 12;
 $tx1->out->[0]->tx_out = "abcd";
 # Set $tx2 as confirmed
 $tx2->block_height = 12;
+
+QBitcoin::Transaction->cleanup_mempool();
 
 my @mempool = QBitcoin::Mempool->choose_for_block(0, 20);
 

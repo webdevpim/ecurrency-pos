@@ -225,13 +225,16 @@ sub drop {
         Debugf("Transaction %s is in loaded unconfirmed blocks, do not drop", $self->hash_str);
         return;
     }
+    foreach my $out (@{$self->out}) {
+        foreach my $dep_tx ($out->spent_list) {
+            Infof("Drop transaction %s dependent on %s", $dep_tx->hash_str, $self->hash_str);
+            $dep_tx->drop
+                or return; # Do not drop the tx if any dependent transaction is in unconfirmed block, at any depth
+        }
+    }
     Debugf("Drop transaction %s from mempool", $self->hash_str);
     foreach my $out (@{$self->out}) {
         $out->del_my_utxo if $out->is_my;
-        foreach my $dep_tx ($out->spent_list) {
-            Infof("Drop transaction %s dependent on %s", $dep_tx->hash_str, $self->hash_str);
-            $dep_tx->drop;
-        }
     }
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
@@ -246,6 +249,37 @@ sub drop {
         }
     }
     delete $TRANSACTION{$self->hash};
+    return 1;
+}
+
+# Remove unneeded stake transactions and transactions with confirmed spent inputs
+sub cleanup_mempool {
+    my $class = shift;
+    my @tx = grep { !$_->in_blocks && !defined($_->block_height) } values %TRANSACTION;
+    foreach my $tx (@tx) {
+        if ($tx->fee < 0) {
+            if ($tx->drop()) {
+                Infof("Drop stake tx %s not related to any known blocks", $tx->hash_str);
+            }
+            next;
+        }
+        my $spent_txo;
+        foreach my $in (@{$tx->in}) {
+            my $txo = $in->{txo};
+            if ($txo->tx_out) {
+                # Already confirmed spent
+                $spent_txo = $txo;
+                last;
+            }
+        }
+        if ($spent_txo) {
+            if ($tx->drop()) {
+                Infof("Drop mempool tx %s b/c input %s:%u was already spent in %s",
+                    $tx->hash_str, $spent_txo->tx_in_str, $spent_txo->num, $tx->hash_str($spent_txo->tx_out));
+            }
+            next;
+        }
+    }
 }
 
 sub store {

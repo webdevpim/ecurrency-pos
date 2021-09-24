@@ -197,10 +197,6 @@ sub process_tx {
         # announce to other peers
         $tx->announce();
     }
-    elsif (!$tx->in_blocks && !$tx->block_height) {
-        Debugf("Ignore stake transactions %s not related to any known block", $tx->hash_str);
-        $tx->drop();
-    }
     return 0;
 }
 
