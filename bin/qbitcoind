@@ -94,7 +94,7 @@ sub usage {
     print "   -f, --config <file>         - config file, 'key = value' format (default " . CONFIG_DIR . "/" . CONFIG_NAME . "),\n";
     print "   -p, --peer <host[:port]>    - connect to peer <host> and <port> (default port " . PORT . "),\n";
     if (UPGRADE_POW) {
-        print "   -B, --btcnode <host[:port]> - connect to btc node <host>:<port> (default port " . Bitcoin::Protocol->PORT . "),\n";
+        print "   -B, --btcnode <host[:port]> - connect to btc node <host>:<port> (default port " . BTC_PORT . "),\n";
     }
     print "   -b, --bind <addr[:port]>    - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT . "),\n";
     print "   -J, --rpc <addr[:port]>     - respond to JSON RPC API on <address> and <port> (default " . RPC_ADDR . ":" . RPC_PORT . "),\n";
