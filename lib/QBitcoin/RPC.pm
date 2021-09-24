@@ -81,7 +81,6 @@ sub send {
     my $self = shift;
     my ($data) = @_;
 
-    $data =~ s/\n/\r\n/gs; # Warning: this includes http body and affects content-length, it does not matter for single-line json
     if ($self->connection->sendbuf eq '' && $self->connection->socket) {
         my $n = syswrite($self->connection->socket, $data);
         if (!defined($n)) {
@@ -129,7 +128,7 @@ sub http_response {
     );
     my $response = HTTP::Response->new($code, $message, $headers, $body);
     $response->protocol("HTTP/1.1");
-    return $self->send($response->as_string);
+    return $self->send($response->as_string("\r\n"));
 }
 
 sub process_rpc {
