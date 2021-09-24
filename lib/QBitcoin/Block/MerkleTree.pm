@@ -25,14 +25,14 @@ sub _merkle_root {
 
 sub calculate_merkle_root {
     my $self = shift;
-    @{$self->transactions}
+    my $hashes = $self->tx_hashes;
+    @$hashes
         or return ZERO_HASH;
-    my @hashes = map { $_->hash } @{$self->transactions};
     my $level = 0;
     my $level_size = 1; # 2**$level
-    my $cur_hash = $hashes[0];
-    while ($level_size < @hashes) {
-        $cur_hash = _merkle_hash($cur_hash, _merkle_root($level, $level_size, \@hashes));
+    my $cur_hash = $hashes->[0];
+    while ($level_size < @$hashes) {
+        $cur_hash = _merkle_hash($cur_hash, _merkle_root($level, $level_size, $hashes));
         ++$level;
         $level_size <<= 1;
     }
@@ -42,13 +42,13 @@ sub calculate_merkle_root {
 sub merkle_path {
     my $self = shift;
     my ($tx_num) = @_;
-    my @hashes = map { $_->hash } @{$self->transactions};
+    my $hashes = $self->tx_hashes;
     my $level = 0;
     my $level_size = 1; # 2**$level
     my @path;
-    while ($level_size < @hashes) {
-        my $start = $level_size * ($tx_num & 1 ? $tx_num-1 : ($tx_num+1) * $level_size > $#hashes ? $tx_num : $tx_num+1);
-        push @path, _merkle_root($level, $start, \@hashes);
+    while ($level_size < @$hashes) {
+        my $start = $level_size * ($tx_num & 1 ? $tx_num-1 : ($tx_num+1) * $level_size > $#$hashes ? $tx_num : $tx_num+1);
+        push @path, _merkle_root($level, $start, $hashes);
         ++$level;
         $level_size <<= 1;
         $tx_num >>= 1;

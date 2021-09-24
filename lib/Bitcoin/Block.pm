@@ -97,4 +97,9 @@ sub prev_hash_hex {
     return unpack("H*", scalar reverse $self->prev_hash);
 }
 
+sub tx_hashes {
+    my $self = shift;
+    return [ map { $_->hash } @{$self->transactions} ];
+}
+
 1;
