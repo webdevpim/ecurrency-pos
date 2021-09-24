@@ -24,11 +24,13 @@ use constant QBITCOIN_CONST => {
     SERVICE_NAME            => "qbitcoin",
     SELECT_TIMEOUT          => 10, # sec
     RPC_TIMEOUT             => 4,  # sec
+    REST_TIMEOUT            => 4,  # sec
     PEER_RECV_TIMEOUT       => 60, # sec, ping period and timeout for waiting for pong
     PORT                    => 9555,
     BIND_ADDR               => '*',
     RPC_PORT                => 9556, # JSON RPC API
     RPC_ADDR                => '127.0.0.1',
+    REST_PORT               => 9557, # Esplora REST API, https://github.com/blockstream/esplora/blob/master/API.md
     LISTEN_QUEUE            => 5,
     PEER_RECONNECT_TIME     => 10,
     BTC_TESTNET             => BTC_TESTNET,
@@ -76,6 +78,7 @@ use constant PROTOCOL_CONST => {
     PROTOCOL_QBITCOIN => 1,
     PROTOCOL_BITCOIN  => 2,
     PROTOCOL_RPC      => 3,
+    PROTOCOL_REST     => 4,
 };
 
 use constant PEER_STATUS_CONST => {

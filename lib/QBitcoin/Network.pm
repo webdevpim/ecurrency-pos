@@ -16,6 +16,7 @@ use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced);
 use QBitcoin::Generate;
 use QBitcoin::Produce;
 use QBitcoin::RPC;
+use QBitcoin::REST;
 
 sub bind_addr {
     my $class = shift;
@@ -30,6 +31,15 @@ sub bind_rpc_addr {
 
     my ($address, $port) = split(/:/, $config->{rpc} // RPC_ADDR);
     $port //= $config->{rpc_port} // RPC_PORT;
+    return listen_socket($address, $port);
+}
+
+sub bind_rest_addr {
+    my $class = shift;
+
+    $config->{rest} or return undef;
+    my ($address, $port) = split(/:/, $config->{rest});
+    $port //= $config->{rest_port} // REST_PORT;
     return listen_socket($address, $port);
 }
 
@@ -111,6 +121,7 @@ sub main_loop {
 
     my $listen_socket = $class->bind_addr;
     my $listen_rpc    = $class->bind_rpc_addr;
+    my $listen_rest   = $class->bind_rest_addr;
 
     set_pinned_peers();
 
@@ -139,6 +150,7 @@ sub main_loop {
         $rin = $win = $ein = '';
         vec($rin, fileno($listen_socket), 1) = 1 if $listen_socket;
         vec($rin, fileno($listen_rpc),    1) = 1 if $listen_rpc;
+        vec($rin, fileno($listen_rest),   1) = 1 if $listen_rest;
 
         call_qbt_peers();
         call_btc_peers();
@@ -225,6 +237,27 @@ sub main_loop {
             $connection->protocol->startup();
             push @connections, $connection;
         }
+        if ($listen_rest && vec($rin, fileno($listen_rest), 1) == 1) {
+            my $peerinfo = accept(my $new_socket, $listen_rest);
+            my ($remote_port, $peer_addr) = unpack_sockaddr_in($peerinfo);
+            my $peer_ip = inet_ntoa($peer_addr);
+            Debugf("Incoming REST connection from %s:%u", $peer_ip, $remote_port);
+            my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($new_socket));
+            my $my_ip = inet_ntoa($my_addr);
+            my $connection = QBitcoin::Connection->new(
+                type_id    => PROTOCOL_REST,
+                socket     => $new_socket,
+                state      => STATE_CONNECTED,
+                state_time => $time,
+                host       => $peer_ip,
+                ip         => $peer_ip,
+                addr       => $peer_addr,
+                port       => $remote_port,
+                direction  => DIR_IN,
+            );
+            $connection->protocol->startup();
+            push @connections, $connection;
+        }
 
         foreach my $connection (@connections) {
             my $was_traffic;
@@ -297,7 +330,7 @@ sub main_loop {
                 elsif ($n > 0) {
                     $connection->sendbuf = $n == length($connection->sendbuf) ? "" : substr($connection->sendbuf, $n);
                     $was_traffic = 1;
-                    if (!$connection->sendbuf && $connection->type_id == PROTOCOL_RPC) {
+                    if (!$connection->sendbuf && ($connection->type_id == PROTOCOL_RPC || $connection->type_id == PROTOCOL_REST)) {
                         $connection->disconnect();
                         next;
                     }
