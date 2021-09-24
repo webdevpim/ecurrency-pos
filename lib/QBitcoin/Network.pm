@@ -29,7 +29,7 @@ sub bind_rpc_addr {
     my $class = shift;
 
     my ($address, $port) = split(/:/, $config->{rpc} // RPC_ADDR);
-    $port //= $config->{rpc_port} // getservbyname(SERVICE_NAME, 'tcp') // RPC_PORT;
+    $port //= $config->{rpc_port} // RPC_PORT;
     return listen_socket($address, $port);
 }
 
