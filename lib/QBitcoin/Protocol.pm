@@ -502,8 +502,11 @@ sub cmd_getblks {
     my $height;
     my $min_incore_height = QBitcoin::Block->min_incore_height;
     for ($height = QBitcoin::Block->blockchain_height; $height >= $min_incore_height; $height--) {
-        my $block = QBitcoin::Block->best_block($height)
-            or last;
+        my $block = QBitcoin::Block->best_block($height);
+        if (!$block) {
+            $height = -1;
+            last;
+        }
         last if $locators{$block->hash};
     }
     my $sent = 0;
