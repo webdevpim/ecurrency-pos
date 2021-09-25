@@ -29,7 +29,7 @@ sub mock_block_serialize {
         weight       => $self->weight+0,
         hash         => $self->hash,
         prev_hash    => $self->prev_hash,
-        transactions => $self->tx_hashes,
+        tx_hashes    => $self->tx_hashes,
         merkle_root  => $self->merkle_root,
     }));
 }
