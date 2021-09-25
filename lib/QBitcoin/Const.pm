@@ -78,10 +78,17 @@ use constant PROTOCOL_CONST => {
     PROTOCOL_RPC      => 3,
 };
 
+use constant PEER_STATUS_CONST => {
+    PEER_STATUS_ACTIVE => 0,
+    PEER_STATUS_BANNED => 1, # disabled incoming
+    PEER_STATUS_NOCALL => 2, # disabled outgoing
+};
+
 use constant QBITCOIN_CONST;
 use constant STATE_CONST;
 use constant DIR_CONST;
 use constant PROTOCOL_CONST;
+use constant PEER_STATUS_CONST;
 
 use constant PROTOCOL2NAME => {
     map { s/BITCOIN/Bitcoin/r } map { s/PROTOCOL_//r } reverse %{&PROTOCOL_CONST}
@@ -100,7 +107,14 @@ sub height_by_time {
 }
 
 use Exporter qw(import);
-our @EXPORT = ( keys %{&QBITCOIN_CONST}, keys %{&STATE_CONST}, keys %{&DIR_CONST}, keys %{&PROTOCOL_CONST}, 'PROTOCOL2NAME' );
+our @EXPORT = (
+    keys %{&QBITCOIN_CONST},
+    keys %{&STATE_CONST},
+    keys %{&DIR_CONST},
+    keys %{&PROTOCOL_CONST},
+    keys %{&PEER_STATUS_CONST},
+    'PROTOCOL2NAME',
+);
 push @EXPORT, qw(time_by_height height_by_time);
 
 1;

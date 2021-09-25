@@ -89,7 +89,7 @@ CREATE INDEX IF NOT EXISTS `coinbase_tx_out` ON `coinbase` (tx_out);
 
 CREATE TABLE IF NOT EXISTS `peer` (
   type_id smallint unsigned NOT NULL,
-  status smallint unsigned,
+  status smallint unsigned NOT NULL DEFAULT 0,
   ip binary(16) NOT NULL,
   port smallint unsigned,
   create_time int unsigned NOT NULL,

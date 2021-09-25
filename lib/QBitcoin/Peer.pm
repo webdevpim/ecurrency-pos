@@ -18,6 +18,7 @@ use constant TABLE => 'peer';
 use constant PRIMARY_KEY => qw(type_id ip);
 use constant FIELDS => {
     type_id         => NUMERIC,
+    status          => NUMERIC,
     ip              => BINARY,
     port            => NUMERIC,
     create_time     => NUMERIC,
@@ -42,6 +43,7 @@ my @PEERS; # by type_id and ip
 sub new {
     my $class = shift;
     my $attr = @_ == 1 ? $_[0] : { @_ };
+    $attr->{status} //= PEER_STATUS_ACTIVE;
     return bless $attr, $class;
 }
 
@@ -156,6 +158,7 @@ sub conn_state {
 sub is_connect_allowed {
     my $self = shift;
     return 0 if $self->conn_state != STATE_DISCONNECTED;
+    return 0 if $self->status & PEER_STATUS_NOCALL;
     if ($self->failed_connects) {
         my $period = $self->failed_connects >= 10 ? 10 * 2**10 : 10 * 2**$self->failed_connects;
         return 0 if time() - $self->update_time < $period;
