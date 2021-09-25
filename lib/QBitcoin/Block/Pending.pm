@@ -111,7 +111,7 @@ sub recv_pending_tx {
             my $block = $PENDING_BLOCK{$block_hash};
             Debugf("Block %s is pending received tx %s", $block->hash_str, $tx->hash_str);
             $block->add_tx($tx);
-            if (!$block->pending_tx && (!$block->height || !$PENDING_BLOCK_BLOCK{$block->prev_hash})) {
+            if (!$block->pending_tx && ($block->height == 0 || !$PENDING_BLOCK_BLOCK{$block->prev_hash})) {
                 delete $PENDING_BLOCK{$block->hash};
                 $block->compact_tx();
                 if ($block->receive() == 0) {

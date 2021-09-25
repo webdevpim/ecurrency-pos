@@ -79,6 +79,7 @@ sub pending_tx {
     my $self = shift;
     my ($tx_hash) = @_;
     if ($tx_hash) {
+        $self->{pending_tx} //= {};
         $self->{pending_tx}->{$tx_hash} = 1;
         return 1;
     }

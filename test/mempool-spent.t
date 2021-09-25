@@ -9,6 +9,7 @@ use lib ("$Bin/../lib", "$Bin/lib");
 use List::Util qw(sum sum0);
 use Test::More;
 use Test::MockModule;
+use QBitcoin::Test::ORM;
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Transaction;
