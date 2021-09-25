@@ -113,7 +113,14 @@ sub get_block_by_hash {
     my ($hash) = @_;
 
     my $block = QBitcoin::Block->find(hash => $hash);
-    if (!$block) {
+    if ($block) {
+        # If the block is already loaded we have to use loaded object b/c transactions are singletone and have "in_blocks" property,
+        # it's possible to free transaction on free just loaded block, and it will cause error for another loaded block object
+        if (my $loaded_block = QBitcoin::Block->block_pool($block->height, $hash)) {
+            $block = $loaded_block;
+        }
+    }
+    else {
         my $best_height = QBitcoin::Block->blockchain_height;
         for (my $height = QBitcoin::Block->min_incore_height; $height <= $best_height; $height++) {
             last if $block = QBitcoin::Block->block_pool($height, $hash);
