@@ -29,7 +29,10 @@ sub transactions {
         $self->transactions = $_[0];
     }
     elsif (!$self->{transactions}) {
-        my @transactions = QBitcoin::Transaction->find(block_height => $self->height);
+        if ($self->{tx_by_hash}) {
+            die "Get transactions from not-loaded block\n";
+        }
+        my @transactions = QBitcoin::Transaction->find(block_height => $self->height, -sortby => 'block_pos ASC');
         $self->{transactions} = \@transactions;
         $_->add_to_block($self) foreach @transactions;
     }
@@ -41,7 +44,7 @@ sub tx_hashes {
     return $self->{tx_hashes} //=
         $self->{transactions} ?
             [ map { $_->hash } @{$self->{transactions}} ] :
-            [ map { $_->{hash} } QBitcoin::Transaction->fetch(block_height => $self->height) ];
+            [ map { $_->{hash} } QBitcoin::Transaction->fetch(block_height => $self->height, -sortby => 'block_pos ASC') ];
 }
 
 sub max_db_height {

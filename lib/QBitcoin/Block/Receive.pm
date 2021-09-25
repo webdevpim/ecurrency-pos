@@ -166,7 +166,8 @@ sub receive {
         Debugf("Add block %s height %u to the best branch", $b->hash_str, $b->height);
         my $fail_tx;
 
-        foreach my $tx (@{$b->transactions}) {
+        for (my $num = 0; $num < @{$b->transactions}; $num++) {
+            my $tx = $b->transactions->[$num];
             if (defined($tx->block_height) && $tx->block_height != $b->height) {
                 Warningf("Transaction %s included in blocks %u and %u", $tx->hash_str, $tx->block_height, $b->height);
                 $fail_tx = $tx->hash;
@@ -197,6 +198,7 @@ sub receive {
             }
             last if $fail_tx;
             $tx->block_height = $b->height;
+            $tx->block_pos = $num;
             foreach my $in (@{$tx->in}) {
                 my $txo = $in->{txo};
                 $txo->tx_out = $tx->hash;
@@ -239,8 +241,10 @@ sub receive {
             $old_best->prev_block->next_block = $old_best if $old_best && $old_best->prev_block;
             for (my $b1 = $old_best; $b1; $b1 = $b1->next_block) {
                 Debugf("Return block %s height %u to the best branch", $b1->hash_str, $b1->height);
+                my $num = 0;
                 foreach my $tx (@{$b1->transactions}) {
                     $tx->block_height = $b1->height;
+                    $tx->block_pos = $num++;
                     foreach my $in (@{$tx->in}) {
                         my $txo = $in->{txo};
                         $txo->tx_out = $tx->hash;

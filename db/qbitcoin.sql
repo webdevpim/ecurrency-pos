@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS `transaction` (
   id integer NOT NULL AUTO_INCREMENT PRIMARY KEY, -- "integer" (signed) required for sqlite autoincrement
   hash binary(32) NOT NULL,
   block_height int unsigned NOT NULL,
+  block_pos smallint unsigned NOT NULL,
   size int unsigned NOT NULL,
   fee bigint signed NOT NULL,
   FOREIGN KEY (block_height) REFERENCES `block` (height) ON DELETE CASCADE

@@ -24,6 +24,7 @@ use constant FIELDS => {
     id           => NUMERIC, # db primary key for reference links
     hash         => BINARY,
     block_height => NUMERIC,
+    block_pos    => NUMERIC,
     fee          => NUMERIC,
     size         => NUMERIC,
 };
@@ -845,6 +846,7 @@ sub unconfirm {
     Debugf("unconfirm transaction %s (confirmed in block height %u)", $self->hash_str, $self->block_height);
     $self->is_cached or die "unconfirm not cached transaction " . $self->hash_str;
     $self->block_height = undef;
+    $self->block_pos = undef;
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
         $txo->tx_out = undef;
