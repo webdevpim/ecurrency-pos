@@ -43,6 +43,11 @@ sub choose_for_block {
         my $skip = 0;
         foreach my $in (@{$mempool[$i]->in}) {
             my $txo = $in->{txo};
+            if ($txo->tx_out) {
+                # Already confirmed spent (MB not dropped from mempool b/c it included in some other block in alternate branch)
+                $skip = 1;
+                last;
+            }
             if (exists $spent{$txo->tx_in . $txo->num}) {
                 # Spent in previous mempool transaction
                 $skip = 1;
