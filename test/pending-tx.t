@@ -111,6 +111,7 @@ $connection->protocol->command = "tx";
 $connection->protocol->cmd_tx($tx->serialize . $zero_ip);
 $connection->protocol->cmd_tx($test_tx->serialize . $zero_ip);
 $connection->protocol->cmd_tx($stake_tx->serialize . $zero_ip);
+QBitcoin::Transaction->cleanup_mempool();
 send_block(1, "a1", "a0", 100, $stake_tx, $test_tx);
 $connection->protocol->cmd_tx($test_tx->serialize . $zero_ip);
 $connection->protocol->cmd_tx($stake_tx->serialize . $zero_ip);
@@ -122,5 +123,6 @@ my $hash   = $block ? $block->hash : undef;
 is($height,   1, "height");
 is($hash,  "a1", "hash"  );
 is($weight, 100, "weight");
+is(scalar(@{$block->transactions}), 2, "transactions");
 
 done_testing();
