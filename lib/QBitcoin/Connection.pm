@@ -18,6 +18,7 @@ use constant MODULE_BY_TYPE => {
     &PROTOCOL_QBITCOIN => "QBitcoin::Protocol",
     &PROTOCOL_BITCOIN  => "Bitcoin::Protocol",
     &PROTOCOL_RPC      => "QBitcoin::RPC",
+    &PROTOCOL_REST     => "QBitcoin::REST",
 };
 
 sub new {
@@ -54,8 +55,8 @@ sub disconnect {
             Infof("Disconnected from %s peer %s", $self->type, $self->ip);
             # TODO: update peer data
         }
-        elsif ($self->type_id == PROTOCOL_RPC) {
-            Debugf("Disconnected from RPC API client %s:%u", $self->ip, $self->port);
+        else {
+            Debugf("Disconnected from %s API client %s:%u", $self->type, $self->ip, $self->port);
         }
     }
     $self->state = STATE_DISCONNECTED;

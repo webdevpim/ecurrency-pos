@@ -25,6 +25,8 @@ sub main {
         'port|P=s'      => \$opts{port},
         'rpc|J=s'       => \$opts{rpc},
         'rpc-port=s'    => \$opts{rpc_port},
+        'rest|R=s'      => \$opts{rest},
+        'rest-port=s'   => \$opts{rest_port},
         'genesis|G'     => \$opts{genesis},
         'generate|g'    => \$opts{generate},
         'fake-coinbase' => \$opts{fake_coinbase},
@@ -98,6 +100,7 @@ sub usage {
     }
     print "   -b, --bind <addr[:port]>    - bind to local <address> and <port> (default " . BIND_ADDR . ":" . PORT . "),\n";
     print "   -J, --rpc <addr[:port]>     - respond to JSON RPC API on <address> and <port> (default " . RPC_ADDR . ":" . RPC_PORT . "),\n";
+    print "   -R, --rest <addr[:port]>    - respond to Esplora RESTful API on <address> and <port> (disabled by default, default port " . REST_PORT . "),\n";
     print "   -D, --daemonize             - daemonize,\n";
     print "   -g, --generate              - generate blocks (private key must be stored in the database),\n";
     print "   -G, --genesis               - run as genesis node, do not need to synchronize with other nodes for authoritative answers,\n";
