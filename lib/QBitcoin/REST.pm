@@ -27,6 +27,8 @@ use constant {
     TRUE  => JSON::XS::true,
 };
 
+use constant DEBUG_REST => 0;
+
 my $JSON = JSON::XS->new;
 
 sub type_id() { PROTOCOL_REST }
@@ -51,6 +53,7 @@ sub process_request {
     shift @path if @path && $path[0] eq "";
     shift @path if @path && $path[0] eq "api";
     return $self->http_response(404, "Unknown request") unless @path;
+    DEBUG_REST && Debugf("REST request: /%s", join("/", @path));
     if ($path[0] eq "tx") {
         if ($http_request->method eq "POST") {
             @path == 1 or $self->http_response(404, "Unknown request");
@@ -257,6 +260,7 @@ sub http_ok {
     );
     my $http_response = HTTP::Response->new(200, "OK", $headers, $body);
     $http_response->protocol("HTTP/1.1");
+    DEBUG_REST && Debugf("REST response: %s", $cont_type eq "application/octet-stream" ? "X'" . unpack("H*", $body) : $body);
     return $self->send($http_response->as_string("\r\n"));
 }
 
