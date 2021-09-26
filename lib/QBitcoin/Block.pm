@@ -90,7 +90,10 @@ sub pending_tx {
 
 sub compact_tx {
     my $self = shift;
-    $self->{transactions} //= [ map { $self->{tx_by_hash}->{$_} } @{$self->{tx_hashes}} ];
+    if ($self->{transactions}) {
+        die "Call compact_tx with already defined transactions for block " . $self->hash_str . " height " . $self->height . "\n";
+    }
+    $self->{transactions} = [ map { $self->{tx_by_hash}->{$_} } @{$self->{tx_hashes}} ];
     delete $self->{tx_by_hash};
 }
 
