@@ -15,12 +15,15 @@ sub validate {
     my $block = shift;
 
     my $now = Time::HiRes::time();
-    $now >= time_by_height($block->height)
-        or return "Block height " . $block->height . " is too early for now";
-    if ($block->height == 0) {
+    $now >= $block->time
+        or return "Block time " . $block->time . " is too early for now";
+    if (!$block->prev_hash || $block->prev_hash eq ZERO_HASH) {
 #        $block->hash eq GENESIS_HASH
 #            or return "Incorrect genesis block hash " . unpack("H*", $block->hash) . ", must be " . GENESIS_HASH_HEX;
         return ""; # Not needed to validate genesis block with correct hash
+    }
+    if (!@{$block->transactions} && (timeslot($block->time) - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS) {
+        return "Empty block";
     }
     my $merkle_root = $block->calculate_merkle_root;
     $block->merkle_root eq $merkle_root

@@ -12,8 +12,10 @@ use constant BTC_TESTNET        => 1;
 use constant QBITCOIN_CONST => {
     VERSION                 => "0.1",
     BLOCK_INTERVAL          => 10, # sec
-    GENESIS_TIME            => 1631186000,
+    GENESIS_TIME            => 1632840000, # must be divided by BLOCK_INTERVAL*FORCE_BLOCKS
+    FORCE_BLOCKS            => 100, # generate each 100th block even if empty
     INCORE_LEVELS           => 6,
+    INCORE_TIME             => 60,
     MIN_FEE                 => 0.00000001, # 1 satoshi
     MAX_VALUE               => 21000000 * 100000000, # 21M
     DENOMINATOR             => 100000000,
@@ -97,16 +99,9 @@ use constant PROTOCOL2NAME => {
     map { s/BITCOIN/Bitcoin/r } map { s/PROTOCOL_//r } reverse %{&PROTOCOL_CONST}
 };
 
-sub time_by_height {
-    my ($height) = @_;
-
-    return GENESIS_TIME + $height * BLOCK_INTERVAL;
-}
-
-sub height_by_time {
-    my ($time) = @_;
-
-    return int(($time - GENESIS_TIME) / BLOCK_INTERVAL);
+sub timeslot($) {
+    my $time = int($_[0]);
+    $time - $time % BLOCK_INTERVAL;
 }
 
 use Exporter qw(import);
@@ -118,6 +113,6 @@ our @EXPORT = (
     keys %{&PEER_STATUS_CONST},
     'PROTOCOL2NAME',
 );
-push @EXPORT, qw(time_by_height height_by_time);
+push @EXPORT, qw(timeslot);
 
 1;

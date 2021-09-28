@@ -17,6 +17,7 @@ use QBitcoin::Peer;
 use QBitcoin::Connection;
 use QBitcoin::Block;
 use QBitcoin::Transaction;
+use QBitcoin::ProtocolState qw(blockchain_synced);
 use QBitcoin::TXO;
 use QBitcoin::Generate;
 use QBitcoin::Crypto qw(hash160);
@@ -30,7 +31,7 @@ $protocol_module->mock('send_message', sub { 1 });
 sub mock_block_serialize {
     my $self = shift;
     varstr(encode_json({
-        height      => $self->height+0,
+        time        => $self->time+0,
         weight      => $self->weight+0,
         hash        => $self->hash,
         prev_hash   => $self->prev_hash,
@@ -60,6 +61,7 @@ $transaction_module->mock('deserialize_coinbase', sub { unpack("C", shift->get(1
 
 my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
 my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
+blockchain_synced(1);
 
 sub mock_self_weight {
     my $self = shift;
@@ -85,7 +87,7 @@ sub make_tx {
 sub send_block {
     my ($height, $hash, $prev_hash, $weight, $tx) = @_;
     my $block = QBitcoin::Block->new(
-        height       => $height,
+        time         => GENESIS_TIME + $height * BLOCK_INTERVAL * FORCE_BLOCKS,
         hash         => $hash,
         prev_hash    => $prev_hash,
         transactions => [ $tx ],
@@ -105,7 +107,7 @@ send_block($_, "a$_", "a" . ($_-1), $_*100, make_tx) foreach (1 .. 10);
 send_block(11, "a11", "a10", 1100, $test_tx);
 send_block(11, "b11", "a10", 1150, make_tx);
 $block_hash = "b12";
-QBitcoin::Generate->generate(12);
+QBitcoin::Generate->generate(GENESIS_TIME + 12 * BLOCK_INTERVAL * FORCE_BLOCKS);
 send_block($_, "b$_", "b" . ($_-1), $_*100+50, make_tx) foreach (13 .. 20);
 
 my $height = QBitcoin::Block->blockchain_height;

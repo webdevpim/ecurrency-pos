@@ -32,7 +32,7 @@ $protocol_module->mock('send_message', sub { 1 });
 sub mock_block_serialize {
     my $self = shift;
     varstr(encode_json({
-        height      => $self->height+0,
+        time        => $self->time+0,
         weight      => $self->weight+0,
         hash        => $self->hash,
         prev_hash   => $self->prev_hash,
@@ -88,7 +88,7 @@ sub make_tx {
 sub send_block {
     my ($height, $hash, $prev_hash, $weight, @tx) = @_;
     my $block = QBitcoin::Block->new(
-        height       => $height,
+        time         => GENESIS_TIME + $height * BLOCK_INTERVAL * FORCE_BLOCKS,
         hash         => $hash,
         prev_hash    => $prev_hash,
         transactions => \@tx,

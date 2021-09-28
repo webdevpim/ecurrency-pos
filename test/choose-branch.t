@@ -15,6 +15,7 @@ use QBitcoin::Config;
 use QBitcoin::Peer;
 use QBitcoin::Connection;
 use QBitcoin::Block;
+use QBitcoin::ProtocolState qw(blockchain_synced);
 use Bitcoin::Serialized;
 
 #$config->{debug} = 1;
@@ -25,7 +26,7 @@ $protocol_module->mock('send_message', sub { 1 });
 sub mock_block_serialize {
     my $self = shift;
     varstr(encode_json({
-        height       => $self->height+0,
+        time         => $self->time+0,
         weight       => $self->weight+0,
         hash         => $self->hash,
         prev_hash    => $self->prev_hash,
@@ -120,9 +121,11 @@ sub send_blocks {
         # child
         my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => "127.0.0.1");
         my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
+        $connection->protocol->command = "block";
+        blockchain_synced(1); # for save blocks with unknown ancestors
         foreach my $block_data (@$blocks) {
             my $block = QBitcoin::Block->new(
-                height       => $block_data->[0],
+                time         => GENESIS_TIME + $block_data->[0] * BLOCK_INTERVAL * FORCE_BLOCKS,
                 hash         => $block_data->[1],
                 prev_hash    => $block_data->[2],
                 weight       => $block_data->[3],

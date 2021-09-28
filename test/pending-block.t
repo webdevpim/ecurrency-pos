@@ -15,6 +15,7 @@ use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Peer;
 use QBitcoin::Connection;
+use QBitcoin::ProtocolState qw(blockchain_synced);
 use QBitcoin::Block;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
@@ -30,7 +31,7 @@ $protocol_module->mock('send_message', sub { 1 });
 sub mock_block_serialize {
     my $self = shift;
     varstr(encode_json({
-        height      => $self->height+0,
+        time        => $self->time+0,
         weight      => $self->weight+0,
         hash        => $self->hash,
         prev_hash   => $self->prev_hash,
@@ -66,6 +67,7 @@ sub mock_self_weight {
 
 my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
 my $connection = QBitcoin::Connection->new(peer => $peer, state => STATE_CONNECTED);
+blockchain_synced(1);
 # height, hash, prev_hash, $tx_num, weight [, self_weight]
 send_blocks([ 0, "a0", undef, 0, 50 ]);
 send_blocks(map [ $_, "a$_", "a" . ($_-1), 1, $_*100 ], 1 .. 20);
@@ -93,7 +95,7 @@ sub send_blocks {
         }
 
         my $block = QBitcoin::Block->new(
-            height       => $block_data->[0],
+            time         => GENESIS_TIME + $block_data->[0] * BLOCK_INTERVAL * FORCE_BLOCKS,
             hash         => $block_data->[1],
             prev_hash    => $block_data->[2],
             transactions => \@tx,
@@ -123,6 +125,8 @@ is($weight, 2210,  "weight");
 send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 21 .. 30);
 send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 20);
 send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 31 .. 35);
+QBitcoin::Block->store_blocks();
+QBitcoin::Block->cleanup_old_blocks();
 my $incore = QBitcoin::Block->min_incore_height;
 is($incore, QBitcoin::Block->blockchain_height-INCORE_LEVELS+1, "incore levels");
 

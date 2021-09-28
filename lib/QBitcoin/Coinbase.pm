@@ -65,14 +65,13 @@ sub store_published {
 
 sub get_new {
     my $class = shift;
-    my ($height) = @_;
+    my ($time) = @_;
 
-    # We often generate new block for the same height. In this case we do not need find for new coinbase w/o generated transaction
-    state $prev_height = -1;
-    return () if $prev_height >= $height;
-    $prev_height = $height;
+    # We often generate new block for the same timeslot. In this case we do not need find for new coinbase w/o generated transaction
+    state $prev_time = -1;
+    return () if $prev_time >= $time;
+    $prev_time = $time;
 
-    my $time = time_by_height($height);
     my ($matched_block) = Bitcoin::Block->find(
         time    => { '<' => $time - COINBASE_CONFIRM_TIME },
         -sortby => 'height DESC',

@@ -30,9 +30,9 @@ sub load_utxo {
     Infof("My UTXO loaded, total %u", scalar QBitcoin::TXO->my_utxo());
 }
 
-sub generated_height {
+sub generated_time {
     my $class = shift;
-    return QBitcoin::Generate::Control->generated_height;
+    return QBitcoin::Generate::Control->generated_time;
 }
 
 sub txo_confirmed {
@@ -67,20 +67,42 @@ sub make_stake_tx {
 
 sub generate {
     my $class = shift;
-    my ($height) = @_;
-    my $prev_block;
-    if ($height > 0) {
-        $prev_block = QBitcoin::Block->best_block($height-1)
-            or die "No prev block height " . ($height-1) . " for generate";
+    my ($time) = @_;
+    my $timeslot = timeslot($time);
+    if ($timeslot < GENESIS_TIME) {
+        die "Genesis time " . GENESIS_TIME . " is in future\n";
     }
-
+    my $prev_block;
+    my $height = QBitcoin::Block->blockchain_height() // -1;
+    if ($height >= 0) {
+        $prev_block = QBitcoin::Block->best_block($height)
+            or die "No prev block height $height for generate";
+        if (timeslot($prev_block->time) >= $timeslot) {
+            if ($height == 0) {
+                Debugf("Skip regenerating genesis block");
+                return;
+            }
+            $height--;
+            $prev_block = QBitcoin::Block->best_block($height)
+                or die "No prev block height $height for generate";
+            if (timeslot($prev_block->time) >= $timeslot) {
+                Warningf("Skip generating blocks from far past, time %s", $time);
+                return;
+            }
+        }
+    }
+    $height++;
     my $stake_tx = make_stake_tx(0, "");
     my $size = $stake_tx ? $stake_tx->size : 0;
-    foreach my $coinbase (QBitcoin::Coinbase->get_new($height)) {
+    foreach my $coinbase (QBitcoin::Coinbase->get_new($timeslot)) {
         # Create new coinbase transaction and add it to mempool (if it's not there)
         QBitcoin::Transaction->new_coinbase($coinbase);
     }
-    my @transactions = QBitcoin::Mempool->choose_for_block($size, $height);
+    # TODO: add transactions from block of the same timeslot, it's not ancestor
+    my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot);
+    if (!@transactions && ($timeslot - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
+        return;
+    }
     if (my $fee = sum map { $_->fee } @transactions) {
         return unless $stake_tx;
         # Generate new stake_tx with correct output value
@@ -98,6 +120,7 @@ sub generate {
     }
     my $generated = QBitcoin::Block->new({
         height       => $height,
+        time         => $time,
         prev_hash    => $prev_block ? $prev_block->hash : undef,
         transactions => \@transactions,
     });
@@ -106,7 +129,7 @@ sub generate {
     my $data = $generated->serialize;
     $generated->hash = $generated->calculate_hash();
     $generated->add_tx($_) foreach @transactions;
-    QBitcoin::Generate::Control->generated_height($height);
+    QBitcoin::Generate::Control->generated_time($time);
     Debugf("Generated block %s height %u weight %u, %u transactions",
         $generated->hash_str, $height, $generated->weight, scalar(@transactions));
     $generated->receive();

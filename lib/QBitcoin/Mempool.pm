@@ -22,8 +22,7 @@ sub want_tx {
 
 sub choose_for_block {
     my $class = shift;
-    my ($size, $block_height) = @_;
-    my $block_time = time_by_height($block_height);
+    my ($size, $block_time) = @_;
     my @mempool = sort { compare_tx($a, $b) }
         grep { defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
             QBitcoin::Transaction->mempool_list()

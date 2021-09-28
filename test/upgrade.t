@@ -120,9 +120,9 @@ SKIP: {
 
 is($tx->validate(), 0, "Correct coinbase");
 
-my $block = QBitcoin::Block->new( height => height_by_time($btc_block[7]->time + 2*3600 - 15) );
+my $block = QBitcoin::Block->new( time => $btc_block[7]->time + 2*3600 - 15 );
 isnt($tx->valid_for_block($block), 0, "Early block");
-$block->height = height_by_time($btc_block[7]->time + 2*3600 + 15);
+$block->time = $btc_block[7]->time + 2*3600 + 15;
 is($tx->valid_for_block($block), 0, "Valid for block");
 
 $btc_block[7]->delete;

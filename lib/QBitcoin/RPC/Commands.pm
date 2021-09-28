@@ -180,7 +180,7 @@ sub cmd_getblockheader {
     return $self->response_ok({
         hash              => unpack("H*", $block->hash),
         height            => $block->height,
-        time              => time_by_height($block->height),
+        time              => $block->time,
         confirmations     => $best_height - $block->height,
         nTx               => scalar(@{$block->transactions}),
         previousblockhash => unpack("H*", $block->prev_hash),
@@ -264,7 +264,7 @@ sub cmd_getblock {
     my $res = {
         hash              => unpack("H*", $block->hash),
         height            => $block->height,
-        time              => time_by_height($block->height),
+        time              => $block->time,
         confirmations     => $best_height - $block->height,
         previousblockhash => unpack("H*", $block->prev_hash),
         nextblockhash     => $next_block ? unpack("H*", $next_block->hash) : undef,
@@ -379,12 +379,12 @@ sub cmd_getrawtransaction {
     if (defined $tx->block_height) {
         my $best_height = QBitcoin::Block->blockchain_height;
         $res->{confirmations} = $best_height - $tx->block_height;
-        $res->{blocktime} = time_by_height($tx->block_height);
         my $block = QBitcoin::Block->best_block($tx->block_height) // QBitcoin::Block->find(height => $tx->block_height);
         if ($block) {
             my $best_block = QBitcoin::Block->best_block($best_height);
             $res->{confirm_weight} = $best_block->weight - $block->weight;
             $res->{blockhash} = unpack("H*", $block->hash);
+            $res->{blocktime} = $block->time;
         }
     }
     else {
@@ -853,7 +853,7 @@ sub cmd_getchaintxstats {
         undef, $start_height, $last_block->height);
 
     return $self->response_ok({
-        time                      => time_by_height($last_block->height),
+        time                      => $last_block->time,
         window_final_block_hash   => unpack("H*", $last_block->hash),
         window_final_block_height => $last_block->height,
         window_block_count        => $last_block->height - $start_height + 1,
@@ -933,7 +933,7 @@ sub cmd_getblockstats {
         ins        => sum0(map { scalar @{$_->in} } @{$block->transactions}),
         outs       => sum0(map { scalar @{$_->out} } @{$block->transactions}),
         subsidy    => 0,
-        time       => time_by_height($block->height),
+        time       => $block->time,
         total_out  => sum0(map { $_->value } map { @{$_->out} } @{$block->transactions}),
         total_size => sum0(map { $_->size } @{$block->transactions}),
         txs        => scalar(@{$block->transactions}),

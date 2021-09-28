@@ -301,8 +301,14 @@ sub tx_status {
     }
 }
 
+sub block_by_height {
+    my ($height) = @_;
+    return QBitcoin::Block->best_block($height) // QBitcoin::Block->find(height => $height);
+}
+
 sub tx_obj {
     my ($tx) = @_;
+    my $block = defined($tx->block_height) ? block_by_height($tx->block_height) : undef;
     return {
         txid        => unpack("H*", $tx->hash),
         fee         => $tx->fee,
@@ -311,10 +317,10 @@ sub tx_obj {
         is_coinbase => @{$tx->in} ? FALSE : TRUE,
         status      => {
             confirmed => defined($tx->block_height) ? TRUE : FALSE,
-            defined($tx->block_height) ? (
-                block_height => $tx->block_height,
-                block_time   => time_by_height($tx->block_height),
-                # block_hash   => unpack("H*", $block->hash),
+            defined($block) ? (
+                block_height => $block->height,
+                block_time   => $block->time,
+                block_hash   => unpack("H*", $block->hash),
             ) : (),
         },
         vin  => [ map {{ txid => unpack("H*", $_->{txo}->tx_in), vout => $_->{txo}->num }} @{$tx->in} ],
@@ -330,7 +336,7 @@ sub block_obj {
         weight            => $block->weight,
         previousblockhash => $block->prev_hash ? unpack("H*", $block->prev_hash) : undef,
         merkle_root       => unpack("H*", $block->merkle_root),
-        timestamp         => time_by_height($block->height),
+        timestamp         => $block->time,
         tx_count          => scalar(@{$block->tx_hashes}),
         size              => length($block->serialize),
     };
@@ -462,22 +468,22 @@ sub get_address_utxo {
 
 sub merkle_proof {
     my ($tx) = @_;
-    my $block = QBitcoin::Block->best_block($tx->block_height) // QBitcoin::Block->find(height => $tx->block_height)
+    my $block = block_by_height($tx->block_height)
         or return undef;
-    for (my $num = 0; $num < @{$block->tx_hashes}; $num++) {
-        if ($block->tx_hashes->[$num] eq $tx->hash) {
-            my $merkle_path = $block->merkle_path($num);
-            my $hashlen = length($tx->hash);
-            my $merkle_len = length($merkle_path) / $hashlen;
-            my @merkle_path = map { unpack("H*", substr($merkle_path, $_*$hashlen, $hashlen)) } 1 .. $merkle_len;
-            return {
-                block_height => $block->height,
-                pos          => $num,
-                merkle       => \@merkle_path,
-            };
-        }
+    my $num = $tx->block_pos;
+    if ($block->tx_hashes->[$num] ne $tx->hash) {
+        Errf("block %s %u tx hash %s != %s", $block->hash_str, $num, $tx->hash_str($block->tx_hashes->[$num]), $tx->hash_str);
+        return undef;
     }
-    return undef;
+    my $merkle_path = $block->merkle_path($num);
+    my $hashlen = length($tx->hash);
+    my $merkle_len = length($merkle_path) / $hashlen;
+    my @merkle_path = map { unpack("H*", substr($merkle_path, $_*$hashlen, $hashlen)) } 1 .. $merkle_len;
+    return {
+        block_height => $block->height,
+        pos          => $num,
+        merkle       => \@merkle_path,
+    };
 }
 
 sub get_blocks {

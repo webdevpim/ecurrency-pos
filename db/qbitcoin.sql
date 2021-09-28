@@ -1,6 +1,7 @@
 
 CREATE TABLE IF NOT EXISTS `block` (
   height int unsigned NOT NULL PRIMARY KEY,
+  time int unsigned NOT NULL,
   hash binary(32) NOT NULL,
   weight bigint unsigned NOT NULL,
   prev_hash binary(32) DEFAULT NULL,

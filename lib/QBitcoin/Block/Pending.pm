@@ -50,7 +50,7 @@ sub drop_pending {
         $next_block->drop_pending();
     }
     if ($PENDING_BLOCK{$self->hash}) {
-        Debugf("Drop pending block %s height %u", $self->hash_str, $self->height);
+        Debugf("Drop pending block %s", $self->hash_str);
         if ($self->pending_tx) {
             foreach my $tx_hash ($self->pending_tx) {
                 delete $PENDING_TX_BLOCK{$tx_hash}->{$self->hash};
@@ -59,7 +59,7 @@ sub drop_pending {
                 }
             }
         }
-        if ($self->height && $PENDING_BLOCK_BLOCK{$self->prev_hash}) {
+        if ($self->prev_hash && $PENDING_BLOCK_BLOCK{$self->prev_hash}) {
             delete $PENDING_BLOCK_BLOCK{$self->prev_hash}->{$self->hash};
             if (!%{$PENDING_BLOCK_BLOCK{$self->prev_hash}}) {
                 delete $PENDING_BLOCK_BLOCK{$self->prev_hash};
@@ -111,7 +111,7 @@ sub recv_pending_tx {
             my $block = $PENDING_BLOCK{$block_hash};
             Debugf("Block %s is pending received tx %s", $block->hash_str, $tx->hash_str);
             $block->add_tx($tx);
-            if (!$block->pending_tx && ($block->height == 0 || !$PENDING_BLOCK_BLOCK{$block->prev_hash})) {
+            if (!$block->pending_tx && (!$block->prev_hash || !$PENDING_BLOCK_BLOCK{$block->prev_hash})) {
                 delete $PENDING_BLOCK{$block->hash};
                 $block->compact_tx();
                 if ($block->receive() == 0) {

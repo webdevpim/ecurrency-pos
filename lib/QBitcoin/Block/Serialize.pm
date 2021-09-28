@@ -12,7 +12,7 @@ sub serialize {
     my $self = shift;
 
     return $self->{serialized} //=
-        pack("VQ<", $self->height, $self->weight) .
+        pack("VQ<", $self->time, $self->weight) .
         ( $self->prev_hash // ZERO_HASH ) .
         $self->merkle_root .
         pack("a16", $self->received_from ? $self->received_from->peer_id : "") .
@@ -24,7 +24,7 @@ sub deserialize {
     my $class = shift;
     my ($data) = @_;
     my $block = $class->new({
-        height      => unpack("V",  $data->get(4) // return undef),
+        time        => unpack("V",  $data->get(4) // return undef),
         weight      => unpack("Q<", $data->get(8) // return undef),
         prev_hash   => ( $data->get(32) // return undef ),
         merkle_root => ( $data->get(32) // return undef ),
@@ -32,14 +32,17 @@ sub deserialize {
         tx_hashes   => [ map { $data->get(32) // return undef } 1 .. unpack("v", $data->get(2) // return undef) ],
     });
     $block->hash = $block->calculate_hash();
-    $block->prev_hash = undef if $block->prev_hash eq ZERO_HASH;
+    if ($block->prev_hash eq ZERO_HASH) {
+        $block->prev_hash = undef;
+        $block->height = 0;
+    }
     return $block;
 }
 
 sub calculate_hash {
     my $self = shift;
     my $data = ($self->prev_hash // ZERO_HASH) . $self->merkle_root .
-        pack("VQ<", $self->height, $self->weight);
+        pack("VQ<", $self->time, $self->weight);
     return hash256($data);
 }
 

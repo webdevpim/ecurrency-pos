@@ -172,6 +172,7 @@ sub add_to_block {
     my $self = shift;
     my ($block) = @_;
     $self->{blocks}->{$block->hash} = 1;
+    $self->{received_time} //= $block->time; # for transactions loaded from database, they may be unconfirmed and go to mempool
 }
 
 sub del_from_block {
@@ -752,7 +753,7 @@ sub validate {
 sub valid_for_block {
     my $self = shift;
     my ($block) = @_;
-    ($self->min_tx_time // return -1) <= time_by_height($block->height)
+    ($self->min_tx_time // return -1) <= timeslot($block->time)
         or return -1;
     if ($self->fee < 0) {
         $self->block_sign_data = $block->sign_data;
@@ -802,7 +803,6 @@ sub pre_load {
         $attr->{in}  = \@inputs;
         $attr->{out} = \@outputs;
         $attr->{up}  = $upgrade if $upgrade;
-        $attr->{received_time} = time_by_height($attr->{block_height}); # for possible unconfirm the transaction
     }
     return $attr;
 }
@@ -872,10 +872,11 @@ sub is_cached {
 
 sub stake_weight {
     my $self = shift;
-    my ($block_height) = @_;
+    my ($block) = @_;
     my $weight = 0;
     if ($self->fee < 0) {
         my $class = ref $self;
+        my $class_block = ref $block;
         foreach my $in (map { $_->{txo} } @{$self->in}) {
             if (my $in_block_height = $class->check_by_hash($in->tx_in)) {
                 if ($in_block_height < 0) {
@@ -883,7 +884,9 @@ sub stake_weight {
                         $self->hash_str, $in->tx_in_str, $in->num);
                     return undef;
                 }
-                $weight += $in->value * ($block_height - $in_block_height);
+                my $in_block = $class_block->best_block($in_block_height) // $class_block->find(height => $in_block_height)
+                    or die "Can't find block height $in_block_height\n";
+                $weight += $in->value * (timeslot($block->time) - timeslot($in_block->time)) / BLOCK_INTERVAL;
             }
             else {
                 # tx generated this txo should be loaded during tx validation
@@ -897,14 +900,14 @@ sub stake_weight {
 
 sub coinbase_weight {
     my $self = shift;
-    my ($block_height) = @_;
+    my ($block_time) = @_;
     my $weight = 0;
     if (my $coinbase = $self->up) {
         # Early confirmation should have more weight than later
-        my $base_height = height_by_time($coinbase->btc_confirm_time);
-        my $virtual_height = height_by_time($coinbase->btc_confirm_time - COINBASE_WEIGHT_TIME); # MB negative, it's ok
-        $weight = $coinbase->value * ($base_height - $virtual_height);
-        $weight *= ($base_height - $virtual_height) / ($block_height - $virtual_height);
+        my $base_time = timeslot($coinbase->btc_confirm_time);
+        my $virtual_time = timeslot($coinbase->btc_confirm_time - COINBASE_WEIGHT_TIME); # MB negative, it's ok
+        $weight = $coinbase->value * ($base_time - $virtual_time) / BLOCK_INTERVAL;
+        $weight *= ($base_time - $virtual_time) / (timeslot($block_time) - $virtual_time);
     }
     return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
 }
