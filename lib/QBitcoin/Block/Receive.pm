@@ -109,7 +109,6 @@ sub receive {
         # Drop descendants, it's not possible to receive correct block with the same hash
         $self->free_block();
         if ($self->received_from) {
-            $self->received_from->peer->decrease_reputation();
             if ($self->received_from->connection) {
                 $self->received_from->abort("invalid_block");
             }
@@ -267,7 +266,6 @@ sub receive {
             }
             $b->drop_branch();
             if ($self->received_from) {
-                $self->received_from->peer->decrease_reputation();
                 if ($self->received_from->connection) {
                     $self->received_from->abort("incorrect_block");
                 }
