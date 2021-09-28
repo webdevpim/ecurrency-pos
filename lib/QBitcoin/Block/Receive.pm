@@ -14,7 +14,7 @@ use Role::Tiny; # This is role for QBitcoin::Block;
 
 # @block_pool - array (by height) of hashes, block by block->hash
 # @best_block - pointers to blocks in the main branch
-# @descendant - list of block descendants (including pending), as $descendant[$height]->{$prev_hash}->{$hash}
+# %descendant - list of block descendants (including pending), as $descendant{$prev_hash}->{$hash}
 
 # Each block has attributes:
 # - self_weight - weight calculated by the block contents
@@ -28,14 +28,14 @@ use Role::Tiny; # This is role for QBitcoin::Block;
 my @block_pool;
 my %block_pool;
 my @best_block;
-my @descendant;
+my %descendant;
 my $HEIGHT;
 my $MIN_INCORE_HEIGHT;
 
 END {
     # free structures
     undef @best_block;
-    undef @descendant;
+    undef %descendant;
     undef @block_pool;
 };
 
@@ -75,17 +75,20 @@ sub to_cache {
 
 sub add_as_descendant {
     my $self = shift;
-    $descendant[$self->height]->{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
+    $descendant{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
 }
 
 sub del_as_descendant {
     my $self = shift;
-    delete $descendant[$self->height]->{$self->prev_hash}->{$self->hash} if $self->prev_hash;
+    if ($self->prev_hash) {
+        delete $descendant{$self->prev_hash}->{$self->hash};
+        delete $descendant{$self->prev_hash} unless %{$descendant{$self->prev_hash}};
+    }
 }
 
 sub descendants {
     my $self = shift;
-    return $descendant[$self->height+1] && $descendant[$self->height+1]->{$self->hash} ? values %{$descendant[$self->height+1]->{$self->hash}} : ();
+    return $descendant{$self->hash} ? values %{$descendant{$self->hash}} : ();
 }
 
 sub block_pool {
@@ -402,7 +405,6 @@ sub cleanup_old_blocks {
         elsif (%{$block_pool[$free_height]}) {
             last;
         }
-        delete $descendant[$free_height];
         delete $block_pool[$free_height];
         Debugf("Level %u cleared", $free_height);
         $MIN_INCORE_HEIGHT++;
