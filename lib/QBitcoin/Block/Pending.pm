@@ -116,7 +116,7 @@ sub recv_pending_tx {
                 $block->compact_tx();
                 if ($block->receive() == 0) {
                     $block = $block->process_pending();
-                    $height = $block->height if defined($height) && $height < $block->height;
+                    $height = $block->height if !defined($height) || $height < $block->height;
                 }
                 else {
                     $block->drop_pending();

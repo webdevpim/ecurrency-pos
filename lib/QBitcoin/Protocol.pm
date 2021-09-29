@@ -398,7 +398,9 @@ sub process_tx {
         or return -1;
     if (defined(my $height = QBitcoin::Block->recv_pending_tx($tx))) {
         return -1 if $height == -1;
-        # $self->request_new_block();
+        # We've got new block on receive this tx, so we should request new blocks as after usual block receiving
+        # It may be the way for set blockchain_synced(1) if it was the best block
+        $self->request_new_block();
     }
     if ($tx->fee >= 0) {
         if (blockchain_synced() && mempool_synced()) {
