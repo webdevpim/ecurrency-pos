@@ -217,7 +217,7 @@ sub cmd_block {
                 $block->hash_str, $block->hash_str($block->prev_hash));
             if ($block->pending_descendants || !blockchain_synced()) {
                 # deep rollback, request batch of new blocks using locators
-                $self->request_blocks(timeslot($block->time) - BLOCK_INTERVAL);
+                $self->request_blocks(timeslot($block->time)-1);
             }
             else {
                 $block->load_transactions;
@@ -318,7 +318,7 @@ sub cmd_blocks {
             else {
                 Debugf("Received block %s has unknown ancestor %s, request it",
                     $block->hash_str, $block->hash_str($block->prev_hash));
-                $self->request_blocks(timeslot($block->time) - BLOCK_INTERVAL);
+                $self->request_blocks(timeslot($block->time)-1);
                 $self->syncing(1);
                 return 0;
             }
@@ -462,10 +462,23 @@ sub request_blocks {
     my $self = shift;
     my ($top_time) = @_;
     $top_time //= 0;
-    my @blocks = QBitcoin::Block->find(time => { '<=' => $top_time || time() }, -sortby => 'height DESC', -limit => 10);
+    my @blocks;
+    for (my $height = QBitcoin::Block->blockchain_height // -1; $height >= 0; $height--) {
+        last if $height <= QBitcoin::Block->blockchain_height - INCORE_LEVELS;
+        my $best_block = QBitcoin::Block->best_block($height)
+            or last;
+        if ($best_block->time <= $top_time) {
+            push @blocks, $best_block;
+            last if @blocks >= 10;
+        }
+    }
+    if (@blocks < 10) {
+        push @blocks, QBitcoin::Block->find(time => { '<=' => $top_time || time() }, -sortby => 'height DESC', -limit => 10 - @blocks);
+    }
     my @locators = map { $_->hash } @blocks;
     my $low_time = $top_time;
     if (@locators) {
+        $low_time = timeslot($blocks[-1]->time)-1;
         my $step = 4;
         my $height = $blocks[-1]->height - $step;
         my @height;
@@ -478,7 +491,7 @@ sub request_blocks {
         push @height, 0 if @height < 32;
         @blocks = QBitcoin::Block->find(-sortby => 'height DESC', height => \@height);
         push @locators, map { $_->hash } @blocks;
-        $low_time = $blocks[-1]->time;
+        $low_time = timeslot($blocks[-1]->time)-1 if @blocks;
     }
     Debugf("Request batch blocks between time %u and %u", $low_time, $top_time);
     $self->send_message("getblks", pack("Vv", $low_time, scalar(@locators)) . join("", @locators));
@@ -522,7 +535,17 @@ sub cmd_getblks {
         else {
             if ($low_time) {
                 # No block for any locator found, send only one block with $low_time for continue synchronization
-                $block = QBitcoin::Block->find(time => { '<=' => $low_time }, -sortby => 'HEIGHT DESC', -limit => 1);
+                for ($height = QBitcoin::Block->blockchain_height; $height >= $min_incore_height; $height--) {
+                    $block = QBitcoin::Block->best_block($height)
+                        or last;
+                    if ($block->time > $low_time) {
+                        undef $block;
+                    }
+                    else {
+                        last;
+                    }
+                }
+                $block //= QBitcoin::Block->find(time => { '<=' => $low_time }, -sortby => 'HEIGHT DESC', -limit => 1);
             }
             else {
                 # special case
