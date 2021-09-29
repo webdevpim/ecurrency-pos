@@ -85,9 +85,7 @@ sub cmd_version {
     $self->request_btc_blocks() if UPGRADE_POW && !btc_synced();
     $self->request_mempool if blockchain_synced() && !mempool_synced() && (!UPGRADE_POW || btc_synced());
     $self->announce_best_btc_block() if UPGRADE_POW;
-    my $height = QBitcoin::Block->blockchain_height;
-    if (defined($height)) {
-        my $best_block = QBitcoin::Block->best_block($height);
+    if (my $best_block = QBitcoin::Block->best_block) {
         $self->announce_block($best_block);
     }
     return 0;
@@ -426,9 +424,8 @@ sub request_new_block {
     my ($hash) = @_;
 
     if (!$self->syncing) {
-        my $best_height = QBitcoin::Block->blockchain_height // -1;
         my $best_time = QBitcoin::Block->blockchain_time // 0;
-        my $best_block = $best_height >= 0 ? QBitcoin::Block->best_block($best_height) : undef;
+        my $best_block = QBitcoin::Block->best_block;
         my $best_weight = $best_block ? $best_block->weight : -1;
         if (($self->has_weight // -1) > $best_weight ||
             (($self->has_weight // -1) == $best_weight && timeslot($self->has_time // 0) > timeslot($best_time))) {
@@ -604,13 +601,13 @@ sub cmd_sendblock {
     my $hash = $data;
     my $block;
     if ($hash eq ZERO_HASH) {
-        $block = QBitcoin::Block->best_block();
+        $block = QBitcoin::Block->best_block;
     }
     else {
         $block = QBitcoin::Block->block_pool($hash) // QBitcoin::Block->find(hash => $hash);
         if (!$block) {
             Debugf("I have no block with requested hash %s, send best instead", QBitcoin::Block->hash_str($hash));
-            $block = QBitcoin::Block->best_block();
+            $block = QBitcoin::Block->best_block;
         }
     }
     if ($block) {

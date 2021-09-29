@@ -54,7 +54,8 @@ sub blockchain_time {
 sub best_block {
     my $class = shift;
     my ($block_height) = @_;
-    return $best_block[$block_height];
+    $block_height //= $HEIGHT;
+    return defined($block_height) ? $best_block[$block_height] : undef;
 }
 
 sub min_incore_height {
