@@ -272,7 +272,7 @@ sub cmd_blocks {
             $self->abort("bad_block_data");
             return -1;
         }
-        Infof("Receive blocks height %u..%u", $block->height, $block->height+$num_blocks-1) if $num == 1;
+        Infof("Receive %u blocks started from %s time %u", $num_blocks, $block->hash_str, $block->time) if $num == 1;
         if (my $loaded_block = QBitcoin::Block->block_pool($block->hash)) {
             Debugf("Received block %s height %u already in block_pool, skip", $block->hash_str, $loaded_block->height);
             next;
@@ -481,6 +481,8 @@ sub request_blocks {
     my $low_time = $top_time;
     if (@locators) {
         $low_time = timeslot($blocks[-1]->time)-1;
+        my $top_height = $blocks[0]->height;
+        my $low_height = $blocks[-1]->height;
         my $step = 4;
         my $height = $blocks[-1]->height - $step;
         my @height;
@@ -494,8 +496,12 @@ sub request_blocks {
         @blocks = QBitcoin::Block->find(-sortby => 'height DESC', height => \@height);
         push @locators, map { $_->hash } @blocks;
         $low_time = timeslot($blocks[-1]->time)-1 if @blocks;
+        $low_height = $blocks[-1]->height;
+        Debugf("Request batch blocks before time %s, locators height %u .. %u", $low_time, $low_height, $top_height);
     }
-    Debugf("Request batch blocks between time %u and %u", $low_time, $top_time);
+    else {
+        Debugf("Request batch blocks before time %s", $low_time);
+    }
     $self->send_message("getblks", pack("Vv", $low_time, scalar(@locators)) . join("", @locators));
 }
 
