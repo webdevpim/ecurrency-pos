@@ -139,7 +139,7 @@ sub load_transactions {
             else {
                 $self->pending_tx($tx_hash);
                 $PENDING_TX_BLOCK{$tx_hash}->{$self->hash} = 1;
-                Debugf("Set pending_tx %s block %s height %u", unpack("H*", substr($tx_hash, 0, 4)), $self->hash_str, $self->height);
+                Debugf("Set pending_tx %s block %s time %u", unpack("H*", substr($tx_hash, 0, 4)), $self->hash_str, $self->time);
             }
         }
         if ($self->pending_tx) {
