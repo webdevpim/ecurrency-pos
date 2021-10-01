@@ -42,6 +42,7 @@ use constant ATTR => qw(
     block_sign_data
     rcvd
     in_raw
+    block_time
 );
 
 mk_accessors(keys %{&FIELDS}, ATTR);
@@ -846,6 +847,7 @@ sub unconfirm {
     Debugf("unconfirm transaction %s (confirmed in block height %u)", $self->hash_str, $self->block_height);
     $self->is_cached or die "unconfirm not cached transaction " . $self->hash_str;
     $self->block_height = undef;
+    $self->block_time = undef;
     $self->block_pos = undef;
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
@@ -878,21 +880,31 @@ sub stake_weight {
         my $class = ref $self;
         my $class_block = ref $block;
         foreach my $in (map { $_->{txo} } @{$self->in}) {
-            if (my $in_block_height = $class->check_by_hash($in->tx_in)) {
-                if ($in_block_height < 0) {
+            my $in_block_time;
+            my $in_block_height;
+            if (my $tx_in = $class->get($in->tx_in)) {
+                # block_time may be differ from the time of the best block with block_height if we're checking alternative branch
+                $in_block_time = $tx_in->block_time;
+                if (!defined($in_block_height = $tx_in->block_height)) {
                     Warningf("Can't get stake_weight for %s with unconfirmed input %s:%u",
                         $self->hash_str, $in->tx_in_str, $in->num);
                     return undef;
                 }
-                my $in_block = $class_block->best_block($in_block_height) // $class_block->find(height => $in_block_height)
-                    or die "Can't find block height $in_block_height\n";
-                $weight += $in->value * (timeslot($block->time) - timeslot($in_block->time)) / BLOCK_INTERVAL;
+            }
+            elsif (my ($tx_hashref) = $class->fetch(hash => $in->tx_in)) {
+                $in_block_height = $tx_hashref->{block_height};
             }
             else {
                 # tx generated this txo should be loaded during tx validation
                 Warningf("No input transaction %s for txo", $in->tx_in_str);
                 return undef;
             }
+            if (!$in_block_time) {
+                my $in_block = $class_block->best_block($in_block_height) // $class_block->find(height => $in_block_height)
+                    or die "Can't find block height $in_block_height\n";
+                $in_block_time = $in_block->time;
+            }
+            $weight += $in->value * (timeslot($block->time) - timeslot($in_block_time)) / BLOCK_INTERVAL;
         }
     }
     return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight

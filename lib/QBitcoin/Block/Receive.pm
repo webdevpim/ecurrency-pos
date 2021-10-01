@@ -208,6 +208,7 @@ sub receive {
             last if $fail_tx;
             $tx->block_height = $b->height;
             $tx->block_pos = $num;
+            $tx->block_time = $b->time; # needed for calculate stake_weight for this branch
             foreach my $in (@{$tx->in}) {
                 my $txo = $in->{txo};
                 $txo->tx_out = $tx->hash;
@@ -254,6 +255,7 @@ sub receive {
                 foreach my $tx (@{$b1->transactions}) {
                     $tx->block_height = $b1->height;
                     $tx->block_pos = $num++;
+                    $tx->block_time = $b1->time;
                     foreach my $in (@{$tx->in}) {
                         my $txo = $in->{txo};
                         $txo->tx_out = $tx->hash;
