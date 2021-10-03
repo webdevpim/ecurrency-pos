@@ -9,10 +9,9 @@ use lib ("$Bin/../lib", "$Bin/lib");
 use Test::More;
 use Test::MockModule;
 use List::Util qw(sum0);
-use JSON::XS;
 use QBitcoin::Test::ORM;
+use QBitcoin::Test::BlockSerialize;
 use QBitcoin::Const;
-BEGIN { no warnings 'redefine'; *QBitcoin::Const::UPGRADE_POW = sub () { 0 } };
 use QBitcoin::Config;
 use QBitcoin::Peer;
 use QBitcoin::Connection;
@@ -29,39 +28,8 @@ use Bitcoin::Serialized;
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });
 
-sub mock_block_serialize {
-    my $self = shift;
-    varstr(encode_json({
-        time        => $self->time+0,
-        weight      => $self->weight+0,
-        hash        => $self->hash,
-        prev_hash   => $self->prev_hash,
-        tx_hashes   => $self->tx_hashes,
-        merkle_root => $self->merkle_root,
-    }));
-}
-
-sub mock_block_deserialize {
-    my $class = shift;
-    my ($data) = @_;
-    $class->new(decode_json($data->get_string));
-}
-
-my $block_module = Test::MockModule->new('QBitcoin::Block');
-$block_module->mock('self_weight', \&mock_self_weight);
-my $block_hash;
-$block_module->mock('calculate_hash', sub { $block_hash });
-$block_module->mock('serialize', \&mock_block_serialize);
-$block_module->mock('deserialize', \&mock_block_deserialize);
-
 my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => IPV6_V4_PREFIX . pack("C4", split(/\./, "127.0.0.1")));
 my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
-
-sub mock_self_weight {
-    my $self = shift;
-    return $self->{self_weight} //= !defined($self->weight) ? 10 :
-        $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
-}
 
 sub make_tx {
     my ($prev_tx, $fee) = @_;
@@ -97,7 +65,7 @@ sub send_block {
     $block->add_tx($_) foreach @tx;
     $block->merkle_root = $block->calculate_merkle_root();
     my $block_data = $block->serialize;
-    $block_hash = $block->hash;
+    block_hash($block->hash);
     $connection->protocol->cmd_block($block_data);
 }
 
