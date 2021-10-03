@@ -71,7 +71,7 @@ blockchain_synced(1);
 # height, hash, prev_hash, $tx_num, weight [, self_weight]
 send_blocks([ 0, "a0", undef, 0, 50 ]);
 send_blocks(map [ $_, "a$_", "a" . ($_-1), 1, $_*100 ], 1 .. 20);
-$connection->protocol->cmd_ihave(pack("VQ<a32", 20, 20*120-70, "\xaa" x 32));
+$connection->protocol->cmd_ihave(pack("VQ<a32", GENESIS_TIME + 20 * BLOCK_INTERVAL * FORCE_BLOCKS, 20*120-70, "\xaa" x 32));
 send_blocks([ 21, "a21", "a20", 1, 2021 ], [ 5, "b5", "a4", 1, 450 ]);
 send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 6 .. 19);
 

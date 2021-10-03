@@ -400,6 +400,8 @@ sub process_tx {
         return -1 if $height == -1;
         # We've got new block on receive this tx, so we should request new blocks as after usual block receiving
         # It may be the way for set blockchain_synced(1) if it was the best block
+        # But it can produce many unneeded "sendblock" or "getblks" requests, see TODO comment in request_new_block() about it
+        $self->syncing(0);
         $self->request_new_block();
     }
     if ($tx->fee >= 0) {
@@ -429,6 +431,8 @@ sub request_new_block {
         my $best_time = QBitcoin::Block->blockchain_time // 0;
         my $best_block = QBitcoin::Block->best_block;
         my $best_weight = $best_block ? $best_block->weight : -1;
+        # TODO: do not request block(s) if we have block pending for tx with more weight from the same peer,
+        # simple set $self->syncing(1) in this case to avoid many unneeded blocks requests in initial synchronization
         if (($self->has_weight // -1) > $best_weight ||
             (($self->has_weight // -1) == $best_weight && timeslot($self->has_time // 0) > timeslot($best_time))) {
             # Should we request batch blocks if $self->has_weight == $best_weight?
@@ -442,7 +446,7 @@ sub request_new_block {
             else {
                 if (($self->has_weight // -1) > $best_weight) { # otherwise remote may have no such block, no syncing
                     $self->syncing(1);
-                    Debugf("Remote %s have block weight more than our, request block", $self->peer->id);
+                    Debugf("Remote %s has block weight %Lu more than our %Lu, request block", $self->peer->id, $self->has_weight, $best_weight);
                 }
                 $self->send_message("sendblock", $hash // ZERO_HASH);
             }
