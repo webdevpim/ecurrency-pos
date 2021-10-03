@@ -416,7 +416,10 @@ sub free_block {
     my ($block) = @_;
 
     Debugf("Free block %s height %u from memory cache", $block->hash_str, $block->height);
-    $block->prev_block(undef);
+    if ($block->prev_block) {
+        $block->prev_block->next_block(undef);
+        $block->prev_block(undef);
+    }
     $block->next_block(undef);
     delete $block_pool[$block->height]->{$block->hash};
     delete $block_pool{$block->hash};

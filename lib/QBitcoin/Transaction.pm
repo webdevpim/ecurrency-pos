@@ -187,7 +187,7 @@ sub del_from_block {
         }
         elsif ($self->fee < 0) {
             # Stake
-            $self->free();
+            $self->drop();
         }
     }
 }
