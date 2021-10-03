@@ -36,12 +36,6 @@ $transaction_module->mock('deserialize_coinbase', sub { unpack("C", shift->get(1
 my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
 my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
 blockchain_synced(1);
-# height, hash, prev_hash, $tx_num, weight [, self_weight]
-send_blocks([ 0, "a0", undef, 0, 50 ]);
-send_blocks(map [ $_, "a$_", "a" . ($_-1), 1, $_*100 ], 1 .. 20);
-$connection->protocol->cmd_ihave(pack("VQ<a32", 20, 20*120-70, "\xaa" x 32));
-send_blocks([ 5, "b5", "a4", 1, 450 ]);
-send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 6 .. 19);
 
 sub send_blocks {
     my @blocks = @_;
@@ -78,6 +72,13 @@ sub send_blocks {
         $connection->protocol->cmd_block($block_data);
     }
 }
+
+# height, hash, prev_hash, $tx_num, weight [, self_weight]
+send_blocks([ 0, "a0", undef, 0, 50 ]);
+send_blocks(map [ $_, "a$_", "a" . ($_-1), 1, $_*100 ], 1 .. 20);
+$connection->protocol->cmd_ihave(pack("VQ<a32", GENESIS_TIME + 20 * BLOCK_INTERVAL * FORCE_BLOCKS, 20*120-70, "\xaa" x 32));
+send_blocks([ 5, "b5", "a4", 1, 450 ]);
+send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 6 .. 19);
 
 my $height = QBitcoin::Block->blockchain_height;
 my $weight = QBitcoin::Block->best_weight;
