@@ -384,7 +384,6 @@ sub cmd_tx {
         return 0;
     }
     if ($self->process_tx($tx) == -1) {
-        $self->abort("bad_tx_data");
         return -1;
     }
     return 0;
@@ -394,8 +393,10 @@ sub process_tx {
     my $self = shift;
     my ($tx) = @_;
 
-    $tx->receive() == 0
-        or return -1;
+    if ($tx->receive() != 0) {
+        $self->abort("bad_tx_data");
+        return -1;
+    }
     if (defined(my $height = QBitcoin::Block->recv_pending_tx($tx))) {
         return -1 if $height == -1;
         # We've got new block on receive this tx, so we should request new blocks as after usual block receiving

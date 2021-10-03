@@ -117,7 +117,7 @@ send_block(1, "d1", "a0", 190, $tx3);
 send_block(2, "d2", "d1", 290);
 send_block(3, "d3", "d2", 410, $stake_tx2, $test_tx2, $tx3);
 $connection->protocol->cmd_tx($stake_tx2->serialize . $zero_ip);
-is(QBitcoin::Block->best_weight, 400, "revert stake tw once more");
+is(QBitcoin::Block->best_weight, 400, "revert stake tx once more");
 
 # Correct alternative branch
 send_block(1, "z1", "a0", 190, $tx1);
