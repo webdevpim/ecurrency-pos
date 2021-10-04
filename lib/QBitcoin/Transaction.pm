@@ -220,6 +220,10 @@ sub free {
 sub drop {
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my $self = shift;
+    if (!$TRANSACTION{$self->hash}) {
+        Debugf("Attempt to drop not cached transaction %s (already dropped?)", $self->hash_str);
+        return 1;
+    }
     if (defined($self->block_height)) {
         Errf("Attempt to drop confirmed transaction %s, block height %u", $self->hash_str, $self->block_height);
         die "Can't drop confirmed transaction " . $self->hash_str . "\n";
