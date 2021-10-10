@@ -42,6 +42,7 @@ use constant ATTR => qw(
     block_sign_data
     rcvd
     in_raw
+    block_time
 );
 
 mk_accessors(keys %{&FIELDS}, ATTR);
@@ -172,6 +173,7 @@ sub add_to_block {
     my $self = shift;
     my ($block) = @_;
     $self->{blocks}->{$block->hash} = 1;
+    $self->{received_time} //= $block->time; # for transactions loaded from database, they may be unconfirmed and go to mempool
 }
 
 sub del_from_block {
@@ -185,7 +187,7 @@ sub del_from_block {
         }
         elsif ($self->fee < 0) {
             # Stake
-            $self->free();
+            $self->drop();
         }
     }
 }
@@ -218,6 +220,10 @@ sub free {
 sub drop {
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my $self = shift;
+    if (!$TRANSACTION{$self->hash}) {
+        Debugf("Attempt to drop not cached transaction %s (already dropped?)", $self->hash_str);
+        return 1;
+    }
     if (defined($self->block_height)) {
         Errf("Attempt to drop confirmed transaction %s, block height %u", $self->hash_str, $self->block_height);
         die "Can't drop confirmed transaction " . $self->hash_str . "\n";
@@ -752,7 +758,7 @@ sub validate {
 sub valid_for_block {
     my $self = shift;
     my ($block) = @_;
-    ($self->min_tx_time // return -1) <= time_by_height($block->height)
+    ($self->min_tx_time // return -1) <= timeslot($block->time)
         or return -1;
     if ($self->fee < 0) {
         $self->block_sign_data = $block->sign_data;
@@ -802,7 +808,6 @@ sub pre_load {
         $attr->{in}  = \@inputs;
         $attr->{out} = \@outputs;
         $attr->{up}  = $upgrade if $upgrade;
-        $attr->{received_time} = time_by_height($attr->{block_height}); # for possible unconfirm the transaction
     }
     return $attr;
 }
@@ -846,6 +851,7 @@ sub unconfirm {
     Debugf("unconfirm transaction %s (confirmed in block height %u)", $self->hash_str, $self->block_height);
     $self->is_cached or die "unconfirm not cached transaction " . $self->hash_str;
     $self->block_height = undef;
+    $self->block_time = undef;
     $self->block_pos = undef;
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
@@ -872,24 +878,37 @@ sub is_cached {
 
 sub stake_weight {
     my $self = shift;
-    my ($block_height) = @_;
+    my ($block) = @_;
     my $weight = 0;
     if ($self->fee < 0) {
         my $class = ref $self;
+        my $class_block = ref $block;
         foreach my $in (map { $_->{txo} } @{$self->in}) {
-            if (my $in_block_height = $class->check_by_hash($in->tx_in)) {
-                if ($in_block_height < 0) {
+            my $in_block_time;
+            my $in_block_height;
+            if (my $tx_in = $class->get($in->tx_in)) {
+                # block_time may be differ from the time of the best block with block_height if we're checking alternative branch
+                $in_block_time = $tx_in->block_time;
+                if (!defined($in_block_height = $tx_in->block_height)) {
                     Warningf("Can't get stake_weight for %s with unconfirmed input %s:%u",
                         $self->hash_str, $in->tx_in_str, $in->num);
                     return undef;
                 }
-                $weight += $in->value * ($block_height - $in_block_height);
+            }
+            elsif (my ($tx_hashref) = $class->fetch(hash => $in->tx_in)) {
+                $in_block_height = $tx_hashref->{block_height};
             }
             else {
                 # tx generated this txo should be loaded during tx validation
                 Warningf("No input transaction %s for txo", $in->tx_in_str);
                 return undef;
             }
+            if (!$in_block_time) {
+                my $in_block = $class_block->best_block($in_block_height) // $class_block->find(height => $in_block_height)
+                    or die "Can't find block height $in_block_height\n";
+                $in_block_time = $in_block->time;
+            }
+            $weight += $in->value * (timeslot($block->time) - timeslot($in_block_time)) / BLOCK_INTERVAL;
         }
     }
     return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
@@ -897,14 +916,14 @@ sub stake_weight {
 
 sub coinbase_weight {
     my $self = shift;
-    my ($block_height) = @_;
+    my ($block_time) = @_;
     my $weight = 0;
     if (my $coinbase = $self->up) {
         # Early confirmation should have more weight than later
-        my $base_height = height_by_time($coinbase->btc_confirm_time);
-        my $virtual_height = height_by_time($coinbase->btc_confirm_time - COINBASE_WEIGHT_TIME); # MB negative, it's ok
-        $weight = $coinbase->value * ($base_height - $virtual_height);
-        $weight *= ($base_height - $virtual_height) / ($block_height - $virtual_height);
+        my $base_time = timeslot($coinbase->btc_confirm_time);
+        my $virtual_time = timeslot($coinbase->btc_confirm_time - COINBASE_WEIGHT_TIME); # MB negative, it's ok
+        $weight = $coinbase->value * ($base_time - $virtual_time) / BLOCK_INTERVAL;
+        $weight *= ($base_time - $virtual_time) / (timeslot($block_time) - $virtual_time);
     }
     return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
 }

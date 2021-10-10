@@ -33,7 +33,7 @@ my %TXO;
 
 sub key {
     my $self = shift;
-    return $self->tx_in . $self->num;
+    return $self->tx_in . pack("v", $self->num);
 }
 
 sub save {
@@ -65,7 +65,7 @@ sub save_all {
 sub get {
     my $class = shift;
     my ($in) = @_;
-    return $TXO{$in->{tx_out} . $in->{num}};
+    return $TXO{$in->{tx_out} . pack("v", $in->{num})};
 }
 
 # Create new transaction output, it cannot be already cached
@@ -143,7 +143,7 @@ sub DESTROY {
     # Compare pointers to avoid removing from the cache by destroy unlinked object
     if ($self->tx_in) {
         my $key = $self->key;
-        my $cached = $TXO{$self->tx_in};
+        my $cached = $TXO{$key};
         if ($TXO{$key} && refaddr($self) == refaddr($TXO{$key})) {
             delete $TXO{$key};
         }

@@ -14,7 +14,7 @@ use Role::Tiny; # This is role for QBitcoin::Block;
 
 # @block_pool - array (by height) of hashes, block by block->hash
 # @best_block - pointers to blocks in the main branch
-# @descendant - list of block descendants (including pending), as $descendant[$height]->{$prev_hash}->{$hash}
+# %descendant - list of block descendants (including pending), as $descendant{$prev_hash}->{$hash}
 
 # Each block has attributes:
 # - self_weight - weight calculated by the block contents
@@ -26,15 +26,16 @@ use Role::Tiny; # This is role for QBitcoin::Block;
 # request the ancestor and do not switch the best branch until we have completely linked branch and verify its weight
 
 my @block_pool;
+my %block_pool;
 my @best_block;
-my @descendant;
+my %descendant;
 my $HEIGHT;
 my $MIN_INCORE_HEIGHT;
 
 END {
     # free structures
     undef @best_block;
-    undef @descendant;
+    undef %descendant;
     undef @block_pool;
 };
 
@@ -46,10 +47,15 @@ sub blockchain_height {
     return $HEIGHT;
 }
 
+sub blockchain_time {
+    return defined($HEIGHT) ? timeslot($best_block[$HEIGHT]->time) : 0;
+}
+
 sub best_block {
     my $class = shift;
     my ($block_height) = @_;
-    return $best_block[$block_height];
+    $block_height //= $HEIGHT;
+    return defined($block_height) ? $best_block[$block_height] : undef;
 }
 
 sub min_incore_height {
@@ -63,36 +69,40 @@ sub max_incore_height {
 sub to_cache {
     my $self = shift;
     $block_pool[$self->height]->{$self->hash} = $self;
+    $block_pool{$self->hash} = $self;
     $self->add_as_descendant();
     $MIN_INCORE_HEIGHT = $self->height if !defined($MIN_INCORE_HEIGHT) || $MIN_INCORE_HEIGHT > $self->height;
 }
 
 sub add_as_descendant {
     my $self = shift;
-    $descendant[$self->height]->{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
+    $descendant{$self->prev_hash}->{$self->hash} = $self if $self->prev_hash;
 }
 
 sub del_as_descendant {
     my $self = shift;
-    delete $descendant[$self->height]->{$self->prev_hash}->{$self->hash} if $self->prev_hash;
+    if ($self->prev_hash) {
+        delete $descendant{$self->prev_hash}->{$self->hash};
+        delete $descendant{$self->prev_hash} unless %{$descendant{$self->prev_hash}};
+    }
 }
 
 sub descendants {
     my $self = shift;
-    return $descendant[$self->height+1] && $descendant[$self->height+1]->{$self->hash} ? values %{$descendant[$self->height+1]->{$self->hash}} : ();
+    return $descendant{$self->hash} ? values %{$descendant{$self->hash}} : ();
 }
 
 sub block_pool {
     my $class = shift;
-    my ($block_height, $hash) = @_;
-    return $block_pool[$block_height]->{$hash};
+    my ($hash) = @_;
+    return $block_pool{$hash};
 }
 
 sub receive {
     my $self = shift;
     my ($loaded) = @_;
 
-    return 0 if $block_pool[$self->height]->{$self->hash};
+    return 0 if $block_pool{$self->hash};
     if (my $err = $self->validate()) {
         Warningf("Incorrect block %s from %s: %s", $self->hash_str, $self->received_from ? $self->received_from->peer->id : "me", $err);
         # Incorrect block
@@ -100,7 +110,6 @@ sub receive {
         # Drop descendants, it's not possible to receive correct block with the same hash
         $self->free_block();
         if ($self->received_from) {
-            $self->received_from->peer->decrease_reputation();
             if ($self->received_from->connection) {
                 $self->received_from->abort("invalid_block");
             }
@@ -199,6 +208,7 @@ sub receive {
             last if $fail_tx;
             $tx->block_height = $b->height;
             $tx->block_pos = $num;
+            $tx->block_time = $b->time; # needed for calculate stake_weight for this branch
             foreach my $in (@{$tx->in}) {
                 my $txo = $in->{txo};
                 $txo->tx_out = $tx->hash;
@@ -245,6 +255,7 @@ sub receive {
                 foreach my $tx (@{$b1->transactions}) {
                     $tx->block_height = $b1->height;
                     $tx->block_pos = $num++;
+                    $tx->block_time = $b1->time;
                     foreach my $in (@{$tx->in}) {
                         my $txo = $in->{txo};
                         $txo->tx_out = $tx->hash;
@@ -258,7 +269,6 @@ sub receive {
             }
             $b->drop_branch();
             if ($self->received_from) {
-                $self->received_from->peer->decrease_reputation();
                 if ($self->received_from->connection) {
                     $self->received_from->abort("incorrect_block");
                 }
@@ -291,7 +301,6 @@ sub receive {
     }
 
     if (defined($HEIGHT) && $new_best->height <= $HEIGHT) {
-        QBitcoin::Generate::Control->generate_new() if $new_best->height < $HEIGHT;
         Debugf("%s block height %u hash %s, best branch altered, weight %Lu, %u transactions",
             $self->received_from ? "received" : "loaded", $self->height,
             $self->hash_str, $self->weight, scalar(@{$self->transactions}));
@@ -302,9 +311,15 @@ sub receive {
             $self->hash_str, $self->weight, scalar(@{$self->transactions}));
     }
 
-    if (blockchain_synced() && ($self->received_from || time() >= time_by_height($self->height))) {
-        # Do not announce old blocks loaded from the local database or generated
-        $self->announce_to_peers();
+    if (blockchain_synced()) {
+        my $timeslot = timeslot(time());
+        if ($timeslot > timeslot($new_best->time)) {
+            QBitcoin::Generate::Control->generate_new();
+        }
+        if ($self->received_from || timeslot($self->time) >= $timeslot) {
+            # Do not announce old blocks loaded from the local database or generated
+            $self->announce_to_peers();
+        }
     }
 
     if (defined($HEIGHT) && $self->height < $HEIGHT) {
@@ -312,23 +327,30 @@ sub receive {
             delete $best_block[$n];
         }
         $HEIGHT = $self->height;
-        blockchain_synced(0) unless $config->{genesis};
     }
 
     if ($self->height > ($HEIGHT // -1)) {
         # It's the first block in this level
         # Store and free old level (if it's in the best branch)
         $HEIGHT = $self->height;
-        $self->check_synced();
-        for (my $level = QBitcoin::Block->max_db_height + 1; $level <= $HEIGHT - INCORE_LEVELS; $level++) {
-            $best_block[$level]->store();
-        }
         if ($HEIGHT >= INCORE_LEVELS) {
-            cleanup_old_blocks();
+            my $class = ref($self);
+            $class->cleanup_old_blocks();
         }
     }
 
     return 0;
+}
+
+sub store_blocks {
+    my $class = shift;
+    defined($HEIGHT) or return;
+    my $time = time();
+    for (my $level = QBitcoin::Block->max_db_height + 1; $level <= $HEIGHT; $level++) {
+        if ($time - $best_block[$level]->time >= INCORE_TIME) {
+            $best_block[$level]->store();
+        }
+    }
 }
 
 sub want_cleanup_branch {
@@ -355,7 +377,10 @@ sub want_cleanup_branch {
 }
 
 sub cleanup_old_blocks {
+    my $class = shift;
     my $first_free_height = $HEIGHT - INCORE_LEVELS;
+    my $max_db_height = $class->max_db_height;
+    $first_free_height = $max_db_height if $first_free_height > $max_db_height;
     for (my $free_height = $MIN_INCORE_HEIGHT; $free_height <= $first_free_height; $free_height++) {
         if ($free_height < $first_free_height) {
             foreach my $b (values %{$block_pool[$free_height+1]}) {
@@ -381,7 +406,6 @@ sub cleanup_old_blocks {
         elsif (%{$block_pool[$free_height]}) {
             last;
         }
-        delete $descendant[$free_height];
         delete $block_pool[$free_height];
         Debugf("Level %u cleared", $free_height);
         $MIN_INCORE_HEIGHT++;
@@ -392,9 +416,13 @@ sub free_block {
     my ($block) = @_;
 
     Debugf("Free block %s height %u from memory cache", $block->hash_str, $block->height);
-    $block->prev_block(undef);
+    if ($block->prev_block) {
+        $block->prev_block->next_block(undef);
+        $block->prev_block(undef);
+    }
     $block->next_block(undef);
     delete $block_pool[$block->height]->{$block->hash};
+    delete $block_pool{$block->hash};
     $block->del_as_descendant();
     foreach my $tx (@{$block->transactions}) {
         $tx->del_from_block($block);
@@ -425,6 +453,7 @@ sub prev_block {
         if ($_[0]) {
             $_[0]->hash eq $self->prev_hash
                 or die "Incorrect block linking";
+            $self->{height} //= $_[0]->height + 1;
             return $self->{prev_block} = $_[0];
         }
         else {
@@ -434,9 +463,10 @@ sub prev_block {
         }
     }
     return $self->{prev_block} if exists $self->{prev_block}; # undef means we have no such block
-    return undef unless $self->height; # genesis block has no ancestors
-    if (my $prev_block = $block_pool[$self->height-1]->{$self->prev_hash}) {
+    return undef unless $self->prev_hash; # genesis block has no ancestors
+    if (my $prev_block = $block_pool{$self->prev_hash}) {
         $self->{prev_block} = $prev_block;
+        $self->{height} = $prev_block->height + 1;
     }
     return $self->{prev_block};
 }
@@ -444,28 +474,16 @@ sub prev_block {
 sub prev_block_load {
     my $self = shift;
     return $self->{prev_block} if exists $self->{prev_block}; # undef means we have no such block
-    return undef unless $self->height; # genesis block has no ancestors
+    return undef unless $self->prev_hash; # genesis block has no ancestors
     return $self->{prev_block} if $self->prev_block; # exists in block_pool
     my $class = ref($self);
     if (my $prev_block = $class->find(hash => $self->prev_hash)) {
         $prev_block->to_cache;
         $best_block[$prev_block->height] = $prev_block;
         $self->{prev_block} = $prev_block;
+        $self->{height} = $prev_block->height + 1;
     }
     return $self->{prev_block};
-}
-
-# Call after successful block receive, best or not
-sub check_synced {
-    my $self = shift;
-    # Is it OK to synchronize and request mempool from incoming peer?
-    if ($self->received_from && $HEIGHT >= height_by_time(time()) && !blockchain_synced()) {
-        Infof("Blockchain is synced");
-        blockchain_synced(1);
-        if (!mempool_synced()) {
-            $self->received_from->request_mempool();
-        }
-    }
 }
 
 sub announce_to_peers {

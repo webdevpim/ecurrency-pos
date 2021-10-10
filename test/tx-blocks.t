@@ -9,14 +9,15 @@ use lib ("$Bin/../lib", "$Bin/lib");
 use Test::More;
 use Test::MockModule;
 use List::Util qw(sum0);
-use JSON::XS;
 use QBitcoin::Test::ORM;
+use QBitcoin::Test::BlockSerialize;
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Peer;
 use QBitcoin::Connection;
 use QBitcoin::Block;
 use QBitcoin::Transaction;
+use QBitcoin::ProtocolState qw(blockchain_synced);
 use QBitcoin::TXO;
 use QBitcoin::Generate;
 use QBitcoin::Crypto qw(hash160);
@@ -27,31 +28,6 @@ use Bitcoin::Serialized;
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });
 
-sub mock_block_serialize {
-    my $self = shift;
-    varstr(encode_json({
-        height      => $self->height+0,
-        weight      => $self->weight+0,
-        hash        => $self->hash,
-        prev_hash   => $self->prev_hash,
-        tx_hashes   => $self->tx_hashes,
-        merkle_root => $self->merkle_root,
-    }));
-}
-
-sub mock_block_deserialize {
-    my $class = shift;
-    my ($data) = @_;
-    $class->new(decode_json($data->get_string));
-}
-
-my $block_module = Test::MockModule->new('QBitcoin::Block');
-$block_module->mock('self_weight', \&mock_self_weight);
-my $block_hash;
-$block_module->mock('calculate_hash', sub { $block_hash });
-$block_module->mock('serialize', \&mock_block_serialize);
-$block_module->mock('deserialize', \&mock_block_deserialize);
-
 my $transaction_module = Test::MockModule->new('QBitcoin::Transaction');
 $transaction_module->mock('validate_coinbase', sub { 0 });
 $transaction_module->mock('coins_created', sub { $_[0]->{coins_created} //= @{$_[0]->in} ? 0 : sum0(map { $_->value } @{$_[0]->out}) });
@@ -60,12 +36,7 @@ $transaction_module->mock('deserialize_coinbase', sub { unpack("C", shift->get(1
 
 my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
 my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
-
-sub mock_self_weight {
-    my $self = shift;
-    return $self->{self_weight} //= !defined($self->weight) ? 10 :
-        $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
-}
+blockchain_synced(1);
 
 sub make_tx {
     state $value = 10;
@@ -85,7 +56,7 @@ sub make_tx {
 sub send_block {
     my ($height, $hash, $prev_hash, $weight, $tx) = @_;
     my $block = QBitcoin::Block->new(
-        height       => $height,
+        time         => GENESIS_TIME + $height * BLOCK_INTERVAL * FORCE_BLOCKS,
         hash         => $hash,
         prev_hash    => $prev_hash,
         transactions => [ $tx ],
@@ -94,7 +65,7 @@ sub send_block {
     $block->add_tx($tx);
     $block->merkle_root = $block->calculate_merkle_root();
     my $block_data = $block->serialize;
-    $block_hash = $block->hash;
+    block_hash($block->hash);
     $connection->protocol->cmd_block($block_data);
 }
 
@@ -104,8 +75,8 @@ send_block(0, "a0", undef, 50, make_tx);
 send_block($_, "a$_", "a" . ($_-1), $_*100, make_tx) foreach (1 .. 10);
 send_block(11, "a11", "a10", 1100, $test_tx);
 send_block(11, "b11", "a10", 1150, make_tx);
-$block_hash = "b12";
-QBitcoin::Generate->generate(12);
+block_hash("b12");
+QBitcoin::Generate->generate(GENESIS_TIME + 12 * BLOCK_INTERVAL * FORCE_BLOCKS);
 send_block($_, "b$_", "b" . ($_-1), $_*100+50, make_tx) foreach (13 .. 20);
 
 my $height = QBitcoin::Block->blockchain_height;

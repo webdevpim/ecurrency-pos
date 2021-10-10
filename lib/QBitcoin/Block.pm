@@ -19,6 +19,7 @@ use constant PRIMARY_KEY => 'height';
 
 use constant FIELDS => {
     height      => NUMERIC,
+    time        => NUMERIC,
     hash        => BINARY,
     prev_hash   => BINARY,
     merkle_root => BINARY,
@@ -46,7 +47,7 @@ sub self_weight {
     my $self = shift;
     if (!defined $self->{self_weight}) {
         if (@{$self->transactions}) {
-            if (defined(my $stake_weight = $self->transactions->[0]->stake_weight($self->height))) {
+            if (defined(my $stake_weight = $self->transactions->[0]->stake_weight($self))) {
                 $self->{self_weight} = $stake_weight + @{$self->transactions};
                 # coinbase increases block weight
                 foreach my $transaction (@{$self->transactions}) {
@@ -54,7 +55,7 @@ sub self_weight {
                         last if $transaction->fee >= 0;
                         next;
                     }
-                    $self->{self_weight} += $transaction->coinbase_weight($self->height);
+                    $self->{self_weight} += $transaction->coinbase_weight($self->time);
                 }
             }
             # otherwise we have unknown input in stake transaction; return undef and calculate next time

@@ -119,6 +119,10 @@ sub main_loop {
         QBitcoin::Generate->load_utxo();
     }
 
+    if ($config->{genesis} && !QBitcoin::Block->blockchain_time) {
+        QBitcoin::Generate->generate(GENESIS_TIME);
+    }
+
     my $listen_socket = $class->bind_addr;
     my $listen_rpc    = $class->bind_rpc_addr;
     my $listen_rest   = $class->bind_rest_addr;
@@ -133,19 +137,21 @@ sub main_loop {
         my $timeout = SELECT_TIMEOUT;
         if (mempool_synced() && blockchain_synced()) {
             QBitcoin::Transaction->cleanup_mempool();
+            QBitcoin::Block->store_blocks();
             QBitcoin::Produce->produce() if $config->{produce};
             if ($config->{generate}) {
-                my $now = Time::HiRes::time();
-                my $blockchain_height = QBitcoin::Block->blockchain_height // -1;
-                my $time_next_block = time_by_height($blockchain_height + 1);
-                if ($now + $timeout > $time_next_block) {
-                    $timeout = $time_next_block > $now ? $time_next_block - $now : 0;
+                my $time = time();
+                my $generated_time = QBitcoin::Generate->generated_time;
+                if (!$generated_time || timeslot($time) > timeslot($generated_time)) {
+                    QBitcoin::Generate->generate($time);
                 }
-                my $generated_height = QBitcoin::Generate->generated_height;
-                if (!$generated_height || $now >= time_by_height($generated_height + 1)) {
-                    QBitcoin::Generate->generate($now >= $time_next_block ? $blockchain_height + 1 : $blockchain_height);
-                }
+
+                my $now = Time::HiRes::time(); # generate() takes some time, get new timestamp
+                my $blockchain_time = QBitcoin::Block->blockchain_time // 0;
+                my $time_next_block = timeslot($blockchain_time > $now ? $blockchain_time : $now) + BLOCK_INTERVAL;
+                $timeout = $time_next_block - $now;
             }
+            Debugf("Have blockchain height %d, last block time %s, weight %u", QBitcoin::Block->blockchain_height // -1, scalar(localtime QBitcoin::Block->blockchain_time), QBitcoin::Block->best_weight);
         }
         $rin = $win = $ein = '';
         vec($rin, fileno($listen_socket), 1) = 1 if $listen_socket;

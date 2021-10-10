@@ -10,7 +10,6 @@ use QBitcoin::Crypto qw(checksum32);
 
 use constant ATTR => qw(
     greeted
-    has_weight
     syncing
     command
     ping_sent

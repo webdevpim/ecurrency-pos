@@ -8,51 +8,20 @@ use lib ("$Bin/../lib", "$Bin/lib");
 
 use Test::More;
 use Test::MockModule;
-use JSON::XS;
 use QBitcoin::Test::ORM;
+use QBitcoin::Test::BlockSerialize;
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Peer;
 use QBitcoin::Connection;
 use QBitcoin::Block;
+use QBitcoin::ProtocolState qw(blockchain_synced);
 use Bitcoin::Serialized;
 
 #$config->{debug} = 1;
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });
-
-sub mock_block_serialize {
-    my $self = shift;
-    varstr(encode_json({
-        height       => $self->height+0,
-        weight       => $self->weight+0,
-        hash         => $self->hash,
-        prev_hash    => $self->prev_hash,
-        tx_hashes    => $self->tx_hashes,
-        merkle_root  => $self->merkle_root,
-    }));
-}
-
-sub mock_block_deserialize {
-    my $class = shift;
-    my ($data) = @_;
-    $class->new(decode_json($data->get_string));
-}
-
-my $block_module = Test::MockModule->new('QBitcoin::Block');
-$block_module->mock('self_weight', \&mock_self_weight);
-$block_module->mock('find', sub {});
-$block_module->mock('serialize', \&mock_block_serialize);
-$block_module->mock('deserialize', \&mock_block_deserialize);
-my $block_hash;
-$block_module->mock('calculate_hash', sub { $block_hash });
-
-sub mock_self_weight {
-    my $self = shift;
-    return $self->{self_weight} //=
-        $self->prev_block ? $self->weight - $self->prev_block->weight : $self->weight;
-}
 
 # parent process accept and check results; child execute subchilds and wait them
 pipe my $rh, my $wh;
@@ -120,9 +89,11 @@ sub send_blocks {
         # child
         my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => "127.0.0.1");
         my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
+        $connection->protocol->command = "block";
+        blockchain_synced(1); # for save blocks with unknown ancestors
         foreach my $block_data (@$blocks) {
             my $block = QBitcoin::Block->new(
-                height       => $block_data->[0],
+                time         => GENESIS_TIME + $block_data->[0] * BLOCK_INTERVAL * FORCE_BLOCKS,
                 hash         => $block_data->[1],
                 prev_hash    => $block_data->[2],
                 weight       => $block_data->[3],
@@ -131,7 +102,7 @@ sub send_blocks {
                 transactions => [],
             );
             my $block_data = $block->serialize;
-            $block_hash = $block->hash;
+            block_hash($block->hash);
             $connection->protocol->cmd_block($block_data);
         }
         my $height = QBitcoin::Block->blockchain_height;
