@@ -499,9 +499,11 @@ sub request_blocks {
         };
         push @height, 0 if @height < 32;
         @blocks = QBitcoin::Block->find(-sortby => 'height DESC', height => \@height);
-        push @locators, map { $_->hash } @blocks;
-        $low_time = timeslot($blocks[-1]->time)-1 if @blocks;
-        $low_height = $blocks[-1]->height;
+        if (@blocks) {
+            push @locators, map { $_->hash } @blocks;
+            $low_time = timeslot($blocks[-1]->time)-1;
+            $low_height = $blocks[-1]->height;
+        }
         Debugf("Request batch blocks before time %s, locators height %u .. %u", $low_time, $low_height, $top_height);
     }
     else {
