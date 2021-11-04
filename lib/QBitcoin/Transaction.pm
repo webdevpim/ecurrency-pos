@@ -147,7 +147,7 @@ sub add_pending_tx {
     my ($tx) = @_;
 
     if ($self->{input_pending} && (my $tx_in = delete $self->{input_pending}->{$tx->hash})) {
-        foreach my $in (values %$tx_in) {
+        foreach my $in (grep { defined($_) } values %$tx_in) {
             my $txo = QBitcoin::TXO->get($in);
             if (!$txo) {
                 Warningf("Transaction %s has no output %u for tx %s input",
@@ -595,6 +595,7 @@ sub load_inputs {
 
     my @loaded_inputs;
     my @need_load_txo;
+    my %unknown_inputs;
     my $inputs = delete $self->{in_raw};
     foreach my $in (@$inputs) {
         if (my $txo = QBitcoin::TXO->get($in)) {
@@ -606,13 +607,17 @@ sub load_inputs {
                 txo     => $txo,
                 siglist => $in->{siglist},
             };
+            if ($PENDING_TX_INPUT{$in->{tx_out}}) {
+                Infof("input %s:%u is pending in transaction %s",
+                    $self->hash_str($in->{tx_out}), $in->{num}, $self->hash_str);
+                $unknown_inputs{$in->{tx_out}}->{$in->{num}} = undef;
+            }
         }
         else {
             push @need_load_txo, $in;
         }
     }
 
-    my %unknown_inputs;
     if (@need_load_txo) {
         # var @txo here needed to prevent free txo objects as unused just after load
         my @txo = QBitcoin::TXO->load(@need_load_txo);
