@@ -8,20 +8,17 @@ use lib ("$Bin/../lib", "$Bin/lib");
 
 use Test::More;
 use Test::MockModule;
-use List::Util qw(sum0);
 use QBitcoin::Test::ORM;
 use QBitcoin::Test::BlockSerialize;
+use QBitcoin::Test::MakeTx;
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Peer;
 use QBitcoin::Connection;
+use QBitcoin::Protocol;
 use QBitcoin::Block;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
-use QBitcoin::Generate;
-use QBitcoin::Crypto qw(hash160);
-use QBitcoin::Script::OpCodes qw(:OPCODES);
-use Bitcoin::Serialized;
 
 #$config->{debug} = 1;
 
@@ -30,28 +27,6 @@ $protocol_module->mock('send_message', sub { 1 });
 
 my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => IPV6_V4_PREFIX . pack("C4", split(/\./, "127.0.0.1")));
 my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
-
-sub make_tx {
-    my ($prev_tx, $fee) = @_;
-    state $value = 10;
-    state $tx_num = 1;
-    my $val = $prev_tx ? $prev_tx->out->[0]->value : $value;
-    $fee //= 0;
-    my @out;
-    my @in;
-    push @in, { txo => $prev_tx->out->[0], siglist => [] } if $prev_tx;
-    my $script = OP_1;
-    my $out = QBitcoin::TXO->new_txo( value => $val - $fee, scripthash => hash160($script), redeem_script => $script, num => 0 );
-    my $tx = QBitcoin::Transaction->new(
-        out => [ $out ],
-        in  => \@in,
-        $prev_tx ? () : ( coins_created => $val ),
-    );
-    $value += 10;
-    $tx_num++;
-    $out->tx_in = $tx->calculate_hash;
-    return $tx;
-}
 
 sub send_block {
     my ($height, $hash, $prev_hash, $weight, @tx) = @_;

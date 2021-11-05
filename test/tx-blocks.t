@@ -11,17 +11,17 @@ use Test::MockModule;
 use List::Util qw(sum0);
 use QBitcoin::Test::ORM;
 use QBitcoin::Test::BlockSerialize;
+use QBitcoin::Test::MakeTx;
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Peer;
 use QBitcoin::Connection;
+use QBitcoin::Protocol;
 use QBitcoin::Block;
 use QBitcoin::Transaction;
 use QBitcoin::ProtocolState qw(blockchain_synced);
 use QBitcoin::TXO;
 use QBitcoin::Generate;
-use QBitcoin::Crypto qw(hash160);
-use Bitcoin::Serialized;
 
 #$config->{debug} = 1;
 
@@ -38,17 +38,8 @@ my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
 my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
 blockchain_synced(1);
 
-sub make_tx {
-    state $value = 10;
-    state $tx_num = 1;
-    my $tx = QBitcoin::Transaction->new(
-        out           => [ QBitcoin::TXO->new_txo( value => $value, scripthash => hash160("txo_$tx_num") ) ],
-        in            => [],
-        coins_created => $value,
-    );
-    $value += 10;
-    $tx_num++;
-    $tx->calculate_hash;
+sub send_tx {
+    my $tx = make_tx();
     $connection->protocol->cmd_tx($tx->serialize . "\x00"x16);
     return $tx;
 }
@@ -69,15 +60,15 @@ sub send_block {
     $connection->protocol->cmd_block($block_data);
 }
 
-my $test_tx = make_tx;
+my $test_tx = send_tx();
 # height, hash, prev_hash, weight, $tx
-send_block(0, "a0", undef, 50, make_tx);
-send_block($_, "a$_", "a" . ($_-1), $_*100, make_tx) foreach (1 .. 10);
+send_block(0, "a0", undef, 50, send_tx());
+send_block($_, "a$_", "a" . ($_-1), $_*100, send_tx()) foreach (1 .. 10);
 send_block(11, "a11", "a10", 1100, $test_tx);
-send_block(11, "b11", "a10", 1150, make_tx);
+send_block(11, "b11", "a10", 1150, send_tx());
 block_hash("b12");
 QBitcoin::Generate->generate(GENESIS_TIME + 12 * BLOCK_INTERVAL * FORCE_BLOCKS);
-send_block($_, "b$_", "b" . ($_-1), $_*100+50, make_tx) foreach (13 .. 20);
+send_block($_, "b$_", "b" . ($_-1), $_*100+50, send_tx()) foreach (13 .. 20);
 
 my $height = QBitcoin::Block->blockchain_height;
 my $weight = QBitcoin::Block->best_weight;

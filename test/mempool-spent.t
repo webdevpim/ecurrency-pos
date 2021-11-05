@@ -1,24 +1,22 @@
 #! /usr/bin/env perl
 use warnings;
 use strict;
-use feature 'state';
 
 use FindBin '$Bin';
 use lib ("$Bin/../lib", "$Bin/lib");
 
-use List::Util qw(sum sum0);
+use List::Util qw(sum0);
 use Test::More;
 use Test::MockModule;
 use QBitcoin::Test::ORM;
+use QBitcoin::Test::MakeTx;
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
 use QBitcoin::Peer;
 use QBitcoin::Connection;
-use QBitcoin::Protocol;
 use QBitcoin::Mempool;
-use QBitcoin::Crypto qw(hash160);
 
 #$config->{debug} = 1;
 
@@ -33,34 +31,18 @@ $transaction_module->mock('deserialize_coinbase', sub { unpack("C", shift->get(1
 my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
 my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
 
-sub make_tx {
-    my @in = @_;
-    state $value = 10;
-    state $tx_num = 1;
-    my $out_value = @in ? sum(map { $_->value } @in) : $value;
-    $_->{redeem_script} = "open_ " . $_->value foreach @in;
-    my $tx = QBitcoin::Transaction->new(
-        out => [ QBitcoin::TXO->new_txo( value => $out_value, scripthash => hash160("open_$out_value") ) ],
-        in  => [ map +{ txo => $_, siglist => [] }, @in ],
-        @in ? () : ( coins_created => $out_value ),
-    );
-    $value += 10;
-    $tx_num++;
-    $tx->calculate_hash;
-    my $num = 0;
-    foreach my $out (@{$tx->out}) {
-        $out->tx_in = $tx->hash;
-        $out->num = $num++;
-    }
+sub send_tx {
+    my @prev_tx = @_;
+    my $tx = make_tx(\@prev_tx);
     $connection->protocol->command = "tx";
     $connection->protocol->cmd_tx($tx->serialize . "\x00"x16);
     return QBitcoin::Transaction->get($tx->hash);
 }
 
-my $tx1 = make_tx();
-my $tx2 = make_tx();
-my $tx3 = make_tx($tx1->out->[0]);
-my $tx4 = make_tx($tx2->out->[0], $tx3->out->[0]);
+my $tx1 = send_tx();
+my $tx2 = send_tx();
+my $tx3 = send_tx($tx1);
+my $tx4 = send_tx($tx2, $tx3);
 
 # Set $tx1 as spent confirmed
 $tx1->block_height = 12;
