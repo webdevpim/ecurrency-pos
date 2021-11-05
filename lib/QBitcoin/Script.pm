@@ -273,9 +273,9 @@ sub pushdatac($$$) {
     return undef;
 }
 
-sub cmd_pushdata1 { pushdatac(1, "C", @_) }
-sub cmd_pushdata2 { pushdatac(2, "v", @_) }
-sub cmd_pushdata4 { pushdatac(4, "V", @_) }
+sub cmd_pushdata1 { pushdatac(1, "C", $_[0]) }
+sub cmd_pushdata2 { pushdatac(2, "v", $_[0]) }
+sub cmd_pushdata4 { pushdatac(4, "V", $_[0]) }
 
 sub cmd_return($) {
     my ($state) = @_;
