@@ -468,7 +468,8 @@ sub request_new_block {
 sub request_blocks {
     my $self = shift;
     my ($top_time) = @_;
-    $top_time //= 0;
+    my $low_time = $top_time // 0;
+    $top_time ||= time();
     my @blocks;
     for (my $height = QBitcoin::Block->blockchain_height // -1; $height >= 0; $height--) {
         last if $height <= QBitcoin::Block->blockchain_height - INCORE_LEVELS;
@@ -480,10 +481,9 @@ sub request_blocks {
         }
     }
     if (@blocks < 10) {
-        push @blocks, QBitcoin::Block->find(time => { '<=' => $top_time || time() }, -sortby => 'height DESC', -limit => 10 - @blocks);
+        push @blocks, QBitcoin::Block->find(time => { '<=' => $top_time }, -sortby => 'height DESC', -limit => 10 - @blocks);
     }
     my @locators = map { $_->hash } @blocks;
-    my $low_time = $top_time;
     if (@locators) {
         $low_time = timeslot($blocks[-1]->time)-1;
         my $top_height = $blocks[0]->height;
@@ -504,10 +504,10 @@ sub request_blocks {
             $low_time = timeslot($blocks[-1]->time)-1;
             $low_height = $blocks[-1]->height;
         }
-        Debugf("Request batch blocks before time %s, locators height %u .. %u", $low_time, $low_height, $top_height);
+        Debugf("Request batch blocks before time %u, locators height %u .. %u", $low_time, $low_height, $top_height);
     }
     else {
-        Debugf("Request batch blocks before time %s", $low_time);
+        Debugf("Request batch blocks before time %u", $low_time);
     }
     $self->send_message("getblks", pack("Vv", $low_time, scalar(@locators)) . join("", @locators));
 }
@@ -614,7 +614,7 @@ sub cmd_ihave {
         return 0;
     }
     if ($weight < ($self->has_weight // -1)) {
-        Warningf("Remote %s decreases weight %u => %u", $self->has_weight, $weight);
+        Warningf("Remote %s decreases weight %Lu => %Lu", $self->has_weight, $weight);
         $self->syncing(0); # prevent blocking connection on infinite wait
     }
     $self->has_weight = $weight;
