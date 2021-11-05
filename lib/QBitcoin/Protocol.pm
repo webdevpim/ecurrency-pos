@@ -401,7 +401,7 @@ sub process_tx {
         return -1 if $height == -1;
         # We've got new block on receive this tx, so we should request new blocks as after usual block receiving
         # It may be the way for set blockchain_synced(1) if it was the best block
-        # But it can produce many unneeded "sendblock" or "getblks" requests, see TODO comment in request_new_block() about it
+        # But it can produce many unneeded "sendblock" or "getblks" requests, see comment in request_new_block() about it
         $self->syncing(0);
         $self->request_new_block();
     }
@@ -432,8 +432,16 @@ sub request_new_block {
         my $best_time = QBitcoin::Block->blockchain_time // 0;
         my $best_block = QBitcoin::Block->best_block;
         my $best_weight = $best_block ? $best_block->weight : -1;
-        # TODO: do not request block(s) if we have block pending for tx with more weight from the same peer,
+        # Do not request block(s) if we have block pending for tx with more weight from the same peer,
         # simple set $self->syncing(1) in this case to avoid many unneeded blocks requests in initial synchronization
+        if ($best_block && !$hash) {
+            foreach my $descendant ($best_block->descendants) {
+                if ($descendant->received_from && $descendant->received_from->peer->id eq $self->peer->id) {
+                    $self->syncing(1);
+                    return;
+                }
+            }
+        }
         if (($self->has_weight // -1) > $best_weight ||
             (($self->has_weight // -1) == $best_weight && timeslot($self->has_time // 0) > timeslot($best_time))) {
             # Should we request batch blocks if $self->has_weight == $best_weight?
@@ -622,7 +630,9 @@ sub cmd_ihave {
     if (!UPGRADE_POW || btc_synced()) {
         if ($weight > QBitcoin::Block->best_weight ||
             ($weight == QBitcoin::Block->best_weight && timeslot($time) > QBitcoin::Block->blockchain_time)) {
-            $self->request_new_block($hash);
+            if (!QBitcoin::Block->block_pool($hash) && !QBitcoin::Block->is_pending($hash)) {
+                $self->request_new_block($hash);
+            }
         }
     }
     return 0;
