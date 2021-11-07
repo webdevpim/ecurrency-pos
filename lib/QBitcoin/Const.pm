@@ -49,6 +49,7 @@ use constant QBITCOIN_CONST => {
     MAX_PENDING_TX          => 128,
     MAX_EMPTY_TX_IN_BLOCK   => 1,
     UPGRADE_POW             => 1,
+    UPGRADE_FEE             => 0.01, # 1%
     COINBASE_CONFIRM_TIME   => 2*3600, # 2 hours
     COINBASE_CONFIRM_BLOCKS => 6,
     COINBASE_WEIGHT_TIME    => 365*24*3600, # 1 year

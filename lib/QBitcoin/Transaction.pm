@@ -740,23 +740,22 @@ sub calculate_hash {
 
 sub validate_coinbase {
     my $self = shift;
-    if (@{$self->out} != 1) {
-        Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_str, scalar @{$self->out});
-        return -1;
-    }
     # Each upgrade should correspond fixed and deterministic tx hash for qbitcoin
     if (!$self->up) {
         # We should add some code here for validate coinbase in case of not UPGRADE_POW (premined or centrilized emission)
         Warningf("Incorrect transaction %s, no coinbase information nor inputs", $self->hash_str);
         return -1;
     }
+    if (@{$self->out} != 1) {
+        Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_str, scalar @{$self->out});
+        return -1;
+    }
     $self->up->validate() == 0
         or return -1;
-    # TODO: uncomment when $transaction->data will be implemented
-    # if ($self->data ne '') {
-    #     Warningf("Incorrect transaction %s, coinbase can't contain data", $self->hash_str);
-    #     return -1;
-    # }
+    if ($self->data ne '') {
+        Warningf("Incorrect transaction %s, coinbase can't contain data", $self->hash_str);
+        return -1;
+    }
     if ($self->up->scripthash ne $self->out->[0]->scripthash) {
         Warningf("Mismatch scripthash for coinbase transaction %s", $self->hash_str);
         return -1 unless $config->{fake_coinbase};
@@ -1001,7 +1000,7 @@ sub coinbase_weight {
 
 sub coinbase_value {
     my ($value) = @_;
-    return int($value); # TODO: minus upgrade fee
+    return int($value * (1 - UPGRADE_FEE));
 }
 
 # Create a transaction with already exising coinbase output
