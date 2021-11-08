@@ -66,7 +66,7 @@ my $up = QBitcoin::Coinbase->new({
 });
 
 my $out = QBitcoin::TXO->new_txo({
-    value      => $value,
+    value      => int($value * (1 - UPGRADE_FEE)),
     scripthash => $open_script,
 });
 my $tx = QBitcoin::Transaction->new({

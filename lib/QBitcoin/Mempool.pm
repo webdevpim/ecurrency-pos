@@ -20,6 +20,13 @@ sub want_tx {
     return 1;
 }
 
+sub coinbase_list {
+    my $class = shift;
+    my ($block_time) = @_;
+    return grep { $_->coins_created && defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
+        QBitcoin::Transaction->mempool_list();
+}
+
 sub choose_for_block {
     my $class = shift;
     my ($size, $block_time) = @_;
@@ -93,7 +100,7 @@ sub choose_for_block {
 sub compare_tx {
     # coinbase first
     return
-        ( @{$a->in} ? 1 : 0 ) <=> ( @{$b->in} ? 1 : 0 ) || # coinbase first
+        ( $a->coins_created ? 0 : 1 ) <=> ( $b->coins_created ? 0 : 1 ) || # coinbase first
         $b->fee * $a->size    <=> $a->fee * $b->size    ||
         $a->received_time     <=> $b->received_time     ||
         $a->hash cmp $b->hash;

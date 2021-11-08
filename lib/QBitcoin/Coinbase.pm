@@ -316,6 +316,65 @@ sub btc_confirm_time {
     return $self->{btc_confirm_time};
 }
 
+sub fee_dst {
+    my $self = shift;
+    my ($block_start) = @_;
+
+    my $stake_tx;
+    if ($block_start->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME) {
+        if (@{$block_start->transactions} && $block_start->transactions->[0]->fee < 0) {
+            $stake_tx = $block_start->transactions->[0];
+        }
+        my $block = $block_start;
+        while ($block->next_block && $block->next_block->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME) {
+            $block = $block->next_block;
+            if (@{$block->transactions} && $block->transactions->[0]->fee < 0 && @{$block->transactions->[0]->in}) {
+                $stake_tx = $block->transactions->[0];
+            }
+        }
+        if ($stake_tx) {
+            return $stake_tx->out->[0]->scripthash;
+        }
+    }
+    my $block_class = ref $block_start;
+    my $best_block = $block_class->best_block($block_class->max_db_height + 1);
+    if ($best_block && $best_block->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME && $best_block->height < $block_start->height) {
+        if (@{$best_block->transactions} && $best_block->transactions->[0]->fee < 0 && @{$best_block->transactions->[0]->in}) {
+            $stake_tx = $best_block->transactions->[0];
+        }
+        while ($best_block->next_block && $best_block->height < $block_start->height &&
+               $best_block->next_block->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME) {
+            $best_block = $best_block->next_block;
+            if (@{$best_block->transactions} && $best_block->transactions->[0]->fee < 0 && @{$best_block->transactions->[0]->in}) {
+                $stake_tx = $best_block->transactions->[0];
+            }
+        }
+        if ($stake_tx) {
+            return $stake_tx->out->[0]->scripthash;
+        }
+    }
+
+    my $block_before = $block_class->find(
+        time    => { '<=' => $self->btc_confirm_time - COINBASE_CONFIRM_TIME },
+        height  => { '<=' => $block_start->height - 1 },
+        -sortby => 'time DESC',
+        -limit  => 1,
+    )
+        or return undef;
+    for (my $max_height = $block_before->height + 1;; $max_height = $stake_tx->block_height) {
+        $stake_tx = QBitcoin::Transaction->find(
+            block_height => { '<' => $max_height },
+            fee          => { '<' => 0 },
+            -sortby      => 'block_height DESC, block_pos ASC',
+            -limit       => 1,
+        )
+            or return undef;
+        if (@{$stake_tx->in}) {
+            return $stake_tx->out->[0]->scripthash;
+        }
+    }
+}
+
 sub min_tx_time {
     my $self = shift;
     return COINBASE_CONFIRM_TIME + ($self->btc_confirm_time // return undef);

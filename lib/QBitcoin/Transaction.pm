@@ -363,11 +363,8 @@ sub serialize {
     $data .= serialize_input($_) foreach @{$self->in};
     $data .= varint(scalar @{$self->out});
     $data .= serialize_output($_) foreach @{$self->out};
-    if (!@{$self->in}) {
+    if ($self->coins_created) {
         $data .= UPGRADE_POW ? serialize_coinbase($self->up) : pack("Q<", $self->coins_created);
-    }
-    elsif (UPGRADE_POW ? $self->up : $self->coins_created) {
-        die "Incorrect transaction (both input and coinbase), can't serialize " . $self->hash_str . "\n";
     }
     $data .= varstr($self->data);
     return $data;
@@ -784,12 +781,8 @@ sub validate {
     my $self = shift;
 
     if (UPGRADE_POW) {
-        if (!@{$self->in}) {
-            return $self->validate_coinbase;
-        }
         if ($self->coins_created) {
-            Warningf("Mixed input and coinbase in the transaction %s", $self->hash_str);
-            return -1;
+            return $self->validate_coinbase;
         }
     }
     # Transaction must contains at least one output (can't spend all inputs as fee)
@@ -814,10 +807,6 @@ sub validate {
             return -1;
         }
         $input_value += $in->value;
-    }
-    if ($input_value + $self->coins_created <= 0) {
-        Warningf("Zero input in transaction %s", $self->hash_str);
-        return -1;
     }
     if ($self->fee >= 0) {
         # Signcheck for stake transaction depends on block it relates to,

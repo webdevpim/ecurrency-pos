@@ -69,18 +69,31 @@ sub txo_confirmed {
 sub make_stake_tx {
     my ($fee, $block_sign_data) = @_;
 
-    my @my_txo = grep { txo_confirmed($_) } QBitcoin::TXO->my_utxo()
-        or return undef;
-    my $my_amount = sum map { $_->value } @my_txo;
-    my ($my_address) = my_address(); # first one
-    my $out = QBitcoin::TXO->new_txo(
-        value      => $my_amount + $fee,
-        scripthash => scalar(scripthash_by_address($my_address->address)),
-    );
+    my $total_fee = 0;
+    my @out;
+    my @my_txo;
+    if (exists $fee->{""}) {
+        @my_txo = grep { txo_confirmed($_) } QBitcoin::TXO->my_utxo()
+            or return undef;
+        my $my_amount = sum map { $_->value } @my_txo;
+        my ($my_address) = my_address(); # first one
+        push @out, QBitcoin::TXO->new_txo(
+            value      => $my_amount + $fee->{""},
+            scripthash => scalar(scripthash_by_address($my_address->address)),
+        );
+        $total_fee += $fee->{""};
+    }
+    foreach my $fee_dst (sort grep { $_ ne "" } keys %$fee) {
+        push @out, QBitcoin::TXO->new_txo(
+            value      => $fee->{$fee_dst},
+            scripthash => $fee_dst,
+        );
+        $total_fee += $fee->{$fee_dst};
+    }
     my $tx = QBitcoin::Transaction->new(
         in              => [ map +{ txo => $_ }, @my_txo ],
-        out             => [ $out ],
-        fee             => -$fee,
+        out             => \@out,
+        fee             => -$total_fee,
         block_sign_data => $block_sign_data,
         received_time   => time(),
     );
@@ -116,25 +129,31 @@ sub generate {
         }
     }
     $height++;
-    my $stake_tx = make_stake_tx(0, "");
-    my $size = $stake_tx ? $stake_tx->size : 0;
     foreach my $coinbase (QBitcoin::Coinbase->get_new($timeslot)) {
         # Create new coinbase transaction and add it to mempool (if it's not there)
         QBitcoin::Transaction->new_coinbase($coinbase);
     }
+    # Just get upper limit for stake tx size
+    my @coinbase = UPGRADE_POW && UPGRADE_FEE ? QBitcoin::Mempool->coinbase_list($timeslot) : ();
+    my $stake_tx = make_stake_tx({ "" => 0, map { $_->hash => 0 } @coinbase }, "");
+    my $size = $stake_tx ? $stake_tx->size : 0;
     # TODO: add transactions from block of the same timeslot, it's not ancestor
     my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot);
     if (!@transactions && ($timeslot - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
         return;
     }
-    if (my $fee = sum map { $_->fee } @transactions) {
+    my $fee = {};
+    foreach my $tx (grep { $_->fee } @transactions) {
+        $fee->{UPGRADE_POW && UPGRADE_FEE && $tx->up ? $tx->up->fee_dst($prev_block) // "" : ""} += $tx->fee;
+    }
+    if (%$fee) {
         return unless $stake_tx;
         # Generate new stake_tx with correct output value
         my $block_sign_data = $prev_block ? $prev_block->hash : ZERO_HASH;
         $block_sign_data .= $_->hash foreach @transactions;
         $stake_tx = make_stake_tx($fee, $block_sign_data);
         Infof("Generated stake tx %s with input amount %lu, consume %lu fee", $stake_tx->hash_str,
-            sum(map { $_->{txo}->value } @{$stake_tx->in}), -$stake_tx->fee);
+            sum0(map { $_->{txo}->value } @{$stake_tx->in}), -$stake_tx->fee);
         $_->{txo}->spent_add($stake_tx) foreach @{$stake_tx->in};
         QBitcoin::TXO->save_all($stake_tx->hash, $stake_tx->out);
         $stake_tx->validate() == 0

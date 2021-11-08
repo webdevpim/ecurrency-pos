@@ -174,6 +174,7 @@ sub receive {
     for (my $b = $new_best; $b; $b = $b->next_block) {
         Debugf("Add block %s height %u to the best branch", $b->hash_str, $b->height);
         my $fail_tx;
+        my $coinbase_fee = {};
 
         for (my $num = 0; $num < @{$b->transactions}; $num++) {
             my $tx = $b->transactions->[$num];
@@ -217,6 +218,30 @@ sub receive {
             }
             foreach my $txo (@{$tx->out}) {
                 $txo->add_my_utxo if $txo->is_my && $txo->unspent;
+            }
+            if (UPGRADE_POW && UPGRADE_FEE && $tx->coins_created) {
+                if (my $dst_fee = $tx->up->fee_dst($new_best)) {
+                    $coinbase_fee->{$dst_fee} += $tx->fee;
+                }
+            }
+        }
+
+        if (%$coinbase_fee) {
+            my $stake_tx = $b->transactions->[0];
+            if ($stake_tx->fee < 0) {
+                foreach my $out (@{$stake_tx->out}) {
+                    my $dst = $out->scripthash;
+                    if ($coinbase_fee->{$dst}) {
+                        $coinbase_fee->{$dst} -= $out->value;
+                        delete $coinbase_fee->{$dst} if $coinbase_fee->{$dst} <= 0;
+                    }
+                }
+                if (%$coinbase_fee) {
+                    $fail_tx = "block";
+                }
+            }
+            else {
+                $fail_tx = "block";
             }
         }
 
