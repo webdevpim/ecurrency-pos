@@ -73,6 +73,8 @@ sub connect_to {
         or die "socket set fcntl error: $!\n";
     my $connection = QBitcoin::Connection->new(
         peer      => $peer,
+        addr      => $peer->ip,
+        port      => $peer->port,
         socket    => $socket,
         state     => STATE_CONNECTING,
         direction => DIR_OUT,
