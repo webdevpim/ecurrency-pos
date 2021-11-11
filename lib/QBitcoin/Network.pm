@@ -360,6 +360,7 @@ sub main_loop {
                 if (!$connection->protocol->ping_sent) {
                     $connection->protocol->send_message("ping", pack("Q", $time));
                     $connection->protocol->ping_sent = $time;
+                    $connection->protocol->last_cmd_ping = $time;
                 }
                 elsif ($connection->protocol->ping_sent + PEER_RECV_TIMEOUT < $time) {
                     Noticef("%s peer %s timeout, closing connection", $connection->type, $connection->ip);

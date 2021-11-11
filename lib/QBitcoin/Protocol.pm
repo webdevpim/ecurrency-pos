@@ -709,7 +709,12 @@ sub cmd_pong {
         mempool_synced(1);
         Infof("Mempool is synced, %u transactions", scalar QBitcoin::Transaction->mempool_list());
     }
+    if ($self->last_cmd_ping && $data eq pack("Q", $self->last_cmd_ping)) {
+        # There were no received messages since last our "ping" sent, so it's not syncing state
+        $self->syncing(0);
+    }
     $self->ping_sent = undef;
+    $self->last_cmd_ping = undef;
     return 0;
 }
 

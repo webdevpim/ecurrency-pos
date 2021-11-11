@@ -13,6 +13,7 @@ use constant ATTR => qw(
     syncing
     command
     ping_sent
+    last_cmd_ping
     connection
     peer
     last_recv_time
@@ -70,6 +71,10 @@ sub receive {
         if ($self->can($func)) {
             $self->last_recv_time = time();
             Debugf("Received [%s] from %s peer %s", $command, $self->type, $self->peer->id);
+            if ($command ne "pong") {
+                # Reset "syncing" state if we received no commands between send "ping" and receive corresponding "pong"
+                $self->last_cmd_ping = undef;
+            }
             if ($command ne "version" && !$self->greeted) {
                 Errf("command [%s] before greeting from %s peer %s", $command, $self->type, $self->peer->id);
                 $self->abort("protocol_error");
