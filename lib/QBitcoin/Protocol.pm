@@ -351,8 +351,8 @@ sub cmd_blocks {
             $self->request_new_block();
         }
     }
-    else {
-        $self->request_new_block();
+    elsif ($block && $block->time < $self->has_time) {
+        $self->send_message("getblks", pack("Vv", 0, 1) . $block->hash);
     }
     return 0;
 }
