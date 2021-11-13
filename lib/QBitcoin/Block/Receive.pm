@@ -183,6 +183,12 @@ sub receive {
                 $fail_tx = $tx->hash;
                 last;
             }
+            if (!@{$tx->in} && !$tx->coins_created && $b->prev_block && $b->prev_block->weight) {
+                # Stake transaction without inputs allowed only for the first coinbase block
+                Warningf("Transaction %s has no inputs", $tx->hash_str);
+                $fail_tx = $tx->hash;
+                last;
+            }
             foreach my $in (@{$tx->in}) {
                 my $txo = $in->{txo};
                 # It's possible that $txo->tx_out already set for rebuild blockchain loaded from local database

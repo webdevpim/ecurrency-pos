@@ -2,9 +2,10 @@ package QBitcoin::Generate;
 use warnings;
 use strict;
 
-use List::Util qw(sum);
+use List::Util qw(sum0);
 use QBitcoin::Const;
 use QBitcoin::Log;
+use QBitcoin::Config;
 use QBitcoin::Mempool;
 use QBitcoin::Block;
 use QBitcoin::RedeemScript;
@@ -73,9 +74,12 @@ sub make_stake_tx {
     my @out;
     my @my_txo;
     if (exists $fee->{""}) {
-        @my_txo = grep { txo_confirmed($_) } QBitcoin::TXO->my_utxo()
-            or return undef;
-        my $my_amount = sum map { $_->value } @my_txo;
+        @my_txo = grep { txo_confirmed($_) } QBitcoin::TXO->my_utxo();
+        # Genesis node can validate block with the first coinbase transaction without validation amount (no inputs in stake tx)
+        if (!@my_txo && (!$config->{genesis} || QBitcoin::Block->best_weight)) {
+            return undef;
+        }
+        my $my_amount = sum0 map { $_->value } @my_txo;
         my ($my_address) = my_address(); # first one
         push @out, QBitcoin::TXO->new_txo(
             value      => $my_amount + $fee->{""},
