@@ -363,6 +363,7 @@ sub cmd_tx {
     my $data = Bitcoin::Serialized->new($tx_data);
     my $tx = QBitcoin::Transaction->deserialize($data);
     if (!$tx || $data->length != 16) {
+        Warningf("tx %s deserializeation error, data length %u", $tx ? $tx->hash_str : "undef", $data->length);
         $self->abort("bad_tx_data");
         return -1;
     }
