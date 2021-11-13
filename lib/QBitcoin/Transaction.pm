@@ -48,6 +48,12 @@ use constant ATTR => qw(
 
 mk_accessors(keys %{&FIELDS}, ATTR);
 
+use constant {
+    TX_TYPE_STANDARD => 1,
+    TX_TYPE_STAKE    => 2,
+    TX_TYPE_COINBASE => 3,
+};
+
 my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
 
 my %TRANSACTION;      # in-memory cache transaction objects by tx_hash
@@ -356,14 +362,24 @@ sub hash_str {
 
 sub data { "" } # TODO
 
+sub type {
+    my $self = shift;
+
+    return $self->{type} //=
+        $self->coins_created ? TX_TYPE_COINBASE :
+        $self->fee < 0       ? TX_TYPE_STAKE :
+        TX_TYPE_STANDARD;
+}
+
 sub serialize {
     my $self = shift;
 
-    my $data = varint(scalar @{$self->in});
+    my $data = pack("c", $self->type);
+    $data .= varint(scalar @{$self->in});
     $data .= serialize_input($_) foreach @{$self->in};
     $data .= varint(scalar @{$self->out});
     $data .= serialize_output($_) foreach @{$self->out};
-    if ($self->coins_created) {
+    if ($self->type == TX_TYPE_COINBASE) {
         $data .= UPGRADE_POW ? serialize_coinbase($self->up) : pack("Q<", $self->coins_created);
     }
     $data .= varstr($self->data);
@@ -373,7 +389,8 @@ sub serialize {
 sub serialize_unsigned {
     my $self = shift;
 
-    my $data = varint(scalar @{$self->in});
+    my $data = pack("c", $self->type);
+    $data .= varint(scalar @{$self->in});
     if ($self->in_raw) {
         $data .= serialize_input_raw($_) foreach @{$self->in_raw};
     }
@@ -522,10 +539,11 @@ sub deserialize {
     my $class = shift;
     my ($data) = @_;
     my $start_index = $data->index;
+    my $type = unpack("c", $data->get(1));
     my @input  = map { deserialize_input($data)  // return undef } 1 .. ($data->get_varint // return undef);
     my @output = map { deserialize_output($data) // return undef } 1 .. ($data->get_varint // return undef);
     my $up;
-    if (!@input) {
+    if ($type == TX_TYPE_COINBASE) {
         $up = UPGRADE_POW ? (deserialize_coinbase($data) // return undef) : unpack("Q<", $data->get(8) // return undef);
     }
     my $tx_data = $data->get_string() // return undef;
