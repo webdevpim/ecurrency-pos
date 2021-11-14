@@ -80,9 +80,9 @@ sub process_request {
                 my @out;
                 foreach my $out (@{$tx->out}) {
                     push @out, {
-                        spent => $tx->out->[$path[3]]->tx_out ? TRUE : FALSE,
-                        $tx->out->[$path[3]]->tx_out ? (
-                            txid => unpack("H*", $tx->out->[$path[3]]->tx_out),
+                        spent => $out->tx_out ? TRUE : FALSE,
+                        $out->tx_out ? (
+                            txid => unpack("H*", $out->tx_out),
                         ) : (),
                     };
                 }
