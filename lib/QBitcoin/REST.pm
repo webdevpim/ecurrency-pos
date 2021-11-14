@@ -490,7 +490,7 @@ sub get_blocks {
     my $self = shift;
     my ($height) = @_;
     my $best_height = QBitcoin::Block->blockchain_height;
-    if (defined($height) && $height ne "") {
+    if (defined($height) && $height ne "" && $height ne "recent") {
         $height =~ /^(?:0|[1-9][0-9]*)\z/
             or return $self->http_response(404, "Incorrect request");
         $height <= $best_height
