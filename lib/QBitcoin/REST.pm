@@ -125,7 +125,7 @@ sub process_request {
             return $self->get_address_stats($path[1]);
         }
         elsif ($path[2] eq "txs") {
-            return $self->get_address_txs($path[1], $path[3] eq "mempool" ? 0 : 24, $path[3] eq "chain" ? 0 : 50, $path[4]);
+            return $self->get_address_txs($path[1], ($path[3] // "") eq "mempool" ? 0 : 24, ($path[3] // "") eq "chain" ? 0 : 50, $path[4]);
         }
         elsif ($path[2] eq "utxo") {
             @path == 3
@@ -324,7 +324,7 @@ sub tx_obj {
             ) : (),
         },
         vin  => [ map {{ txid => unpack("H*", $_->{txo}->tx_in), vout => $_->{txo}->num }} @{$tx->in} ],
-        vout => [ map {{ value => $_->value, scriptpubkey_address => address_by_hash($_->scripthash) }} @{$tx->out} ],
+        vout => [ map {{ value => $_->value, scripthash => unpack("H*", $_->scripthash), scripthash_address => address_by_hash($_->scripthash) }} @{$tx->out} ],
     };
 }
 
@@ -334,6 +334,7 @@ sub block_obj {
         id                => unpack("H*", $block->hash),
         height            => $block->height,
         weight            => $block->weight,
+        block_weight      => $block->self_weight,
         previousblockhash => $block->prev_hash ? unpack("H*", $block->prev_hash) : undef,
         merkle_root       => unpack("H*", $block->merkle_root),
         timestamp         => $block->time,
