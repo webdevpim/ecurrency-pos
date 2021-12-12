@@ -10,7 +10,8 @@ use QBitcoin::Log;
 use QBitcoin::Produce;
 use QBitcoin::Coinbase;
 use QBitcoin::ORM::Transaction;
-use QBitcoin::ProtocolState qw(btc_synced);
+use QBitcoin::ProtocolState qw(btc_synced blockchain_synced);
+use QBitcoin::ConnectionList;
 use Bitcoin::Serialized;
 use Bitcoin::Block;
 use Bitcoin::Transaction;
@@ -235,6 +236,9 @@ sub request_transactions {
             Infof("BTC syncing done");
             $self->syncing(0);
             btc_synced(1);
+            foreach my $connection (QBitcoin::ConnectionList->connected(PROTOCOL_QBITCOIN)) {
+                blockchain_synced() ? $connection->protocol->request_mempool : $connection->protocol->request_new_block();
+            }
         }
         return 0;
     }

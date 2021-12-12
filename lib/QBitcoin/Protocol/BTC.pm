@@ -228,7 +228,9 @@ sub cmd_btcheaders {
         if (!btc_synced()) {
             Debugf("Set btc_synced to 1");
             btc_synced(1);
-            blockchain_synced() ? $self->request_mempool : $self->request_new_block();
+            foreach my $connection (QBitcoin::ConnectionList->connected(PROTOCOL_QBITCOIN)) {
+                blockchain_synced() ? $connection->protocol->request_mempool : $connection->protocol->request_new_block();
+            }
         }
     }
     return 0;
