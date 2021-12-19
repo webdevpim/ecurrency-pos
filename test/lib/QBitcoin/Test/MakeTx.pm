@@ -27,6 +27,7 @@ sub make_tx {
     my $tx = QBitcoin::Transaction->new(
         out => [ $out ],
         in  => [ map +{ txo => $_, siglist => [] }, @in ],
+        fee => $fee,
         $prev_tx ? () : ( coins_created => $out_value ),
     );
     $value += 10;

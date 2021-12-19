@@ -75,10 +75,8 @@ sub make_stake_tx {
     my @my_txo;
     if (exists $fee->{""}) {
         @my_txo = grep { txo_confirmed($_) } QBitcoin::TXO->my_utxo();
-        # Genesis node can validate block with the first coinbase transaction without validation amount (no inputs in stake tx)
-        if (!@my_txo && (!$config->{genesis} || QBitcoin::Block->best_weight)) {
-            return undef;
-        }
+        # It's possible to create stake tx without inputs if the block contains only coinbase and zero-fee tx
+        return undef if !@my_txo && keys(%$fee) == 1; # No coinbase and no my txo -> no stake tx needed
         my $my_amount = sum0 map { $_->value } @my_txo;
         my ($my_address) = my_address(); # first one
         push @out, QBitcoin::TXO->new_txo(
@@ -142,7 +140,7 @@ sub generate {
     my $stake_tx = make_stake_tx({ "" => 0, map { $_->hash => 0 } @coinbase }, "");
     my $size = $stake_tx ? $stake_tx->size : 0;
     # TODO: add transactions from block of the same timeslot, it's not ancestor
-    my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot);
+    my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $stake_tx && $stake_tx->in);
     if (!@transactions && ($timeslot - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
         return;
     }
@@ -152,6 +150,12 @@ sub generate {
     }
     if (%$fee) {
         return unless $stake_tx;
+        if ($fee->{""} && !@{$stake_tx->in}) {
+            # Genesis node can validate block with the very first coinbase transaction without validation amount
+            if (!$config->{genesis} || QBitcoin::Block->best_weight) {
+                return;
+            }
+        }
         # Generate new stake_tx with correct output value
         my $block_sign_data = $prev_block ? $prev_block->hash : ZERO_HASH;
         $block_sign_data .= $_->hash foreach @transactions;

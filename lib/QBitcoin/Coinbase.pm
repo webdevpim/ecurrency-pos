@@ -322,6 +322,7 @@ sub fee_dst {
 
     my $stake_tx;
     if ($block_start->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME) {
+        # If $block_start is old enough then find stake tx in the branch started from this block
         if (@{$block_start->transactions} && $block_start->transactions->[0]->fee < 0) {
             $stake_tx = $block_start->transactions->[0];
         }
@@ -336,6 +337,7 @@ sub fee_dst {
             return $stake_tx->out->[0]->scripthash;
         }
     }
+    # Try to search dst stake tx within incore blocks
     my $block_class = ref $block_start;
     my $best_block = $block_class->best_block($block_class->max_db_height + 1);
     if ($best_block && $best_block->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME && $best_block->height < $block_start->height) {
@@ -354,6 +356,7 @@ sub fee_dst {
         }
     }
 
+    # Not in the $block_start branch nor in core blocks, find in the database
     my $block_before = $block_class->find(
         time    => { '<=' => $self->btc_confirm_time - COINBASE_CONFIRM_TIME },
         height  => { '<=' => $block_start->height - 1 },
@@ -368,7 +371,8 @@ sub fee_dst {
             -sortby      => 'block_height DESC, block_pos ASC',
             -limit       => 1,
         )
-            or return undef;
+            or return undef; # If there are no suitable recipient for the fee then block validator will take the fee to itself
+        # It's possible stake tx without input if the block contains only coinbase and zero-fee tx, ignore them
         if (@{$stake_tx->in}) {
             return $stake_tx->out->[0]->scripthash;
         }

@@ -761,6 +761,10 @@ sub validate_coinbase {
         Warningf("Incorrect transaction %s, no coinbase information nor inputs", $self->hash_str);
         return -1;
     }
+    if (@{$self->in}) {
+        Warningf("Mixed input and coinbase in the transaction %s", $self->hash_str);
+        return -1;
+    }
     if (@{$self->out} != 1) {
         Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_str, scalar @{$self->out});
         return -1;

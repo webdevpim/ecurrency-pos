@@ -175,6 +175,7 @@ sub receive {
         Debugf("Add block %s height %u to the best branch", $b->hash_str, $b->height);
         my $fail_tx;
         my $coinbase_fee = {};
+        my $can_consume = 1; # Can validator consume transaction fee? No if stake transaction has no inputs
 
         for (my $num = 0; $num < @{$b->transactions}; $num++) {
             my $tx = $b->transactions->[$num];
@@ -183,9 +184,17 @@ sub receive {
                 $fail_tx = $tx->hash;
                 last;
             }
-            if (!@{$tx->in} && !$tx->coins_created && $b->prev_block && $b->prev_block->weight) {
-                # Stake transaction without inputs allowed only for the first coinbase block
-                Warningf("Transaction %s has no inputs", $tx->hash_str);
+            if (!@{$tx->in} && !$tx->coins_created) {
+                if ($num > 0) {
+                    Warningf("Transaction %s has no inputs", $tx->hash_str);
+                    $fail_tx = $tx->hash;
+                    last;
+                }
+                # Stake transaction without inputs allowed only if the block has no (non-coinbase) transactions with positive fee
+                $can_consume = 0;
+            }
+            elsif (!$can_consume && $tx->fee > 0 && !$tx->coins_created) {
+                Warningf("Transaction %s has fee but block validator can't consume it", $tx->hash_str);
                 $fail_tx = $tx->hash;
                 last;
             }
