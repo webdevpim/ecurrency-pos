@@ -314,6 +314,21 @@ sub block_by_height {
     return QBitcoin::Block->best_block($height) // QBitcoin::Block->find(height => $height);
 }
 
+sub vin_obj {
+    my ($vin) = @_;
+    return {
+        txid          => unpack("H*", $vin->{txo}->tx_in),
+        vout          => $vin->{txo}->num,
+        redeem_script => unpack("H*", $vin->{txo}->redeem_script),
+        siglist       => [ map { unpack("H*", $_) } @{$vin->{siglist}} ],
+        prevout       => {
+            value              => $vin->{txo}->value,
+            scripthash         => unpack("H*", $vin->{txo}->scripthash),
+            scripthash_address => address_by_hash($vin->{txo}->scripthash),
+        },
+    };
+}
+
 sub tx_obj {
     my ($tx) = @_;
     my $block = defined($tx->block_height) ? block_by_height($tx->block_height) : undef;
@@ -331,7 +346,7 @@ sub tx_obj {
                 block_hash   => unpack("H*", $block->hash),
             ) : (),
         },
-        vin  => [ map {{ txid => unpack("H*", $_->{txo}->tx_in), vout => $_->{txo}->num }} @{$tx->in} ],
+        vin  => [ map { vin_obj($_) } @{$tx->in} ],
         vout => [ map {{ value => $_->value, scripthash => unpack("H*", $_->scripthash), scripthash_address => address_by_hash($_->scripthash) }} @{$tx->out} ],
     };
 }
