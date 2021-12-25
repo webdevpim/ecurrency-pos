@@ -48,12 +48,6 @@ use constant ATTR => qw(
 
 mk_accessors(keys %{&FIELDS}, ATTR);
 
-use constant {
-    TX_TYPE_STANDARD => 1,
-    TX_TYPE_STAKE    => 2,
-    TX_TYPE_COINBASE => 3,
-};
-
 my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
 
 my %TRANSACTION;      # in-memory cache transaction objects by tx_hash
