@@ -839,6 +839,8 @@ sub on_load {
         }
         $self->calculate_hash;
         if ($self->hash ne $hash) {
+            Errf("Incorrect hash for loaded transaction %s != %s", $self->hash_str, $self->hash_str($hash));
+            Errf("Serialized transaction in hex: %s", unpack("H*", $self->serialize));
             die "Incorrect hash for loaded transaction " . $self->hash_str . " != " . $self->hash_str($hash) . "\n";
         }
         $TRANSACTION{$hash} = $self;

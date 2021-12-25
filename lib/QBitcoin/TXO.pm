@@ -215,7 +215,7 @@ sub load_stored_outputs {
     my $sql = "SELECT value, num, tx_out.hash AS tx_out, siglist, s.hash as scripthash, s.script as redeem_script";
     $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::RedeemScript->TABLE . "` AS s ON (t.scripthash = s.id)";
     $sql .= " LEFT JOIN `" . TRANSACTION_TABLE . "` AS tx_out ON (tx_out.id = t.tx_out)";
-    $sql .= " WHERE tx_in = ?";
+    $sql .= " WHERE tx_in = ? ORDER BY num";
     my $sth = dbh->prepare($sql);
     DEBUG_ORM && Debugf("sql: [%s] values [%u]", $sql, $tx_id);
     $sth->execute($tx_id);
