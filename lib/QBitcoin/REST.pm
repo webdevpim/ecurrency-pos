@@ -174,7 +174,15 @@ sub process_request {
         if ($path[2] eq "status") {
             my $best_block = QBitcoin::Block->best_block($block->height) // QBitcoin::Block->find(height => $block->height);
             my $is_best = $best_block && $best_block->hash eq $block->hash;
-            return $self->http_ok({ in_best_chain => $is_best ? TRUE : FALSE });
+            my $next_best;
+            if ($is_best && $block->height < QBitcoin::Block->blockchain_height) {
+                $next_best = QBitcoin::Block->best_block($block->height + 1) // QBitcoin::Block->find(height => $block->height + 1);
+            }
+            return $self->http_ok({
+                in_best_chain => $is_best ? TRUE : FALSE,
+                height        => $block->height,
+                $next_best ? ( next_best => unpack("H*", $next_best->hash) ) : (),
+            });
         }
         return $self->http_response(404, "Unknown request");
     }
