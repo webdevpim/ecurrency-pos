@@ -979,4 +979,15 @@ sub min_tx_time {
     return $self->up ? $self->up->min_tx_time : 0;
 }
 
+sub drop_all_pending {
+    my $class = shift;
+    my ($connection) = @_;
+
+    foreach my $tx (values %PENDING_TX_INPUT) {
+        if ($tx->received_from->peer->id eq $connection->peer->id) {
+            $tx->drop();
+        }
+    }
+}
+
 1;

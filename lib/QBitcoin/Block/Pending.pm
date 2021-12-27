@@ -149,4 +149,16 @@ sub load_transactions {
     return ();
 }
 
+sub drop_all_pending {
+    my $class = shift;
+    my ($connection) = @_;
+
+    my $requested = 0;
+    foreach my $block (values %PENDING_BLOCK) {
+        if ($block->received_from->peer->id eq $connection->peer->id) {
+            $block->drop_pending();
+        }
+    }
+}
+
 1;

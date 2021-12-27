@@ -704,6 +704,12 @@ sub cmd_ping {
     return 0;
 }
 
+sub drop_pending {
+    my $self = shift;
+    QBitcoin::Block->drop_all_pending($self);
+    QBitcoin::Transaction->drop_all_pending($self);
+}
+
 sub cmd_pong {
     my $self = shift;
     my ($data) = @_;
@@ -713,7 +719,11 @@ sub cmd_pong {
     }
     if ($self->last_cmd_ping && $data eq pack("Q", $self->last_cmd_ping)) {
         # There were no received messages since last our "ping" sent, so it's not syncing state
-        $self->syncing(0);
+        if ($self->syncing) {
+            Infof("%s peer %s is in syncing state but no data receiving, reset syncing", $self->type, $self->peer->id);
+            $self->syncing(0);
+            $self->drop_pending();
+        }
     }
     $self->ping_sent = undef;
     $self->last_cmd_ping = undef;

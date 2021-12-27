@@ -53,6 +53,9 @@ sub disconnect {
     if ($self->state == STATE_CONNECTED) {
         if ($self->peer) {
             Infof("Disconnected from %s peer %s", $self->type, $self->ip);
+            if ($self->protocol->can('drop_pending')) {
+                $self->protocol->drop_pending();
+            }
             # TODO: update peer data
         }
         else {
