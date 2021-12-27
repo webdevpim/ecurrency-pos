@@ -181,10 +181,10 @@ sub cmd_block {
     }
     if ($block->is_pending) {
         Debugf("Received block %s already pending, skip", $block->hash_str);
-        $self->syncing(0);
+        # $self->syncing(0);
         # TODO: request block if pending block; request tx if pending tx
         # TODO: Request pending block or transaction by chain
-        $self->request_new_block($block->prev_hash);
+        # $self->request_new_block($block->prev_hash);
         return 0;
     }
     if ($block->time < (QBitcoin::Block->blockchain_time // -1)) {
@@ -279,6 +279,7 @@ sub cmd_blocks {
         }
         if ($block->is_pending) {
             Debugf("Received block %s already pending, skip", $block->hash_str);
+            undef $block; # Do not request new blocks
             last;
         }
         if ($block->time < (QBitcoin::Block->blockchain_time // 0)) {
