@@ -279,7 +279,6 @@ sub cmd_blocks {
         }
         if ($block->is_pending) {
             Debugf("Received block %s already pending, skip", $block->hash_str);
-            undef $block; # Do not request new blocks
             last;
         }
         if ($block->time < (QBitcoin::Block->blockchain_time // 0)) {
@@ -343,17 +342,20 @@ sub cmd_blocks {
         $got_new++;
     }
     $self->syncing(0);
-    if ($got_new) {
-        if ($num_blocks == BLOCKS_IN_BATCH && $block->time + FORCE_BLOCKS * BLOCK_INTERVAL < timeslot(time())) {
-            $self->send_message("getblks", pack("Vv", timeslot($block->time), 1) . $block->hash);
-            $self->syncing(1);
+    # Do not request new blocks if we already have pending block
+    if ($block && !$block->is_pending) {
+        if ($got_new) {
+            if ($num_blocks == BLOCKS_IN_BATCH && $block->time + FORCE_BLOCKS * BLOCK_INTERVAL < timeslot(time())) {
+                $self->send_message("getblks", pack("Vv", timeslot($block->time), 1) . $block->hash);
+                $self->syncing(1);
+            }
+            else {
+                $self->request_new_block();
+            }
         }
-        elsif (!$block->is_pending) { # Do not request new blocks if we're waiting for requested transactions
-            $self->request_new_block();
+        elsif ($block->time < $self->has_time) {
+            $self->send_message("getblks", pack("Vv", 0, 1) . $block->hash);
         }
-    }
-    elsif ($block && $block->time < $self->has_time) {
-        $self->send_message("getblks", pack("Vv", 0, 1) . $block->hash);
     }
     return 0;
 }
