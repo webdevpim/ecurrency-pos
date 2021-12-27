@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS `transaction` (
   hash binary(32) NOT NULL,
   block_height int unsigned NOT NULL,
   block_pos smallint unsigned NOT NULL,
+  tx_type smallint unsigned NOT NULL DEFAULT 1,
   size int unsigned NOT NULL,
   fee bigint signed NOT NULL,
   FOREIGN KEY (block_height) REFERENCES `block` (height) ON DELETE CASCADE

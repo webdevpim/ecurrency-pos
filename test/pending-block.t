@@ -51,6 +51,7 @@ sub send_blocks {
                 out           => [ QBitcoin::TXO->new_txo( value => $value, scripthash => hash160("txo_$tx_num") ) ],
                 in            => [],
                 coins_created => $value,
+                tx_type       => TX_TYPE_COINBASE,
             );
             $value += 10;
             $tx->calculate_hash;

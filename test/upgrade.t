@@ -70,10 +70,11 @@ my $out = QBitcoin::TXO->new_txo({
     scripthash => $open_script,
 });
 my $tx = QBitcoin::Transaction->new({
-    in  => [],
-    out => [ $out ],
-    up  => $up,
-    fee => 0,
+    in      => [],
+    out     => [ $out ],
+    up      => $up,
+    fee     => 0,
+    tx_type => TX_TYPE_COINBASE,
 });
 $tx->calculate_hash;
 $out->tx_out = $tx->hash;

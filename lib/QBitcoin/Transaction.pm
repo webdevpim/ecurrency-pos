@@ -27,6 +27,7 @@ use constant FIELDS => {
     block_pos    => NUMERIC,
     fee          => NUMERIC,
     size         => NUMERIC,
+    tx_type      => NUMERIC,
 };
 
 use constant TABLE => 'transaction';
@@ -215,8 +216,7 @@ sub del_from_block {
             # Confirmed, not mempool
             $self->free();
         }
-        elsif ($self->fee < 0) {
-            # Stake
+        elsif ($self->is_stake) {
             $self->drop();
         }
     }
@@ -305,7 +305,7 @@ sub cleanup_mempool {
     my $class = shift;
     my @tx = grep { !$_->in_blocks && !defined($_->block_height) } values %TRANSACTION;
     foreach my $tx (@tx) {
-        if ($tx->fee < 0) {
+        if ($tx->is_stake) {
             if ($tx->drop()) {
                 Infof("Drop stake tx %s not related to any known blocks", $tx->hash_str);
             }
@@ -356,24 +356,15 @@ sub hash_str {
 
 sub data { "" } # TODO
 
-sub type {
-    my $self = shift;
-
-    return $self->{type} //=
-        $self->coins_created ? TX_TYPE_COINBASE :
-        $self->fee < 0       ? TX_TYPE_STAKE :
-        TX_TYPE_STANDARD;
-}
-
 sub serialize {
     my $self = shift;
 
-    my $data = pack("c", $self->type);
+    my $data = pack("c", $self->tx_type);
     $data .= varint(scalar @{$self->in});
     $data .= serialize_input($_) foreach @{$self->in};
     $data .= varint(scalar @{$self->out});
     $data .= serialize_output($_) foreach @{$self->out};
-    if ($self->type == TX_TYPE_COINBASE) {
+    if ($self->is_coinbase) {
         $data .= UPGRADE_POW ? serialize_coinbase($self->up) : pack("Q<", $self->coins_created);
     }
     $data .= varstr($self->data);
@@ -383,7 +374,7 @@ sub serialize {
 sub serialize_unsigned {
     my $self = shift;
 
-    my $data = pack("c", $self->type);
+    my $data = pack("c", $self->tx_type);
     $data .= varint(scalar @{$self->in});
     if ($self->in_raw) {
         $data .= serialize_input_raw($_) foreach @{$self->in_raw};
@@ -410,11 +401,16 @@ sub sign_data {
         $data .= varstr($self->data);
         $self->{sign_data} = $data;
     }
-    if ($self->fee < 0) {
+    if ($self->is_stake) {
         # It's stake tx which signs block, add block info
         $data .= $self->block_sign_data;
     }
     return $data;
+}
+
+sub type_as_text {
+    my $self = shift;
+    return TX_TYPES_NAMES->[$self->tx_type];
 }
 
 # For JSON RPC output
@@ -426,6 +422,7 @@ sub as_hashref {
         size => $self->size //= length($self->serialize),
         in   => $self->in_raw ? [ map { inputraw_as_hashref($_) } @{$self->in_raw} ] : [ map { input_as_hashref($_) } @{$self->in} ],
         out  => [ map { output_as_hashref($_) } @{$self->out} ],
+        type => $self->type_as_text,
         $self->up ? ( up => $self->up->as_hashref ) : (),
         !UPGRADE_POW && $self->coins_created ? ( coins_created => $self->coins_created / DENOMINATOR ) : (),
         $self->received_time ? ( time => $self->received_time ) : (),
@@ -533,11 +530,11 @@ sub deserialize {
     my $class = shift;
     my ($data) = @_;
     my $start_index = $data->index;
-    my $type = unpack("c", $data->get(1));
+    my $tx_type = unpack("c", $data->get(1));
     my @input  = map { deserialize_input($data)  // return undef } 1 .. ($data->get_varint // return undef);
     my @output = map { deserialize_output($data) // return undef } 1 .. ($data->get_varint // return undef);
     my $up;
-    if ($type == TX_TYPE_COINBASE) {
+    if ($tx_type == TX_TYPE_COINBASE) {
         $up = UPGRADE_POW ? (deserialize_coinbase($data) // return undef) : unpack("Q<", $data->get(8) // return undef);
     }
     my $tx_data = $data->get_string() // return undef;
@@ -550,6 +547,7 @@ sub deserialize {
         in_raw        => \@input,
         out           => create_outputs(\@output, $hash),
         $up ? UPGRADE_POW ? ( up => $up ) : ( coins_created => $up ) : (),
+        tx_type       => $tx_type,
         # data          => $tx_data, # TODO
         hash          => $hash,
         size          => $end_index - $start_index,
@@ -747,14 +745,13 @@ sub calculate_hash {
     $self->hash = tx_data_hash($tx_raw_data);
 }
 
+sub is_standard { $_[0]->{tx_type} == TX_TYPE_STANDARD }
+sub is_stake    { $_[0]->{tx_type} == TX_TYPE_STAKE }
+sub is_coinbase { $_[0]->{tx_type} == TX_TYPE_COINBASE }
+
 sub validate_coinbase {
     my $self = shift;
     # Each upgrade should correspond fixed and deterministic tx hash for qbitcoin
-    if (!$self->up) {
-        # We should add some code here for validate coinbase in case of not UPGRADE_POW (premined or centrilized emission)
-        Warningf("Incorrect transaction %s, no coinbase information nor inputs", $self->hash_str);
-        return -1;
-    }
     if (@{$self->in}) {
         Warningf("Mixed input and coinbase in the transaction %s", $self->hash_str);
         return -1;
@@ -763,20 +760,30 @@ sub validate_coinbase {
         Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_str, scalar @{$self->out});
         return -1;
     }
-    $self->up->validate() == 0
-        or return -1;
     if ($self->data ne '') {
         Warningf("Incorrect transaction %s, coinbase can't contain data", $self->hash_str);
         return -1;
     }
-    if ($self->up->scripthash ne $self->out->[0]->scripthash) {
-        Warningf("Mismatch scripthash for coinbase transaction %s", $self->hash_str);
-        return -1 unless $config->{fake_coinbase};
-        $self->up->scripthash = $self->out->[0]->scripthash;
+    if (UPGRADE_POW) {
+        if (!$self->up) {
+            Warningf("Incorrect transaction %s, no coinbase information nor inputs", $self->hash_str);
+            return -1;
+        }
+        $self->up->validate() == 0
+            or return -1;
+        if ($self->up->scripthash ne $self->out->[0]->scripthash) {
+            Warningf("Mismatch scripthash for coinbase transaction %s", $self->hash_str);
+            return -1 unless $config->{fake_coinbase};
+            $self->up->scripthash = $self->out->[0]->scripthash;
+        }
+        if ($self->out->[0]->value != coinbase_value($self->up->value)) {
+            Warningf("Mismatch value for coinbase transaction %s", $self->hash_str);
+            return -1;
+        }
     }
-    if ($self->out->[0]->value != coinbase_value($self->up->value)) {
-        Warningf("Mismatch value for coinbase transaction %s", $self->hash_str);
-        return -1;
+    else {
+        Warningf("Coinbase denied, invalid transaction %s", $self->hash_str);
+        return -1 unless $config->{fake_coinbase};
     }
     return 0;
 }
@@ -796,10 +803,8 @@ sub validate_hash {
 sub validate {
     my $self = shift;
 
-    if (UPGRADE_POW) {
-        if ($self->coins_created) {
-            return $self->validate_coinbase;
-        }
+    if ($self->is_coinbase) {
+        return $self->validate_coinbase;
     }
     # Transaction must contains at least one output (can't spend all inputs as fee)
     if (!@{$self->out}) {
@@ -824,11 +829,27 @@ sub validate {
         }
         $input_value += $in->value;
     }
-    if ($self->fee >= 0) {
+    if ($self->is_stake) {
+        if ($self->fee >= 0) {
+            Warningf("Fee for stake transaction %s is %li, not negative",
+                $self->hash_str, $self->fee);
+            return -1;
+        }
+    }
+    elsif ($self->is_standard) {
+        if ($self->fee < 0) {
+            Warningf("Fee for standard transaction %s is %li, can't be negative",
+                $self->hash_str, $self->fee);
+            return -1;
+        }
         # Signcheck for stake transaction depends on block it relates to,
         # so skip this check while block_sign_data is not known, check from valid_for_block()
         $self->check_input_script == 0
             or return -1;
+    }
+    else {
+        Warningf("Unknown type %d for transaction %s", $self->tx_type, $self->hash_str);
+        return -1;
     }
     return 0;
 }
@@ -838,7 +859,7 @@ sub valid_for_block {
     my ($block) = @_;
     ($self->min_tx_time // return -1) <= timeslot($block->time)
         or return -1;
-    if ($self->fee < 0) {
+    if ($self->is_stake) {
         $self->block_sign_data = $block->sign_data;
         $self->check_input_script == 0
             or return -1;
@@ -933,7 +954,7 @@ sub unconfirm {
         $txo->tx_out = undef;
         $txo->siglist = undef;
         # Return to list of my utxo inputs from stake transaction, but do not use returned to mempool
-        $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my && $txo->unspent;
+        $txo->add_my_utxo() if $self->is_stake && $txo->is_my && $txo->unspent;
     }
     foreach my $txo (@{$self->out}) {
         $txo->del_my_utxo() if $txo->is_my;
@@ -955,7 +976,7 @@ sub stake_weight {
     my $self = shift;
     my ($block) = @_;
     my $weight = 0;
-    if ($self->fee < 0) {
+    if ($self->is_stake) {
         my $class = ref $self;
         my $class_block = ref $block;
         foreach my $in (map { $_->{txo} } @{$self->in}) {
@@ -1021,6 +1042,7 @@ sub new_coinbase {
         in            => [],
         out           => [ $txo ],
         up            => $coinbase,
+        tx_type       => TX_TYPE_COINBASE,
         fee           => $coinbase->value - $txo->value,
         received_time => time(),
     );

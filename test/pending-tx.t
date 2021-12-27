@@ -45,8 +45,8 @@ sub send_block {
 }
 
 sub pending_one {
-    my $stake_tx = make_tx(undef, -2);
-    my $test_tx = make_tx($stake_tx, 2);
+    my $coinbase_tx = make_tx(undef, 0);
+    my $test_tx = make_tx($coinbase_tx, 0);
     my $tx = make_tx;
     # height, hash, prev_hash, weight, $tx
     send_block(0, "a0", undef, 50, $tx);
@@ -54,11 +54,11 @@ sub pending_one {
     $connection->protocol->command = "tx";
     $connection->protocol->cmd_tx($tx->serialize . $zero_ip);
     $connection->protocol->cmd_tx($test_tx->serialize . $zero_ip);
-    $connection->protocol->cmd_tx($stake_tx->serialize . $zero_ip);
+    $connection->protocol->cmd_tx($coinbase_tx->serialize . $zero_ip);
     QBitcoin::Transaction->cleanup_mempool();
-    send_block(1, "a1", "a0", 100, $stake_tx, $test_tx);
+    send_block(1, "a1", "a0", 100, $coinbase_tx, $test_tx);
     $connection->protocol->cmd_tx($test_tx->serialize . $zero_ip);
-    $connection->protocol->cmd_tx($stake_tx->serialize . $zero_ip);
+    $connection->protocol->cmd_tx($coinbase_tx->serialize . $zero_ip);
 
     my $height = QBitcoin::Block->blockchain_height;
     my $weight = QBitcoin::Block->best_weight;
@@ -71,19 +71,19 @@ sub pending_one {
 }
 
 sub pending_two {
-    my $stake_tx = make_tx(undef, -2);
+    my $coinbase_tx = make_tx(undef, 0);
     my $tx = make_tx();
-    my $test_tx = make_tx([ $stake_tx, $tx ], 2);
+    my $test_tx = make_tx([ $coinbase_tx, $tx ], 0);
     # height, hash, prev_hash, weight, $tx
     my $zero_ip = "\x00"x16;
     $connection->protocol->command = "tx";
     $connection->protocol->cmd_tx($test_tx->serialize . $zero_ip);
-    $connection->protocol->cmd_tx($stake_tx->serialize . $zero_ip);
+    $connection->protocol->cmd_tx($coinbase_tx->serialize . $zero_ip);
     QBitcoin::Transaction->cleanup_mempool();
-    send_block(1, "b1", "a0", 300, $stake_tx, $tx, $test_tx);
+    send_block(1, "b1", "a0", 300, $coinbase_tx, $tx, $test_tx);
     $connection->protocol->cmd_tx($test_tx->serialize . $zero_ip);
     $connection->protocol->cmd_tx($tx->serialize . $zero_ip);
-    $connection->protocol->cmd_tx($stake_tx->serialize . $zero_ip);
+    $connection->protocol->cmd_tx($coinbase_tx->serialize . $zero_ip);
 
     my $height = QBitcoin::Block->blockchain_height;
     my $weight = QBitcoin::Block->best_weight;

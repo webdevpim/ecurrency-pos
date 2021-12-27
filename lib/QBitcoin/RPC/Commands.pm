@@ -441,8 +441,9 @@ sub cmd_createrawtransaction {
         push @out, map { QBitcoin::TXO->new_txo(value => $out->{$_} * DENOMINATOR, scripthash => scripthash_by_address($_)) } keys %$out;
     }
     my $tx = QBitcoin::Transaction->new(
-        in  => \@in,
-        out => \@out,
+        in      => \@in,
+        out     => \@out,
+        tx_type => TX_TYPE_STANDARD,
     );
     return $self->response_ok(unpack("H*", $tx->serialize_unsigned));
 }

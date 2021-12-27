@@ -323,13 +323,13 @@ sub fee_dst {
     my $stake_tx;
     if ($block_start->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME) {
         # If $block_start is old enough then find stake tx in the branch started from this block
-        if (@{$block_start->transactions} && $block_start->transactions->[0]->fee < 0 && @{$block_start->transactions->[0]->in}) {
+        if (@{$block_start->transactions} && $block_start->transactions->[0]->is_stake && @{$block_start->transactions->[0]->in}) {
             $stake_tx = $block_start->transactions->[0];
         }
         my $block = $block_start;
         while ($block->next_block && $block->next_block->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME) {
             $block = $block->next_block;
-            if (@{$block->transactions} && $block->transactions->[0]->fee < 0 && @{$block->transactions->[0]->in}) {
+            if (@{$block->transactions} && $block->transactions->[0]->is_stake && @{$block->transactions->[0]->in}) {
                 $stake_tx = $block->transactions->[0];
             }
         }
@@ -341,13 +341,13 @@ sub fee_dst {
     my $block_class = ref $block_start;
     my $best_block = $block_class->best_block($block_class->max_db_height + 1);
     if ($best_block && $best_block->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME && $best_block->height < $block_start->height) {
-        if (@{$best_block->transactions} && $best_block->transactions->[0]->fee < 0 && @{$best_block->transactions->[0]->in}) {
+        if (@{$best_block->transactions} && $best_block->transactions->[0]->is_stake && @{$best_block->transactions->[0]->in}) {
             $stake_tx = $best_block->transactions->[0];
         }
         while ($best_block->next_block && $best_block->height < $block_start->height &&
                $best_block->next_block->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME) {
             $best_block = $best_block->next_block;
-            if (@{$best_block->transactions} && $best_block->transactions->[0]->fee < 0 && @{$best_block->transactions->[0]->in}) {
+            if (@{$best_block->transactions} && $best_block->transactions->[0]->is_stake && @{$best_block->transactions->[0]->in}) {
                 $stake_tx = $best_block->transactions->[0];
             }
         }

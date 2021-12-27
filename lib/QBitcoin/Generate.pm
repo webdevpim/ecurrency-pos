@@ -96,6 +96,7 @@ sub make_stake_tx {
         in              => [ map +{ txo => $_ }, @my_txo ],
         out             => \@out,
         fee             => -$total_fee,
+        tx_type         => TX_TYPE_STAKE,
         block_sign_data => $block_sign_data,
         received_time   => time(),
     );

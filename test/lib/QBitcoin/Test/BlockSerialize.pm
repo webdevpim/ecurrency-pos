@@ -6,6 +6,7 @@ use JSON::XS;
 use Test::MockModule;
 use QBitcoin::Const;
 BEGIN { no warnings 'redefine'; *QBitcoin::Const::UPGRADE_POW = sub () { 0 } };
+use QBitcoin::Config;
 use QBitcoin::Block;
 use Bitcoin::Serialized;
 
@@ -49,6 +50,7 @@ CHECK {
     $block_module->mock('deserialize', \&mock_block_deserialize);
     $block_module->mock('self_weight', \&mock_self_weight);
     $block_module->mock('calculate_hash', sub { $block_hash });
+    $config->{fake_coinbase} = 1;
 };
 
 1;

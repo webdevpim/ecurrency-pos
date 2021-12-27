@@ -4,6 +4,7 @@ use strict;
 use feature 'state';
 
 use List::Util qw(sum);
+use QBitcoin::Const;
 use QBitcoin::TXO;
 use QBitcoin::Transaction;
 use QBitcoin::Script::OpCodes qw(:OPCODES);
@@ -25,9 +26,10 @@ sub make_tx {
     $_->{redeem_script} = op_pushdata(pack("v", $_->value)) . OP_DROP . OP_1 foreach @in;
     my $out = QBitcoin::TXO->new_txo( value => $out_value - $fee, scripthash => hash160($script), redeem_script => $script, num => 0 );
     my $tx = QBitcoin::Transaction->new(
-        out => [ $out ],
-        in  => [ map +{ txo => $_, siglist => [] }, @in ],
-        fee => $fee,
+        out     => [ $out ],
+        in      => [ map +{ txo => $_, siglist => [] }, @in ],
+        fee     => $fee,
+        tx_type => $fee < 0 ? TX_TYPE_STAKE : $prev_tx ? TX_TYPE_STANDARD : TX_TYPE_COINBASE,
         $prev_tx ? () : ( coins_created => $out_value ),
     );
     $value += 10;

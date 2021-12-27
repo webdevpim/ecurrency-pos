@@ -337,7 +337,7 @@ sub tx_obj {
         fee         => $tx->fee,
         size        => $tx->size,
         value       => sum0(map { $_->value } @{$tx->out}) + $tx->fee,
-        is_coinbase => $tx->type == TX_TYPE_COINBASE ? TRUE : FALSE,
+        is_coinbase => $tx->is_coinbase ? TRUE : FALSE,
         status      => {
             confirmed => defined($tx->block_height) ? TRUE : FALSE,
             defined($block) ? (

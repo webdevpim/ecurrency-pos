@@ -94,6 +94,7 @@ sub _produce_my_utxo {
         in            => [],
         out           => [ $out ],
         fee           => 0,
+        tx_type       => TX_TYPE_COINBASE,
         coins_created => $out->{value},
         received_time => $time,
     );
@@ -146,6 +147,7 @@ sub _produce_tx {
         in            => [ map +{ txo => $_, siglist => $siglist }, @txo ],
         out           => [ $out ],
         fee           => $fee,
+        tx_type       => TX_TYPE_STANDARD,
         received_time => time(),
         @txo ? () : ( coins_created => $amount ),
     );

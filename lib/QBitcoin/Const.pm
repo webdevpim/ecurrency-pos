@@ -95,6 +95,10 @@ use constant TX_TYPES_CONST => {
     TX_TYPE_STAKE    => 2,
     TX_TYPE_COINBASE => 3,
 };
+# use constant TX_TYPES_NAMES  => [ "unknown", "standard", "stake", "coinbase" ];
+use constant TX_NAME_BY_TYPE => { reverse %{&TX_TYPES_CONST} };
+use constant TX_TYPES_NAMES  =>
+    [ map { $_ = lc(TX_NAME_BY_TYPE->{$_} // "unknown") and s/^tx_type_//r } 0 .. (sort values %{&TX_TYPES_CONST})[-1] ];
 
 use constant QBITCOIN_CONST;
 use constant STATE_CONST;
@@ -120,6 +124,7 @@ our @EXPORT = (
     keys %{&PROTOCOL_CONST},
     keys %{&PEER_STATUS_CONST},
     keys %{&TX_TYPES_CONST},
+    'TX_TYPES_NAMES',
     'PROTOCOL2NAME',
 );
 push @EXPORT, qw(timeslot);

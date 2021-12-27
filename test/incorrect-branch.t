@@ -45,8 +45,8 @@ sub send_block {
     $connection->protocol->cmd_block($block_data);
 }
 
-my $stake_tx = make_tx(undef, -2);
-my $test_tx = make_tx($stake_tx, 2);
+my $coinbase_tx = make_tx(undef, 0);
+my $test_tx = make_tx($coinbase_tx, 0);
 my $tx1 = make_tx;
 my $tx2 = make_tx($tx1, 0);
 # height, hash, prev_hash, weight, $tx
@@ -57,8 +57,8 @@ $connection->protocol->cmd_tx($test_tx->serialize . $zero_ip);
 $connection->protocol->cmd_tx($tx1->serialize . $zero_ip);
 $connection->protocol->cmd_tx($tx2->serialize . $zero_ip);
 QBitcoin::Transaction->cleanup_mempool();
-send_block(1, "a1", "a0", 200, $stake_tx, $test_tx);
-$connection->protocol->cmd_tx($stake_tx->serialize . $zero_ip);
+send_block(1, "a1", "a0", 200, $coinbase_tx, $test_tx);
+$connection->protocol->cmd_tx($coinbase_tx->serialize . $zero_ip);
 send_block(2, "a2", "a1", 300, $tx1);
 send_block(3, "a3", "a2", 400, $tx2);
 $connection->protocol->cmd_ihave(pack("VQ<a32", GENESIS_TIME + 3 * BLOCK_INTERVAL * FORCE_BLOCKS, 410, "\xaa" x 32));
@@ -75,23 +75,23 @@ send_block(2, "c2", "c1", 290);
 send_block(3, "c3", "c2", 410);
 is(QBitcoin::Block->best_weight, 400, "transaction included twice in block");
 
-# Process stake tx twice
-my $stake_tx2 = make_tx(undef, -2);
-my $test_tx2 = make_tx($stake_tx, 2);
+# Process coinbase tx twice
+my $coinbase_tx2 = make_tx(undef, 0);
+my $test_tx2 = make_tx($coinbase_tx, 0);
 my $tx3 = make_tx(undef, 0);
 send_block(1, "d1", "a0", 190, $tx3);
 send_block(2, "d2", "d1", 290);
-send_block(3, "d3", "d2", 410, $stake_tx2, $test_tx2, $tx3);
+send_block(3, "d3", "d2", 410, $coinbase_tx2, $test_tx2, $tx3);
 $connection->protocol->cmd_tx($test_tx2->serialize . $zero_ip);
-$connection->protocol->cmd_tx($stake_tx2->serialize . $zero_ip);
+$connection->protocol->cmd_tx($coinbase_tx2->serialize . $zero_ip);
 $connection->protocol->cmd_tx($tx3->serialize . $zero_ip);
 QBitcoin::Transaction->cleanup_mempool();
 is(QBitcoin::Block->best_weight, 400, "revert stake tx");
 send_block(1, "d1", "a0", 190, $tx3);
 send_block(2, "d2", "d1", 290);
-send_block(3, "d3", "d2", 410, $stake_tx2, $test_tx2, $tx3);
-$connection->protocol->cmd_tx($stake_tx2->serialize . $zero_ip);
-is(QBitcoin::Block->best_weight, 400, "revert stake tx once more");
+send_block(3, "d3", "d2", 410, $coinbase_tx2, $test_tx2, $tx3);
+$connection->protocol->cmd_tx($coinbase_tx2->serialize . $zero_ip);
+is(QBitcoin::Block->best_weight, 400, "revert coinbase tx once more");
 
 # Correct alternative branch
 send_block(1, "z1", "a0", 190, $tx1);
