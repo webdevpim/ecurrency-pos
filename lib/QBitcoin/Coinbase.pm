@@ -323,7 +323,7 @@ sub fee_dst {
     my $stake_tx;
     if ($block_start->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME) {
         # If $block_start is old enough then find stake tx in the branch started from this block
-        if (@{$block_start->transactions} && $block_start->transactions->[0]->fee < 0) {
+        if (@{$block_start->transactions} && $block_start->transactions->[0]->fee < 0 && @{$block_start->transactions->[0]->in}) {
             $stake_tx = $block_start->transactions->[0];
         }
         my $block = $block_start;
