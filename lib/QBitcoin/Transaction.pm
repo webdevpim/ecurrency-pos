@@ -38,6 +38,7 @@ use constant ATTR => qw(
     out
     up
     input_pending
+    input_detached
     blocks
     block_sign_data
     rcvd
@@ -51,8 +52,8 @@ my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
 
 my %TRANSACTION;      # in-memory cache transaction objects by tx_hash
 my %PENDING_INPUT_TX; # 2-level hash $pending_hash => $hash; value - transaction object
-tie(%PENDING_INPUT_TX, 'Tie::IxHash'); # Ordered by age, to remove oldest
 my %PENDING_TX_INPUT; # hash of pending transaction objects by tx_hash
+tie(%PENDING_TX_INPUT, 'Tie::IxHash'); # Ordered by age, to remove oldest
 
 END {
     # Free all references to txo for graceful free %TXO hash
@@ -99,7 +100,6 @@ sub save {
     }
 
     foreach my $in (@{$self->in}) {
-        $in->{txo}->spent_add($self);
         # Exclude from my utxo spent unconfirmed, do not use them for stake transactions
         $in->{txo}->del_my_utxo() if $self->fee >= 0 && $in->{txo}->is_my;
     }
@@ -158,13 +158,28 @@ sub add_pending_tx {
                 Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
                 return undef;
             }
-            push @{$self->in}, { txo => $txo, siglist => $in->{siglist} };
+            if ($tx->is_pending) {
+                $self->{input_detached}->{$tx->hash} //= [];
+                push @{$self->{input_detached}->{$tx->hash}}, { txo => $txo, siglist => $in->{siglist} };
+            }
+            else {
+                push @{$self->in}, { txo => $txo, siglist => $in->{siglist} };
+            }
+            $txo->spent_add($self);
         }
         if (!%{$self->{input_pending}}) {
             delete $self->{input_pending};
-            delete $PENDING_TX_INPUT{$self->hash};
-            $self->in = [ sort { _cmp_inputs($a, $b) } @{$self->in} ];
         }
+    }
+    elsif ($self->{input_detached} && ($tx_in = delete $self->{input_detached}->{$tx->hash})) {
+        push @{$self->in}, @$tx_in;
+        if (!%{$self->{input_detached}}) {
+            delete $self->{input_detached};
+        }
+    }
+    if (!$self->{input_pending} && !$self->{input_detached}) {
+        $self->in = [ sort { _cmp_inputs($a, $b) } @{$self->in} ];
+        delete $PENDING_TX_INPUT{$self->hash};
     }
     return $self;
 }
@@ -220,7 +235,7 @@ sub free {
 sub drop {
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my $self = shift;
-    if (!$TRANSACTION{$self->hash}) {
+    if (!$TRANSACTION{$self->hash} && !$PENDING_TX_INPUT{$self->hash}) {
         Debugf("Attempt to drop not cached transaction %s (already dropped?)", $self->hash_str);
         return 1;
     }
@@ -239,23 +254,34 @@ sub drop {
                 or return; # Do not drop the tx if any dependent transaction is in unconfirmed block, at any depth
         }
     }
-    Debugf("Drop transaction %s from mempool", $self->hash_str);
-    foreach my $out (@{$self->out}) {
-        $out->del_my_utxo if $out->is_my;
+    foreach my $in (@{$self->in}, map { @$_ } values %{$self->input_detached // {}}) {
+        $in->{txo}->spent_del($self);
     }
-    foreach my $in (@{$self->in}) {
-        my $txo = $in->{txo};
-        $txo->spent_del($self);
-        if ($txo->is_my && !$txo->spent_list) {
-            # add to my_utxo list only if it was confirmed in the best branch
-            my $class = ref $self;
-            my $tx_in = $class->get($txo->tx_in);
-            if (!$tx_in || defined($tx_in->block_height)) {
-                $txo->add_my_utxo;
-            }
+    if ($self->is_pending) {
+        Debugf("Drop pending transaction %s", $self->hash_str);
+        delete $PENDING_TX_INPUT{$self->hash};
+        foreach my $tx_in (keys(%{$self->input_detached // {}}), keys(%{$self->input_pending // {}})) {
+            delete $PENDING_INPUT_TX{$tx_in}->{$self->hash};
+            delete $PENDING_INPUT_TX{$tx_in} unless %{$PENDING_INPUT_TX{$tx_in}};
         }
     }
-    delete $TRANSACTION{$self->hash};
+    else {
+        Debugf("Drop transaction %s from mempool", $self->hash_str);
+        foreach my $out (@{$self->out}) {
+            $out->del_my_utxo if $out->is_my;
+        }
+        foreach my $txo (map { $_->{txo} } @{$self->in}) {
+            if ($txo->is_my && !$txo->spent_checked) {
+                # add to my_utxo list only if it was confirmed in the best branch
+                my $class = ref $self;
+                my $tx_in = $class->get($txo->tx_in);
+                if (!$tx_in || defined($tx_in->block_height)) {
+                    $txo->add_my_utxo;
+                }
+            }
+        }
+        delete $TRANSACTION{$self->hash};
+    }
     return 1;
 }
 
@@ -510,7 +536,7 @@ sub deserialize {
 
 sub is_pending {
     my $self = shift;
-    return $self->input_pending;
+    return exists $PENDING_TX_INPUT{$self->hash};
 }
 
 sub has_pending {
@@ -523,11 +549,11 @@ sub load_txo {
     my $self = shift;
 
     $self->load_inputs
-        or return undef; # transaction has no such output
+        or return undef; # transaction has no such output or incorrect redeem script
     $_->save foreach @{$self->out};
-    if ($self->input_pending) {
+    if ($self->input_pending || $self->input_detached) {
         # put the transaction into separate "waiting" pull (limited size) and reprocess it by each received transaction
-        foreach my $tx_in (keys %{$self->input_pending}) {
+        foreach my $tx_in (keys %{$self->input_pending // {}}) {
             Debugf("Save transaction %s as pending for %s", $self->hash_str, $self->hash_str($tx_in));
             # request pending inputs
             if (!$PENDING_INPUT_TX{$tx_in}) {
@@ -535,16 +561,17 @@ sub load_txo {
             }
             $PENDING_INPUT_TX{$tx_in}->{$self->hash} = $self;
         }
+        foreach my $tx_in (keys %{$self->input_detached // {}}) {
+            Debugf("Save transaction %s dependent on pending %s", $self->hash_str, $self->hash_str($tx_in));
+            $PENDING_INPUT_TX{$tx_in}->{$self->hash} = $self;
+        }
         $PENDING_TX_INPUT{$self->hash} = $self;
-        if (keys %PENDING_INPUT_TX > MAX_PENDING_TX) {
-            my ($oldest_hash) = keys %PENDING_INPUT_TX;
-            foreach my $tx (values %{$PENDING_INPUT_TX{$oldest_hash}}) {
-                foreach my $tx_in (keys %{$tx->input_pending}) {
-                    delete $PENDING_INPUT_TX{$tx_in}->{$tx->hash};
-                    delete $PENDING_INPUT_TX{$tx_in} unless %{$PENDING_INPUT_TX{$tx_in}};
+        if (keys %PENDING_TX_INPUT > MAX_PENDING_TX) {
+            foreach my $old_pending_tx (values %PENDING_TX_INPUT) {
+                if ($old_pending_tx->drop()) {
+                    Debugf("Drop old pending transaction %s", $old_pending_tx->hash_str);
+                    last;
                 }
-                delete $PENDING_TX_INPUT{$tx->hash};
-                Debugf("Drop transaction %s pending for %s from pending pool", $tx->hash_str, $self->hash_str($oldest_hash));
             }
         }
         return $self;
@@ -596,6 +623,7 @@ sub load_inputs {
     my @loaded_inputs;
     my @need_load_txo;
     my %unknown_inputs;
+    my %pending_inputs;
     my $inputs = delete $self->{in_raw};
     foreach my $in (@$inputs) {
         if (my $txo = QBitcoin::TXO->get($in)) {
@@ -603,14 +631,20 @@ sub load_inputs {
                 Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
                 return undef;
             }
-            push @loaded_inputs, {
-                txo     => $txo,
-                siglist => $in->{siglist},
-            };
             if ($PENDING_TX_INPUT{$in->{tx_out}}) {
                 Infof("input %s:%u is pending in transaction %s",
                     $self->hash_str($in->{tx_out}), $in->{num}, $self->hash_str);
-                $unknown_inputs{$in->{tx_out}}->{$in->{num}} = undef;
+                $pending_inputs{$in->{tx_out}} //= [];
+                push @{$pending_inputs{$in->{tx_out}}}, {
+                    txo     => $txo,
+                    siglist => $in->{siglist},
+                };
+            }
+            else {
+                push @loaded_inputs, {
+                    txo     => $txo,
+                    siglist => $in->{siglist},
+                };
             }
         }
         else {
@@ -628,10 +662,21 @@ sub load_inputs {
                     Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
                     return undef;
                 }
-                push @loaded_inputs, {
-                    txo     => $txo,
-                    siglist => $in->{siglist},
-                };
+                if ($PENDING_TX_INPUT{$in->{tx_out}}) {
+                    Infof("input %s:%u is pending in transaction %s",
+                        $self->hash_str($in->{tx_out}), $in->{num}, $self->hash_str);
+                    $pending_inputs{$in->{tx_out}} //= [];
+                    push @{$pending_inputs{$in->{tx_out}}}, {
+                        txo     => $txo,
+                        siglist => $in->{siglist},
+                    };
+                }
+                else {
+                    push @loaded_inputs, {
+                        txo     => $txo,
+                        siglist => $in->{siglist},
+                    };
+                }
             }
             else {
                 if ($class->check_by_hash($in->{tx_out})) {
@@ -648,7 +693,11 @@ sub load_inputs {
         }
     }
     $self->in = [ sort { _cmp_inputs($a, $b) } @loaded_inputs ];
-    $self->input_pending = \%unknown_inputs if %unknown_inputs;
+    foreach my $in (@loaded_inputs, map { @$_ } values %pending_inputs) {
+        $in->{txo}->spent_add($self);
+    }
+    $self->input_pending  = \%unknown_inputs if %unknown_inputs;
+    $self->input_detached = \%pending_inputs if %pending_inputs;
     return $self;
 }
 
@@ -865,7 +914,7 @@ sub unconfirm {
         $txo->tx_out = undef;
         $txo->siglist = undef;
         # Return to list of my utxo inputs from stake transaction, but do not use returned to mempool
-        $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my && !$txo->spent_list;
+        $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my && !$txo->spent_checked;
     }
     foreach my $txo (@{$self->out}) {
         $txo->del_my_utxo() if $txo->is_my;

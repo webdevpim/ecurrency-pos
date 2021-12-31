@@ -271,6 +271,11 @@ sub spent_list {
     return $self->{spent} ? values %{$self->{spent}} : ();
 }
 
+sub spent_checked {
+    my $self = shift;
+    return grep { !$_->is_pending } $self->spent_list;
+}
+
 sub set_redeem_script {
     my $self = shift;
     my ($script) = @_;
