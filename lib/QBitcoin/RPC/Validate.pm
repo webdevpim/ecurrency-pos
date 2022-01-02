@@ -29,6 +29,7 @@ my %SPEC = (
     inputs         => \&validate_inputs,
     outputs        => \&validate_outputs,
     privatekeys    => \&validate_privkeys,
+    privkey        => \&validate_privkey,
 );
 
 sub validate {
@@ -158,6 +159,12 @@ sub validate_outputs {
     }
     $_[0] = $outputs;
     return 1;
+}
+
+sub validate_privkey {
+    my $pk = eval { wif_to_pk($_[0]) }
+        or return 0;
+    $_[0] = $pk;
 }
 
 sub validate_privkeys {

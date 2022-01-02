@@ -17,15 +17,18 @@ use constant TABLE => 'my_address';
 
 use constant FIELDS => {
     address     => STRING,
+    public_key  => STRING,
     private_key => STRING,
 };
 
 mk_accessors(qw(private_key));
 
+state $my_address;
+
 sub my_address {
     my $class = shift // __PACKAGE__;
-    state $address = [ $class->find() ];
-    return wantarray ? @$address : $address->[0];
+    $my_address //= [ $class->find() ];
+    return wantarray ? @$my_address : $my_address->[0];
 }
 
 sub privkey {
@@ -43,6 +46,18 @@ sub pubkey {
 sub pubkeyhash {
     my $self = shift;
     return hash160($self->pubkey);
+}
+
+sub create {
+    my $class = shift;
+    my $attr = @_ == 1 ? $_[0] : { @_ };
+    my $self = QBitcoin::ORM::create($class, $attr);
+    if ($self) {
+        Infof("Created my address %s", $self->address);
+        push @$my_address, $self if $my_address;
+        # Do not forget to load utxo for this address by QBitcoin::Generate->load_address_utxo()
+    }
+    return $self;
 }
 
 sub address {

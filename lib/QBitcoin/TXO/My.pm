@@ -6,7 +6,7 @@ use feature 'state';
 use Role::Tiny;
 
 use QBitcoin::Log;
-use QBitcoin::MyAddress qw(my_address);
+use QBitcoin::MyAddress;
 
 my %MY_UTXO;
 
