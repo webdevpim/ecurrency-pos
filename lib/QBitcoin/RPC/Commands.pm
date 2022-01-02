@@ -1030,6 +1030,33 @@ sub cmd_importprivkey {
     return $self->response_ok("Private key for address $address imported");
 }
 
+$PARAMS{dumpprivkey} = "address";
+$HELP{dumpprivkey} = qq(
+dumpprivkey "address"
+
+Reveals the private key corresponding to 'address'.
+Then the importprivkey can be used with this output
+
+Arguments:
+1. address    (string, required) The address for the private key
+
+Result:
+"str"    (string) The private key
+
+Examples:
+> qbitcoin-cli dumpprivkey "myaddress"
+> qbitcoin-cli importprivkey "mykey"
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "dumpprivkey", "params": ["myaddress"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_dumpprivkey {
+    my $self = shift;
+    my $scripthash = scripthash_by_address($self->args->[0])
+        or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "The address is not correct");
+    my $my_address = QBitcoin::MyAddress->get_by_hash($scripthash)
+        or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Private key is unknown for this address");
+    return $self->response_ok($my_address->private_key);
+}
+
 # getmemoryinfo
 # getrpcinfo
 # stop
@@ -1056,6 +1083,5 @@ sub cmd_importprivkey {
 # listmyaddresses
 # getbalance
 # listunspent
-# dumpprivkey
 
 1;
