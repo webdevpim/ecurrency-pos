@@ -34,7 +34,7 @@ null    (json null)
 
 Examples:
 > qbitcoin-cli ping
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "ping", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "ping", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
 );
 sub cmd_ping {
     my $self = shift;
@@ -61,7 +61,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getblockchaininfo
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockchaininfo", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockchaininfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
 );
 sub cmd_getblockchaininfo {
     my $self = shift;
@@ -107,7 +107,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getbestblockhash
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getbestblockhash", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getbestblockhash", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
 );
 sub cmd_getbestblockhash {
     my $self = shift;
@@ -166,7 +166,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getblockheader "00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockheader", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockheader", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
 );
 sub cmd_getblockheader {
     my $self = shift;
@@ -201,7 +201,7 @@ n    (numeric) The current block count
 
 Examples:
 > qbitcoin-cli getblockcount
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockcount", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockcount", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
 );
 sub cmd_getblockcount {
     my $self = shift;
@@ -248,7 +248,7 @@ Result (for verbosity = 2):
 
 Examples:
 > qbitcoin-cli getblock "00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblock", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblock", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
 );
 sub cmd_getblock {
     my $self = shift;
@@ -294,7 +294,7 @@ Result:
 
 Examples:
 > bitcoin-cli getblockhash 1000
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockhash", "params": [1000]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockhash", "params": [1000]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
 );
 sub cmd_getblockhash {
     my $self = shift;
@@ -361,7 +361,7 @@ Result (if verbose is not set or is set to true):
 Examples:
 > qbitcoin-cli getrawtransaction "mytxid"
 > qbitcoin-cli getrawtransaction "mytxid" true
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getrawtransaction", "params": ["mytxid", true]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getrawtransaction", "params": ["mytxid", true]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getrawtransaction {
     my $self = shift;
@@ -426,7 +426,7 @@ Result:
 
 Examples:
 > bitcoin-cli createrawtransaction '[{"txid":"myid","vout":0}]' '[{"address":0.01}]'
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "createrawtransaction", "params": ['[{"txid":"myid","vout":0}]', '[{"address":0.01}]"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "createrawtransaction", "params": ['[{"txid":"myid","vout":0}]', '[{"address":0.01}]"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_createrawtransaction {
     my $self = shift;
@@ -469,7 +469,7 @@ Send the transaction (signed hex)
 > bitcoin-cli sendrawtransaction "signedhex"
 
 As a JSON-RPC call
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "sendrawtransaction", "params": ["signedhex"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "sendrawtransaction", "params": ["signedhex"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_sendrawtransaction {
     my $self = shift;
@@ -530,7 +530,7 @@ Result:
 
 Examples:
 > bitcoin-cli signrawtransactionwithkey "myhex" "[\"key1\",\"key2\"]"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "signrawtransactionwithkey", "params": ["myhex", "[\"key1\",\"key2\"]"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "signrawtransactionwithkey", "params": ["myhex", "[\"key1\",\"key2\"]"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_signrawtransactionwithkey {
     my $self = shift;
@@ -617,7 +617,7 @@ Result:
 
 Examples:
 > bitcoin-cli decoderawtransaction "hexstring"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "decoderawtransaction", "params": ["hexstring"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "decoderawtransaction", "params": ["hexstring"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_decoderawtransaction {
     my $self = shift;
@@ -645,7 +645,7 @@ Result:
 
 Examples:
 > bitcoin-cli getmempoolinfo
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getmempoolinfo", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getmempoolinfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getmempoolinfo {
     my $self = shift;
@@ -685,7 +685,7 @@ Result (for verbose = true):
 
 Examples:
 > bitcoin-cli getrawmempool true
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getrawmempool", "params": [true]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getrawmempool", "params": [true]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getrawmempool {
     my $self = shift;
@@ -712,7 +712,7 @@ Result:
 
 Examples:
 > bitcoin-cli validateaddress "WMAdVHijSynNwkU4RCttKhavrohAz2tNPvBPLF"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "validateaddress", "params": ["WMAdVHijSynNwkU4RCttKhavrohAz2tNPvBPLF"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "validateaddress", "params": ["WMAdVHijSynNwkU4RCttKhavrohAz2tNPvBPLF"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_validateaddress {
     my $self = shift;
@@ -754,7 +754,7 @@ Result:
 
 Examples:
 > bitcoin-cli getnetworkinfo
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getnetworkinfo", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getnetworkinfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getnetworkinfo {
     my $self = shift;
@@ -795,7 +795,7 @@ Result:
 
 Examples:
 > bitcoin-cli getindexinfo
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getindexinfo", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getindexinfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getindexinfo {
     my $self = shift;
@@ -830,7 +830,7 @@ Result:
 
 Examples:
 > bitcoin-cli getchaintxstats
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getchaintxstats", "params": [2016]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getchaintxstats", "params": [2016]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getchaintxstats {
     my $self = shift;
@@ -911,8 +911,8 @@ Result:
 Examples:
 > bitcoin-cli getblockstats '"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"'
 > bitcoin-cli getblockstats 1000
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockstats", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockstats", "params": [1000]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockstats", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockstats", "params": [1000]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getblockstats {
     my $self = shift;
@@ -977,7 +977,7 @@ Result:
 
 Examples:
 > bitcoin-cli getmempoolentry "mytxid"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getmempoolentry", "params": ["mytxid"]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getmempoolentry", "params": ["mytxid"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getmempoolentry {
     my $self = shift;
