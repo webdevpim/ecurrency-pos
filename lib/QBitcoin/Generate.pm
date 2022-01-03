@@ -12,9 +12,8 @@ use QBitcoin::TXO;
 use QBitcoin::Coinbase;
 use QBitcoin::Address qw(scripthash_by_address);
 use QBitcoin::MyAddress qw(my_address);
+use QBitcoin::Transaction;
 use QBitcoin::Generate::Control;
-
-my %MY_UTXO;
 
 sub load_utxo {
     my $class = shift;
