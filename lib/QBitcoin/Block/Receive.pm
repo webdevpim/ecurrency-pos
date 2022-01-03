@@ -216,7 +216,7 @@ sub receive {
                 $txo->del_my_utxo if $txo->is_my; # for stake transaction
             }
             foreach my $txo (@{$tx->out}) {
-                $txo->add_my_utxo if $txo->is_my && !$txo->spent_list;
+                $txo->add_my_utxo if $txo->is_my && !$txo->spent_checked;
             }
         }
 
@@ -263,7 +263,7 @@ sub receive {
                         $txo->del_my_utxo if $txo->is_my;
                     }
                     foreach my $txo (@{$tx->out}) {
-                        $txo->add_my_utxo if $txo->is_my && !$txo->spent_list;
+                        $txo->add_my_utxo if $txo->is_my && !$txo->spent_checked;
                     }
                 }
             }
