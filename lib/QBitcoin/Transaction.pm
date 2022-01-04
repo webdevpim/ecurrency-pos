@@ -121,7 +121,7 @@ sub receive {
         }
         return -1;
     }
-    Debugf("Process tx %s fee %i size %u", $self->hash_str, $self->fee, $self->size);
+    Debugf("Process tx %s fee %li size %u", $self->hash_str, $self->fee, $self->size);
     $self->process_pending();
     return 0;
 }
