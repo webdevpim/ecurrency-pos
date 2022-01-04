@@ -137,6 +137,9 @@ sub process_pending {
             }
             if (!$tx->is_pending) {
                 Debugf("Process transaction %s pending for %s", $tx->hash_str, $self->hash_str);
+                foreach my $in (@{$tx->in}) {
+                    $in->{txo}->spent_confirm($tx);
+                }
                 $tx->calculate_fee();
                 $tx->received_from->process_tx($tx);
             }
@@ -179,7 +182,7 @@ sub add_pending_tx {
             delete $self->{input_detached};
         }
     }
-    if (!$self->{input_pending} && !$self->{input_detached}) {
+    if (!($self->{input_pending} && %{$self->{input_pending}}) && !($self->{input_detached} && %{$self->{input_detached}})) {
         $self->in = [ sort { _cmp_inputs($a, $b) } @{$self->in} ];
         delete $PENDING_TX_INPUT{$self->hash};
     }
@@ -250,7 +253,7 @@ sub drop {
         return;
     }
     foreach my $out (@{$self->out}) {
-        foreach my $dep_tx ($out->spent_list) {
+        foreach my $dep_tx ($out->spent_list, $out->spent_pending) {
             Infof("Drop transaction %s dependent on %s", $dep_tx->hash_str, $self->hash_str);
             $dep_tx->drop
                 or return; # Do not drop the tx if any dependent transaction is in unconfirmed block, at any depth
@@ -273,7 +276,7 @@ sub drop {
             $out->del_my_utxo if $out->is_my;
         }
         foreach my $txo (map { $_->{txo} } @{$self->in}) {
-            if ($txo->is_my && !$txo->spent_checked) {
+            if ($txo->is_my && $txo->unspent) {
                 # add to my_utxo list only if it was confirmed in the best branch
                 my $class = ref $self;
                 my $tx_in = $class->get($txo->tx_in);
@@ -568,6 +571,9 @@ sub load_txo {
             $PENDING_INPUT_TX{$tx_in}->{$self->hash} = $self;
         }
         $PENDING_TX_INPUT{$self->hash} = $self;
+        foreach my $in (map { @$_ } values %{$self->input_detached // {}}) {
+            $in->{txo}->spent_add($self);
+        }
         if (keys %PENDING_TX_INPUT > MAX_PENDING_TX) {
             foreach my $old_pending_tx (values %PENDING_TX_INPUT) {
                 if ($old_pending_tx->drop()) {
@@ -576,10 +582,15 @@ sub load_txo {
                 }
             }
         }
-        return $self;
+    }
+    else {
+        $self->calculate_fee();
     }
 
-    $self->calculate_fee();
+    foreach my $in (@{$self->in}) {
+        $in->{txo}->spent_add($self);
+    }
+
     return $self;
 }
 
@@ -695,9 +706,6 @@ sub load_inputs {
         }
     }
     $self->in = [ sort { _cmp_inputs($a, $b) } @loaded_inputs ];
-    foreach my $in (@loaded_inputs, map { @$_ } values %pending_inputs) {
-        $in->{txo}->spent_add($self);
-    }
     $self->input_pending  = \%unknown_inputs if %unknown_inputs;
     $self->input_detached = \%pending_inputs if %pending_inputs;
     return $self;
@@ -916,7 +924,7 @@ sub unconfirm {
         $txo->tx_out = undef;
         $txo->siglist = undef;
         # Return to list of my utxo inputs from stake transaction, but do not use returned to mempool
-        $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my && !$txo->spent_checked;
+        $txo->add_my_utxo() if $self->fee < 0 && $txo->is_my && $txo->unspent;
     }
     foreach my $txo (@{$self->out}) {
         $txo->del_my_utxo() if $txo->is_my;

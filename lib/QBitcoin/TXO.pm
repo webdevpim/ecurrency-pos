@@ -256,14 +256,15 @@ sub pre_load {
 sub spent_add {
     my $self = shift;
     my ($tx) = @_;
-    $self->{spent} //= {}; # I am suspicious of autovivification
-    $self->{spent}->{$tx->hash} = $tx;
+    my $key = $tx->is_pending ? "spent_pending" : "spent";
+    $self->{$key} //= {}; # I am suspicious of autovivification
+    $self->{$key}->{$tx->hash} = $tx;
 }
 
 sub spent_del {
     my $self = shift;
     my ($tx) = @_;
-    delete $self->{spent}->{$tx->hash};
+    delete $self->{$tx->is_pending ? "spent_pending" : "spent"}->{$tx->hash};
 }
 
 sub spent_list {
@@ -271,9 +272,20 @@ sub spent_list {
     return $self->{spent} ? values %{$self->{spent}} : ();
 }
 
-sub spent_checked {
+sub spent_pending {
     my $self = shift;
-    return grep { !$_->is_pending } $self->spent_list;
+    return $self->{spent_pending} ? values %{$self->{spent_pending}} : ();
+}
+
+sub spent_confirm {
+    my $self = shift;
+    my ($tx) = @_;
+    $self->{spent}->{$tx->hash} = delete $self->{spent_pending}->{$tx->hash};
+}
+
+sub unspent {
+    my $self = shift;
+    return !($self->{spent} && %{$self->{spent}});
 }
 
 sub set_redeem_script {
@@ -334,7 +346,7 @@ sub address {
 sub get_scripthash_utxo {
     my $class = shift;
     my ($scripthash) = @_;
-    return grep { $_->scripthash eq $scripthash && !$_->spent_checked } values %TXO;
+    return grep { $_->scripthash eq $scripthash && $_->unspent } values %TXO;
 }
 
 1;
