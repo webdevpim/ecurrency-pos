@@ -115,12 +115,12 @@ sub save {
 sub receive {
     my $self = shift;
 
-    $self->validate_hash() == 0
-        or return -1;
-    $self->validate() == 0
-        or return -1;
-    $self->save() == 0
-        or return -1;
+    if ($self->validate_hash() or $self->validate() or $self->save()) {
+        foreach my $in (@{$self->in}) {
+            $in->{txo}->spent_del($self);
+        }
+        return -1;
+    }
     Debugf("Process tx %s fee %i size %u", $self->hash_str, $self->fee, $self->size);
     $self->process_pending();
     return 0;
@@ -131,8 +131,10 @@ sub process_pending {
     my $self = shift;
     if (my $pending = delete $PENDING_INPUT_TX{$self->hash}) {
         foreach my $tx (values %$pending) {
-            $tx->add_pending_tx($self)
-                or next;
+            if (!$tx->add_pending_tx($self)) {
+                $tx->drop();
+                next;
+            }
             if (!$tx->is_pending) {
                 Debugf("Process transaction %s pending for %s", $tx->hash_str, $self->hash_str);
                 $tx->calculate_fee();
