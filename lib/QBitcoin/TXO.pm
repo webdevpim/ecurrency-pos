@@ -155,7 +155,7 @@ sub store {
     my ($tx) = @_;
     my $script = QBitcoin::RedeemScript->store($self->scripthash);
     my $sql = "REPLACE INTO `" . TABLE . "` (value, num, tx_in, scripthash, tx_out, siglist) VALUES (?,?,?,?,NULL,NULL)";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%u]", $sql, $self->value, $self->num, $tx->id, $script->id);
+    DEBUG_ORM && Debugf("dbi [%s] values [%lu,%u,%u,%u]", $sql, $self->value, $self->num, $tx->id, $script->id);
     my $res = dbh->do($sql, undef, $self->value, $self->num, $tx->id, $script->id);
     $res == 1
         or die "Can't store txo " . $self->tx_in_str . ":" . $self->num . ": " . (dbh->errstr // "no error") . "\n";

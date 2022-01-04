@@ -108,7 +108,7 @@ sub generate {
         my $block_sign_data = $prev_block ? $prev_block->hash : ZERO_HASH;
         $block_sign_data .= $_->hash foreach @transactions;
         $stake_tx = make_stake_tx($fee, $block_sign_data);
-        Infof("Generated stake tx %s with input amount %u, consume %u fee", $stake_tx->hash_str,
+        Infof("Generated stake tx %s with input amount %lu, consume %lu fee", $stake_tx->hash_str,
             sum(map { $_->{txo}->value } @{$stake_tx->in}), -$stake_tx->fee);
         QBitcoin::TXO->save_all($stake_tx->hash, $stake_tx->out);
         $stake_tx->validate() == 0
@@ -129,7 +129,7 @@ sub generate {
     $generated->hash = $generated->calculate_hash();
     $generated->add_tx($_) foreach @transactions;
     QBitcoin::Generate::Control->generated_time($time);
-    Debugf("Generated block %s height %u weight %u, %u transactions",
+    Debugf("Generated block %s height %u weight %Lu, %u transactions",
         $generated->hash_str, $height, $generated->weight, scalar(@transactions));
     $generated->receive();
 }
