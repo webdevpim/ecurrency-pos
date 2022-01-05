@@ -434,16 +434,21 @@ sub drop_branch {
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my ($block) = @_;
 
-    while (1) {
-        free_block($block);
-        my @descendants = $block->descendants
-            or last;
-        # loop instead of deep recursion for case only one descendant (long chain)
-        my $next_block = pop @descendants;
+    # Change recursion to loop for chain with single descendant to avoid too deep recursion for drop long chains
+    # Drop starting with leaves (fresh blocks) to root (blocks with lower height)
+    # to prevent too long stake transactions dependency and deep recursion during drop dependent transactions
+    my $cur_block = $block;
+    while (my @descendants = $cur_block->descendants) {
+        $cur_block = pop @descendants;
         foreach my $descendant (@descendants) {
             $descendant->drop_branch(); # recursively
         }
-        $block = $next_block;
+    }
+    while (1) {
+        my $prev_block = $cur_block->prev_block;
+        free_block($cur_block);
+        last if $cur_block->hash eq $block->hash;
+        $cur_block = $prev_block;
     }
 }
 
