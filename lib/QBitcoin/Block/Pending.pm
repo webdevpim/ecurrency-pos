@@ -46,7 +46,6 @@ sub drop_pending {
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
 
     foreach my $next_block ($self->pending_descendants()) {
-        # TODO: Change recursion to loop by block chain
         $next_block->drop_pending();
     }
     if ($PENDING_BLOCK{$self->hash}) {
@@ -75,26 +74,36 @@ sub process_pending {
     my $self = shift;
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
 
-    my $pending = delete $PENDING_BLOCK_BLOCK{$self->hash}
-        or return $self;
-    # TODO: change recursion to loop by block chain to avoid too deep recursion
-    my $ret_block = $self;
-    foreach my $hash (keys %$pending) {
-        my $block_next = $PENDING_BLOCK{$hash};
-        $block_next->prev_block($self);
-        $block_next->add_as_descendant();
-        next if $block_next->pending_tx;
-        delete $PENDING_BLOCK{$hash};
-        Debugf("Process block %s height %u pending for received %s", $block_next->hash_str, $block_next->height, $self->hash_str);
-        $block_next->compact_tx();
-        if ($block_next->receive() == 0) {
-            $ret_block = $block_next->process_pending();
+    # change recursion to loop by chain of pending blocks to avoid too deep recursion
+    my $block = $self;
+    while (1) {
+        my $pending = delete $PENDING_BLOCK_BLOCK{$block->hash}
+            or return $block;
+        my @hashes = keys %$pending;
+        my $block_next;
+        while (my $hash = pop @hashes) {
+            my $pending_block = $PENDING_BLOCK{$hash};
+            $pending_block->prev_block($block);
+            $pending_block->add_as_descendant();
+            next if $pending_block->pending_tx;
+            delete $PENDING_BLOCK{$hash};
+            Debugf("Process block %s height %u pending for received %s", $pending_block->hash_str, $pending_block->height, $block->hash_str);
+            $pending_block->compact_tx();
+            if ($pending_block->receive() == 0) {
+                if ($block_next) {
+                    $pending_block->process_pending(); # recursve
+                }
+                else {
+                    $block_next = $pending_block;
+                }
+            }
+            else {
+                $pending_block->drop_pending();
+            }
         }
-        else {
-            $block_next->drop_pending();
-        }
+        return $block unless $block_next;
+        $block = $block_next;
     }
-    return $ret_block;
 }
 
 sub is_pending {
