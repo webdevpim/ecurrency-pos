@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS `block` (
   merkle_root binary(32) NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS `block_hash` ON `block` (hash);
+CREATE INDEX IF NOT EXISTS `block_time` ON `block` (time);
 
 CREATE TABLE IF NOT EXISTS `transaction` (
   id integer NOT NULL AUTO_INCREMENT PRIMARY KEY, -- "integer" (signed) required for sqlite autoincrement

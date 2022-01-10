@@ -20,17 +20,23 @@ sub want_tx {
     return 1;
 }
 
+sub coinbase_list {
+    my $class = shift;
+    my ($block_time) = @_;
+    return grep { $_->coins_created && defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
+        QBitcoin::Transaction->mempool_list();
+}
+
 sub choose_for_block {
     my $class = shift;
-    my ($size, $block_time) = @_;
+    my ($size, $block_time, $can_consume) = @_;
     my @mempool = sort { compare_tx($a, $b) }
         grep { defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
             QBitcoin::Transaction->mempool_list()
                 or return ();
     Debugf("Mempool: %s", join(',', map { $_->hash_str } @mempool));
-    if ($size == 0) {
-        # We can include only transactions with zero fee into block without stake transaction
-        @mempool = grep { $_->fee == 0 } @mempool;
+    if (!$can_consume) {
+        @mempool = grep { $_->fee == 0 || $_->coins_created } @mempool;
     }
     my $empty_tx = 0;
     my $tx_in_block = $size ? 1 : 0;
@@ -93,7 +99,7 @@ sub choose_for_block {
 sub compare_tx {
     # coinbase first
     return
-        ( @{$a->in} ? 1 : 0 ) <=> ( @{$b->in} ? 1 : 0 ) || # coinbase first
+        ( $a->coins_created ? 0 : 1 ) <=> ( $b->coins_created ? 0 : 1 ) || # coinbase first
         $b->fee * $a->size    <=> $a->fee * $b->size    ||
         $a->received_time     <=> $b->received_time     ||
         $a->hash cmp $b->hash;

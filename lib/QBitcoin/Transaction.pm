@@ -356,18 +356,25 @@ sub hash_str {
 
 sub data { "" } # TODO
 
+sub type {
+    my $self = shift;
+
+    return $self->{type} //=
+        $self->coins_created ? TX_TYPE_COINBASE :
+        $self->fee < 0       ? TX_TYPE_STAKE :
+        TX_TYPE_STANDARD;
+}
+
 sub serialize {
     my $self = shift;
 
-    my $data = varint(scalar @{$self->in});
+    my $data = pack("c", $self->type);
+    $data .= varint(scalar @{$self->in});
     $data .= serialize_input($_) foreach @{$self->in};
     $data .= varint(scalar @{$self->out});
     $data .= serialize_output($_) foreach @{$self->out};
-    if (!@{$self->in}) {
+    if ($self->type == TX_TYPE_COINBASE) {
         $data .= UPGRADE_POW ? serialize_coinbase($self->up) : pack("Q<", $self->coins_created);
-    }
-    elsif (UPGRADE_POW ? $self->up : $self->coins_created) {
-        die "Incorrect transaction (both input and coinbase), can't serialize " . $self->hash_str . "\n";
     }
     $data .= varstr($self->data);
     return $data;
@@ -376,7 +383,8 @@ sub serialize {
 sub serialize_unsigned {
     my $self = shift;
 
-    my $data = varint(scalar @{$self->in});
+    my $data = pack("c", $self->type);
+    $data .= varint(scalar @{$self->in});
     if ($self->in_raw) {
         $data .= serialize_input_raw($_) foreach @{$self->in_raw};
     }
@@ -525,10 +533,11 @@ sub deserialize {
     my $class = shift;
     my ($data) = @_;
     my $start_index = $data->index;
+    my $type = unpack("c", $data->get(1));
     my @input  = map { deserialize_input($data)  // return undef } 1 .. ($data->get_varint // return undef);
     my @output = map { deserialize_output($data) // return undef } 1 .. ($data->get_varint // return undef);
     my $up;
-    if (!@input) {
+    if ($type == TX_TYPE_COINBASE) {
         $up = UPGRADE_POW ? (deserialize_coinbase($data) // return undef) : unpack("Q<", $data->get(8) // return undef);
     }
     my $tx_data = $data->get_string() // return undef;
@@ -740,23 +749,26 @@ sub calculate_hash {
 
 sub validate_coinbase {
     my $self = shift;
-    if (@{$self->out} != 1) {
-        Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_str, scalar @{$self->out});
-        return -1;
-    }
     # Each upgrade should correspond fixed and deterministic tx hash for qbitcoin
     if (!$self->up) {
         # We should add some code here for validate coinbase in case of not UPGRADE_POW (premined or centrilized emission)
         Warningf("Incorrect transaction %s, no coinbase information nor inputs", $self->hash_str);
         return -1;
     }
+    if (@{$self->in}) {
+        Warningf("Mixed input and coinbase in the transaction %s", $self->hash_str);
+        return -1;
+    }
+    if (@{$self->out} != 1) {
+        Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_str, scalar @{$self->out});
+        return -1;
+    }
     $self->up->validate() == 0
         or return -1;
-    # TODO: uncomment when $transaction->data will be implemented
-    # if ($self->data ne '') {
-    #     Warningf("Incorrect transaction %s, coinbase can't contain data", $self->hash_str);
-    #     return -1;
-    # }
+    if ($self->data ne '') {
+        Warningf("Incorrect transaction %s, coinbase can't contain data", $self->hash_str);
+        return -1;
+    }
     if ($self->up->scripthash ne $self->out->[0]->scripthash) {
         Warningf("Mismatch scripthash for coinbase transaction %s", $self->hash_str);
         return -1 unless $config->{fake_coinbase};
@@ -785,12 +797,8 @@ sub validate {
     my $self = shift;
 
     if (UPGRADE_POW) {
-        if (!@{$self->in}) {
-            return $self->validate_coinbase;
-        }
         if ($self->coins_created) {
-            Warningf("Mixed input and coinbase in the transaction %s", $self->hash_str);
-            return -1;
+            return $self->validate_coinbase;
         }
     }
     # Transaction must contains at least one output (can't spend all inputs as fee)
@@ -815,10 +823,6 @@ sub validate {
             return -1;
         }
         $input_value += $in->value;
-    }
-    if ($input_value + $self->coins_created <= 0) {
-        Warningf("Zero input in transaction %s", $self->hash_str);
-        return -1;
     }
     if ($self->fee >= 0) {
         # Signcheck for stake transaction depends on block it relates to,
@@ -1001,7 +1005,7 @@ sub coinbase_weight {
 
 sub coinbase_value {
     my ($value) = @_;
-    return int($value); # TODO: minus upgrade fee
+    return int($value * (1 - UPGRADE_FEE));
 }
 
 # Create a transaction with already exising coinbase output

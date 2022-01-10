@@ -49,6 +49,7 @@ use constant QBITCOIN_CONST => {
     MAX_PENDING_TX          => 128,
     MAX_EMPTY_TX_IN_BLOCK   => 1,
     UPGRADE_POW             => 1,
+    UPGRADE_FEE             => 0.01, # 1%
     COINBASE_CONFIRM_TIME   => 2*3600, # 2 hours
     COINBASE_CONFIRM_BLOCKS => 6,
     COINBASE_WEIGHT_TIME    => 365*24*3600, # 1 year
@@ -89,11 +90,18 @@ use constant PEER_STATUS_CONST => {
     PEER_STATUS_NOCALL => 2, # disabled outgoing
 };
 
+use constant TX_TYPES_CONST => {
+    TX_TYPE_STANDARD => 1,
+    TX_TYPE_STAKE    => 2,
+    TX_TYPE_COINBASE => 3,
+};
+
 use constant QBITCOIN_CONST;
 use constant STATE_CONST;
 use constant DIR_CONST;
 use constant PROTOCOL_CONST;
 use constant PEER_STATUS_CONST;
+use constant TX_TYPES_CONST;
 
 use constant PROTOCOL2NAME => {
     map { s/BITCOIN/Bitcoin/r } map { s/PROTOCOL_//r } reverse %{&PROTOCOL_CONST}
@@ -111,6 +119,7 @@ our @EXPORT = (
     keys %{&DIR_CONST},
     keys %{&PROTOCOL_CONST},
     keys %{&PEER_STATUS_CONST},
+    keys %{&TX_TYPES_CONST},
     'PROTOCOL2NAME',
 );
 push @EXPORT, qw(timeslot);

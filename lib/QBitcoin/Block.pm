@@ -51,7 +51,7 @@ sub self_weight {
                 $self->{self_weight} = $stake_weight + @{$self->transactions};
                 # coinbase increases block weight
                 foreach my $transaction (@{$self->transactions}) {
-                    if (@{$transaction->in}) {
+                    if (!$transaction->coins_created) {
                         last if $transaction->fee >= 0;
                         next;
                     }

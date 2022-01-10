@@ -174,11 +174,27 @@ sub receive {
     for (my $b = $new_best; $b; $b = $b->next_block) {
         Debugf("Add block %s height %u to the best branch", $b->hash_str, $b->height);
         my $fail_tx;
+        my $coinbase_fee = {};
+        my $can_consume = 1; # Can validator consume transaction fee? No if stake transaction has no inputs
 
         for (my $num = 0; $num < @{$b->transactions}; $num++) {
             my $tx = $b->transactions->[$num];
             if (defined($tx->block_height) && $tx->block_height != $b->height) {
                 Warningf("Transaction %s included in blocks %u and %u", $tx->hash_str, $tx->block_height, $b->height);
+                $fail_tx = $tx->hash;
+                last;
+            }
+            if (!@{$tx->in} && !$tx->coins_created) {
+                if ($num > 0) {
+                    Warningf("Transaction %s has no inputs", $tx->hash_str);
+                    $fail_tx = $tx->hash;
+                    last;
+                }
+                # Stake transaction without inputs allowed only if the block has no (non-coinbase) transactions with positive fee
+                $can_consume = 0;
+            }
+            elsif (!$can_consume && $tx->fee > 0 && !$tx->coins_created) {
+                Warningf("Transaction %s has fee but block validator can't consume it", $tx->hash_str);
                 $fail_tx = $tx->hash;
                 last;
             }
@@ -217,6 +233,30 @@ sub receive {
             }
             foreach my $txo (@{$tx->out}) {
                 $txo->add_my_utxo if $txo->is_my && $txo->unspent;
+            }
+            if (UPGRADE_POW && UPGRADE_FEE && $tx->coins_created) {
+                if (my $dst_fee = $tx->up->fee_dst($new_best)) {
+                    $coinbase_fee->{$dst_fee} += $tx->fee;
+                }
+            }
+        }
+
+        if (%$coinbase_fee) {
+            my $stake_tx = $b->transactions->[0];
+            if ($stake_tx->fee < 0) {
+                foreach my $out (@{$stake_tx->out}) {
+                    my $dst = $out->scripthash;
+                    if ($coinbase_fee->{$dst}) {
+                        $coinbase_fee->{$dst} -= $out->value;
+                        delete $coinbase_fee->{$dst} if $coinbase_fee->{$dst} <= 0;
+                    }
+                }
+                if (%$coinbase_fee) {
+                    $fail_tx = "block";
+                }
+            }
+            else {
+                $fail_tx = "block";
             }
         }
 

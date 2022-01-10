@@ -52,7 +52,7 @@ $tx2->block_height = 12;
 
 QBitcoin::Transaction->cleanup_mempool();
 
-my @mempool = QBitcoin::Mempool->choose_for_block(0, 20);
+my @mempool = QBitcoin::Mempool->choose_for_block(0, 20, 0);
 
 is(scalar(@mempool), 0, "transactions dropped");
 
