@@ -42,7 +42,7 @@ sub save {
         my $key = $self->key;
         if ($TXO{$key}) {
             Errf("Attempt to override already loaded txo %s:%u", $self->tx_in_str, $self->num);
-            die "Attempt to override already loaded txo " . $self->tx_in_str. ":" . $self->num . "\n";
+            die "Attempt to override already loaded txo " . $self->tx_in_str . ":" . $self->num . "\n";
         }
         $TXO{$key} = $self;
         # Keep the txo in the %TXO hash until at least one reference (input or output) exists

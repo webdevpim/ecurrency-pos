@@ -92,19 +92,29 @@ sub get { # only cached
     return $TRANSACTION{$tx_hash};
 }
 
+sub add_to_cache {
+    my $self = shift;
+
+    if (exists $TRANSACTION{$self->hash}) {
+        die "receive already loaded transaction " . $self->hash_str . "\n";
+    }
+    $TRANSACTION{$self->hash} = $self;
+
+    foreach my $in (@{$self->in}) {
+        $in->{txo}->spent_add($self);
+    }
+}
+
 sub save {
     my $self = shift;
 
-    if ($TRANSACTION{$self->hash}) {
-        die "receive already loaded transaction " . $self->hash_str . "\n";
-    }
+    $self->add_to_cache();
 
     foreach my $in (@{$self->in}) {
         # Exclude from my utxo spent unconfirmed, do not use them for stake transactions
         $in->{txo}->del_my_utxo() if $self->fee >= 0 && $in->{txo}->is_my;
     }
 
-    $TRANSACTION{$self->hash} = $self;
     if ($self->up) {
         # This transaction is already validated
         $self->up->store;
@@ -902,11 +912,6 @@ sub on_load {
             Errf("Serialized transaction in hex: %s", unpack("H*", $self->serialize));
             die "Incorrect hash for loaded transaction " . $self->hash_str . " != " . $self->hash_str($hash) . "\n";
         }
-        $TRANSACTION{$hash} = $self;
-
-        foreach my $in (@{$self->in}) {
-            $in->{txo}->spent_add($self);
-        }
     }
 
     return $self;
@@ -939,7 +944,7 @@ sub unconfirm {
 sub is_cached {
     my $self = shift;
 
-    return $TRANSACTION{$self->hash} && refaddr($TRANSACTION{$self->hash}) == refaddr($self);
+    return exists($TRANSACTION{$self->hash}) && refaddr($TRANSACTION{$self->hash}) == refaddr($self);
 }
 
 sub stake_weight {

@@ -33,8 +33,11 @@ sub transactions {
             die "Get transactions from not-loaded block\n";
         }
         my @transactions = QBitcoin::Transaction->find(block_height => $self->height, -sortby => 'block_pos ASC');
+        foreach my $transaction (@transactions) {
+            $transaction->add_to_cache();
+            $transaction->add_to_block($self);
+        }
         $self->{transactions} = \@transactions;
-        $_->add_to_block($self) foreach @transactions;
     }
     return $self->{transactions};
 }

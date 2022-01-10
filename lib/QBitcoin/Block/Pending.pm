@@ -143,6 +143,7 @@ sub load_transactions {
         foreach my $tx_hash (@{$self->tx_hashes}) {
             my $transaction = QBitcoin::Transaction->get_by_hash($tx_hash);
             if ($transaction) {
+                $transaction->add_to_cache() unless $transaction->is_cached;
                 $self->add_tx($transaction);
             }
             else {
