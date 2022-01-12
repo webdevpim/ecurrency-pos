@@ -172,11 +172,11 @@ sub process_request {
             return $self->http_ok(unpack("H*", $block->serialize));
         }
         if ($path[2] eq "status") {
-            my $best_block = QBitcoin::Block->best_block($block->height) // QBitcoin::Block->find(height => $block->height);
+            my $best_block = block_by_height($block->height);
             my $is_best = $best_block && $best_block->hash eq $block->hash;
             my $next_best;
             if ($is_best && $block->height < QBitcoin::Block->blockchain_height) {
-                $next_best = QBitcoin::Block->best_block($block->height + 1) // QBitcoin::Block->find(height => $block->height + 1);
+                $next_best = block_by_height($block->height + 1);
             }
             return $self->http_ok({
                 in_best_chain => $is_best ? TRUE : FALSE,
@@ -208,7 +208,7 @@ sub process_request {
     elsif ($path[0] eq "block-height") {
         (@path == 2 && $path[1] =~ /^(?:0|[1-9][0-9]*)\z/)
             or return $self->http_response(404, "Unknown request");
-        my $block = QBitcoin::Block->best_block($path[1]) // QBitcoin::Block->find(height => $path[1])
+        my $block = block_by_height($path[1])
             or return $self->http_response(404, "Block not found");
         return $self->http_ok(unpack("H*", $block->hash));
     }
