@@ -2,6 +2,7 @@ package QBitcoin::Block::Receive;
 use warnings;
 use strict;
 
+use Scalar::Util qw(refaddr);
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Config;
@@ -72,6 +73,11 @@ sub to_cache {
     $block_pool{$self->hash} = $self;
     $self->add_as_descendant();
     $MIN_INCORE_HEIGHT = $self->height if !defined($MIN_INCORE_HEIGHT) || $MIN_INCORE_HEIGHT > $self->height;
+}
+
+sub is_cached {
+    my $self = shift;
+    return exists($block_pool{$self->hash}) && refaddr($block_pool{$self->hash}) == refaddr($self);
 }
 
 sub add_as_descendant {

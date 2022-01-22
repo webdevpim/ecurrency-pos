@@ -33,9 +33,12 @@ sub transactions {
             die "Get transactions from not-loaded block\n";
         }
         my @transactions = QBitcoin::Transaction->find(block_height => $self->height, -sortby => 'block_pos ASC');
-        foreach my $transaction (@transactions) {
-            $transaction->add_to_cache();
-            $transaction->add_to_block($self);
+        if ($self->is_cached) {
+            foreach my $transaction (@transactions) {
+                # It's possible that the transaction already loaded if it's included in some alternative branch
+                $transaction->add_to_cache() unless $transaction->is_cached;
+                $transaction->add_to_block($self);
+            }
         }
         $self->{transactions} = \@transactions;
     }

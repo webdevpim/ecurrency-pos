@@ -220,7 +220,7 @@ sub cmd_block {
                 $self->request_blocks(timeslot($block->time)-1);
             }
             else {
-                $block->load_transactions;
+                $block->load_transactions();
                 $self->request_tx($block->pending_tx);
                 $self->send_message("sendblock", $block->prev_hash);
                 $block->add_pending_block();
@@ -230,7 +230,7 @@ sub cmd_block {
         }
     }
 
-    $block->load_transactions($block);
+    $block->load_transactions();
     $self->syncing(0);
     if ($block->pending_tx) {
         $block->add_as_descendant();
