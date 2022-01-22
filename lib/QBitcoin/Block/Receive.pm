@@ -464,9 +464,7 @@ sub free_block {
     delete $block_pool[$block->height]->{$block->hash};
     delete $block_pool{$block->hash};
     $block->del_as_descendant();
-    foreach my $tx (@{$block->transactions}) {
-        $tx->del_from_block($block);
-    }
+    $block->free_tx();
     $block->drop_pending();
 }
 
