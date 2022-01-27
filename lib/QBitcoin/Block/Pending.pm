@@ -164,7 +164,9 @@ sub drop_all_pending {
     my ($connection) = @_;
 
     my $requested = 0;
-    foreach my $block (values %PENDING_BLOCK) {
+    foreach my $block_hash (keys %PENDING_BLOCK) {
+        my $block = $PENDING_BLOCK{$block_hash}
+            or next; # already dropped?
         if ($block->received_from->peer->id eq $connection->peer->id) {
             $block->drop_pending();
         }
