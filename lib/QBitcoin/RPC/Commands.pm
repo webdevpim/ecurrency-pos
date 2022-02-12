@@ -7,7 +7,7 @@ use List::Util qw(sum0 sum min max);
 use QBitcoin::Const;
 use QBitcoin::RPC::Const;
 use QBitcoin::ORM qw(dbh);
-use QBitcoin::Crypto qw(pubkey_by_privkey pk_import);
+use QBitcoin::Crypto qw(pk_import pk_alg);
 use QBitcoin::Block;
 use QBitcoin::Coinbase;
 use QBitcoin::Transaction;
@@ -1017,13 +1017,16 @@ As a JSON-RPC call
 );
 sub cmd_importprivkey {
     my $self = shift;
-    my $privkey = pk_import($self->args->[0])
+    my $private_key = $self->args->[0];
+    my ($pk_alg) = pk_alg($private_key)
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Incorrect private key");
-    my $pubkey = pubkey_by_privkey($privkey)
+    my $privkey = pk_import($self->args->[0], $pk_alg)
+        or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Incorrect private key");
+    my $pubkey = $privkey->pubkey_by_privkey
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "This type of private key is not supported for my_address");
     my $address = address_by_pubkey($pubkey);
     my $my_address = QBitcoin::MyAddress->create({
-        private_key => $self->args->[0],
+        private_key => $private_key,
         address     => $address,
     });
     QBitcoin::Generate->load_address_txo($my_address);

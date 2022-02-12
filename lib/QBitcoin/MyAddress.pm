@@ -6,8 +6,9 @@ use feature 'state';
 use QBitcoin::Config;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors new);
+use QBitcoin::Const;
 use QBitcoin::ORM qw(find :types);
-use QBitcoin::Crypto qw(hash160 hash256 pubkey_by_privkey pk_import);
+use QBitcoin::Crypto qw(hash160 hash256 pk_import pk_alg);
 use QBitcoin::Address qw(wif_to_pk address_by_pubkey script_by_pubkey script_by_pubkeyhash);
 
 use Exporter qw(import);
@@ -31,16 +32,28 @@ sub my_address {
     return wantarray ? @$my_address : $my_address->[0];
 }
 
-sub privkey {
-    my $self = shift;
-    return $self->{privkey} //= pk_import(wif_to_pk($self->private_key));
-}
-
 sub pubkey {
     my $self = shift;
     return $self->{pubkey} if $self->{pubkey};
-    $self->privkey or return undef;
-    return $self->{pubkey} = pubkey_by_privkey($self->privkey);
+    my ($pk_alg) = $self->algo
+        or return undef;
+    my $pk = $self->privkey($pk_alg);
+    return $self->{pubkey} = $pk->pubkey_by_privkey;
+}
+
+sub privkey {
+    my $self = shift;
+    my ($algo) = @_;
+    my $private_key = $self->private_key
+        or return undef;
+    return $self->{privkey}->[$algo] //= pk_import(wif_to_pk($private_key), $algo);
+}
+
+sub algo {
+    my $self = shift;
+    my $private_key = $self->private_key
+        or return ();
+    return @{$self->{algo} //= [ pk_alg(wif_to_pk($private_key)) ]};
 }
 
 sub pubkeyhash {

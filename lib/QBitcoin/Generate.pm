@@ -78,7 +78,19 @@ sub make_stake_tx {
         # It's possible to create stake tx without inputs if the block contains only coinbase and zero-fee tx
         return undef if !@my_txo && keys(%$fee) == 1 && !$fee->{""}; # No coinbase and no my txo -> no stake tx needed
         my $my_amount = sum0 map { $_->value } @my_txo;
-        my ($my_address) = my_address(); # first one
+        my $my_address;
+        if ($config->{sign_alg}) {
+            foreach my $sign_alg (split(/\s+/, $config->{sign_alg})) {
+                foreach my $addr (my_address()) {
+                    if (grep { $_ eq $sign_alg } $addr->algo) {
+                        $my_address = $addr;
+                        last;
+                    }
+                }
+                last if $my_address;
+            }
+        }
+        $my_address //= (my_address())[0];
         push @out, QBitcoin::TXO->new_txo(
             value      => $my_amount + $fee->{""},
             scripthash => scalar(scripthash_by_address($my_address->address)),

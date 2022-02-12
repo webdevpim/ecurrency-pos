@@ -96,6 +96,12 @@ use constant TX_TYPES_CONST => {
     TX_TYPE_STAKE    => 2,
     TX_TYPE_COINBASE => 3,
 };
+
+use constant CRYPT_ALGO => {
+    CRYPT_ALGO_ECDSA   => 1,
+    CRYPT_ALGO_SCHNORR => 2,
+};
+
 # use constant TX_TYPES_NAMES  => [ "unknown", "standard", "stake", "coinbase" ];
 use constant TX_NAME_BY_TYPE => { reverse %{&TX_TYPES_CONST} };
 use constant TX_TYPES_NAMES  =>
@@ -107,6 +113,7 @@ use constant DIR_CONST;
 use constant PROTOCOL_CONST;
 use constant PEER_STATUS_CONST;
 use constant TX_TYPES_CONST;
+use constant CRYPT_ALGO;
 
 use constant PROTOCOL2NAME => {
     map { s/BITCOIN/Bitcoin/r } map { s/PROTOCOL_//r } reverse %{&PROTOCOL_CONST}
@@ -125,6 +132,7 @@ our @EXPORT = (
     keys %{&PROTOCOL_CONST},
     keys %{&PEER_STATUS_CONST},
     keys %{&TX_TYPES_CONST},
+    keys %{&CRYPT_ALGO},
     'TX_TYPES_NAMES',
     'PROTOCOL2NAME',
 );
