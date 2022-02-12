@@ -95,30 +95,21 @@ sub main_loop {
         mempool_synced(1);
         blockchain_synced(1);
     }
-    # Load last INCORE_LEVELS blocks from database
-    while (1) {
-        my $incorrect = 0;
-        foreach my $block (reverse QBitcoin::Block->find(-sortby => "height DESC", -limit => 1)) {
-            if ($incorrect) {
-                Errf("Delete incorrect block descendant %s height %u", $block->hash_str, $block->height);
-                $block->delete();
-                next;
-            }
-            foreach my $tx (@{$block->transactions}) {
-                $tx->add_to_cache();
-                $tx->add_to_block($block);
-            }
-            QBitcoin::Block->max_db_height($block->height);
-            if ($block->receive(1) != 0) {
-                Errf("Incorrect stored block %s height %u, delete", $block->hash_str, $block->height);
-                $incorrect = 1;
-                $block->delete();
-                QBitcoin::Block->max_db_height($block->height - 1);
-                next;
-            }
-            Debugf("Loaded block height %u", $block->height);
+    # Load last block from database
+    while (my ($block) = QBitcoin::Block->find(-sortby => "height DESC", -limit => 1)) {
+        foreach my $tx (@{$block->transactions}) {
+            $tx->add_to_cache();
+            $tx->add_to_block($block);
         }
-        last if QBitcoin::Block->max_db_height >= 0 || !$incorrect;
+        QBitcoin::Block->max_db_height($block->height);
+        if ($block->receive(1) != 0) {
+            Errf("Incorrect stored block %s height %u, delete", $block->hash_str, $block->height);
+            $block->delete();
+            QBitcoin::Block->max_db_height($block->height - 1);
+            next;
+        }
+        Debugf("Loaded block height %u", $block->height);
+        last;
     }
     # Load my UTXO
     if ($config->{generate}) {
