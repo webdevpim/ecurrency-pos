@@ -161,33 +161,36 @@ sub generate {
         my $block_sign_data = $prev_block ? $prev_block->hash : ZERO_HASH;
         $block_sign_data .= $_->hash foreach @transactions;
         $stake_tx = make_stake_tx($fee, $block_sign_data);
-        Infof("Generated stake tx %s with input amount %lu, consume %lu fee", $stake_tx->hash_str,
-            sum0(map { $_->{txo}->value } @{$stake_tx->in}), -$stake_tx->fee);
-        # It's possible that the $stake_tx has no my_txo, so it may be not unique, already received or pending
-        # Ignore if already received; process if pending
-        if (QBitcoin::Transaction->check_by_hash($stake_tx->hash)) {
-            Warningf("Generated stake tx %s already known, skip block generation", $stake_tx->hash_str);
-            return;
-        }
-        $_->{txo}->spent_add($stake_tx) foreach @{$stake_tx->in};
-        QBitcoin::TXO->save_all($stake_tx->hash, $stake_tx->out);
-        $stake_tx->validate() == 0
-            or die "Incorrect generated stake transaction\n";
-        $stake_tx->save() == 0
-            or die "Incorrect generated stake transaction\n";
-        $stake_tx->process_pending();
-        if (defined(my $height = QBitcoin::Block->recv_pending_tx($stake_tx))) {
-            Infof("Generated stake tx %s is pending by a block, process it and skip new block generation", $stake_tx->hash_str);
-            if ($height != -1) {
-                my $block = QBitcoin::Block->best_block($height);
-                if (my $connection = $block->received_from) {
-                    $connection->syncing(0);
-                    $connection->request_new_block();
-                }
+        # No stake_tx here for the first transaction: no @my_txo, exists coinbase, but no reward dst for this coinbase
+        if ($stake_tx) {
+            Infof("Generated stake tx %s with input amount %lu, consume %lu fee", $stake_tx->hash_str,
+                sum0(map { $_->{txo}->value } @{$stake_tx->in}), -$stake_tx->fee);
+            # It's possible that the $stake_tx has no my_txo, so it may be not unique, already received or pending
+            # Ignore if already received; process if pending
+            if (QBitcoin::Transaction->check_by_hash($stake_tx->hash)) {
+                Warningf("Generated stake tx %s already known, skip block generation", $stake_tx->hash_str);
                 return;
             }
+            $_->{txo}->spent_add($stake_tx) foreach @{$stake_tx->in};
+            QBitcoin::TXO->save_all($stake_tx->hash, $stake_tx->out);
+            $stake_tx->validate() == 0
+                or die "Incorrect generated stake transaction\n";
+            $stake_tx->save() == 0
+                or die "Incorrect generated stake transaction\n";
+            $stake_tx->process_pending();
+            if (defined(my $height = QBitcoin::Block->recv_pending_tx($stake_tx))) {
+                Infof("Generated stake tx %s is pending by a block, process it and skip new block generation", $stake_tx->hash_str);
+                if ($height != -1) {
+                    my $block = QBitcoin::Block->best_block($height);
+                    if (my $connection = $block->received_from) {
+                        $connection->syncing(0);
+                        $connection->request_new_block();
+                    }
+                    return;
+                }
+            }
+            unshift @transactions, $stake_tx;
         }
-        unshift @transactions, $stake_tx;
     }
     my $generated = QBitcoin::Block->new({
         height       => $height,
