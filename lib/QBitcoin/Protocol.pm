@@ -727,7 +727,6 @@ sub cmd_pong {
             $self->drop_pending();
         }
     }
-    $self->ping_sent = undef;
     $self->last_cmd_ping = undef;
     return 0;
 }
@@ -736,6 +735,31 @@ sub cmd_reject {
     my $self = shift;
     Warningf("%s peer %s aborted connection", $self->type, $self->peer->id);
     return -1;
+}
+
+sub keepalive {
+    my $self = shift;
+    my $time = time();
+    if (!$self->ping_sent) {
+        # Do not send ping directly after connect
+        $self->ping_sent = $time;
+    }
+    elsif ($self->last_cmd_ping) {
+        if ($self->ping_sent + PEER_RECV_TIMEOUT < $time) {
+            # Timeout: no response for ping and no other commands received since ping was sent
+            return 0;
+        }
+    }
+    elsif ($self->ping_sent + PEER_PING_PERIOD < $time) {
+        # Send "ping" after each PEER_PING_PERIOD seconds even if there are other commands received from the peer
+        # This needed to reset "syncing" state in case when remote periodically announce new blocks or transactions, or just "ping" us
+        # Bitcoin node can ignore "getheaders" if it is in "initial block download" state,
+        # and in this case protocol will remain in "syncing" state and do not request new blocks until "ping" response and reset "syncing"
+        $self->send_message("ping", pack("Q", $time));
+        $self->ping_sent = $time;
+        $self->last_cmd_ping = $time;
+    }
+    return 1;
 }
 
 1;

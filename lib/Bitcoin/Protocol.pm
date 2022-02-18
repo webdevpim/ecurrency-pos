@@ -107,12 +107,12 @@ sub cmd_version {
     Infof("Remote version %u, features 0x%x", $version, $features);
     $self->send_message("verack", "");
     $self->greeted = 1;
-    $self->request_btc_blocks();
     return 0;
 }
 
 sub cmd_verack {
     my $self = shift;
+    $self->request_btc_blocks();
     return 0;
 }
 
@@ -438,6 +438,29 @@ sub cmd_sendcmpct {
 sub cmd_feefilter {
     my $self = shift;
     return 0;
+}
+
+sub keepalive {
+    my $self = shift;
+    my $time = time();
+    if (!$self->ping_sent) {
+        # Do not send ping directly after connect
+        $self->ping_sent = $time;
+    }
+    elsif ($self->ping_sent + PEER_RECV_TIMEOUT < $time) {
+        # Send "ping" after each PEER_RECV_TIMEOUT seconds even if there are other commands received from the peer
+        # This needed to reset "syncing" state in case when remote periodically announce new blocks or transactions, or just "ping" us
+        # Bitcoin node can ignore "getheaders" if it is in "initial block download" state,
+        # and in this case protocol will remain in "syncing" state and do not request new blocks until "ping" response and reset "syncing"
+        if ($self->last_cmd_ping) {
+            # Timeout: no response for ping and no other commands received since ping was sent
+            return 0;
+        }
+        $self->send_message("ping", pack("Q", $time));
+        $self->ping_sent = $time;
+        $self->last_cmd_ping = $time;
+    }
+    return 1;
 }
 
 1;

@@ -350,14 +350,8 @@ sub main_loop {
                 next unless $connection->protocol; # RPC can call disconnect() from receive() call
             }
 
-            if ($connection->state == STATE_CONNECTED &&
-                $connection->protocol->can('ping_sent') && $connection->protocol->last_recv_time + PEER_RECV_TIMEOUT < $time) {
-                if (!$connection->protocol->ping_sent) {
-                    $connection->protocol->send_message("ping", pack("Q", $time));
-                    $connection->protocol->ping_sent = $time;
-                    $connection->protocol->last_cmd_ping = $time;
-                }
-                elsif ($connection->protocol->ping_sent + PEER_RECV_TIMEOUT < $time) {
+            if ($connection->state == STATE_CONNECTED && $connection->protocol->can('keepalive')) {
+                if (!$connection->protocol->keepalive()) {
                     Noticef("%s peer %s timeout, closing connection", $connection->type, $connection->ip);
                     $connection->disconnect();
                     next;
