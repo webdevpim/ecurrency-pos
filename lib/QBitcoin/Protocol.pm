@@ -188,8 +188,8 @@ sub cmd_block {
         return 0;
     }
     if ($block->time < (QBitcoin::Block->blockchain_time // -1)) {
-        if (QBitcoin::Block->find(hash => $block->hash)) {
-            Debugf("Received block %s already known, skip", $block->hash_str);
+        if (my $loaded_block = QBitcoin::Block->find(hash => $block->hash)) {
+            Debugf("Received block %s height %u already known, skip", $block->hash_str, $loaded_block->height);
             $self->syncing(0);
             $self->request_new_block();
             return 0;
@@ -560,27 +560,43 @@ sub cmd_getblks {
             $height = $block->height;
         }
         else {
+            my @blocks;
             if ($low_time) {
-                # No block for any locator found, send only one block with $low_time for continue synchronization
+                # No block for any locator found, send two blocks: one just before $low_time and one just after
+                # for cover cases if prev block already exists on remote and if next our block is too far in future
+                my $new_block;
                 for ($height = QBitcoin::Block->blockchain_height; $height >= $min_incore_height; $height--) {
-                    $block = QBitcoin::Block->best_block($height)
+                    my $prev_block = QBitcoin::Block->best_block($height)
                         or last;
-                    if ($block->time > $low_time) {
-                        undef $block;
-                    }
-                    else {
+                    if ($prev_block->time <= $low_time) {
+                        $block = $prev_block;
                         last;
                     }
+                    $new_block = $prev_block;
                 }
-                $block //= QBitcoin::Block->find(time => { '<=' => $low_time }, -sortby => 'HEIGHT DESC', -limit => 1);
+                if (!$block) {
+                    $block = QBitcoin::Block->find(time => { '<=' => $low_time }, -sortby => 'HEIGHT DESC', -limit => 1);
+                    if (!$new_block || $new_block->height != $block->height+1) {
+                        $new_block = QBitcoin::Block->find(time => { '>' => $low_time }, -sortby => 'HEIGHT ASC', -limit => 1);
+                    }
+                }
+                push @blocks, $block if $block;
+                push @blocks, $new_block if $new_block;
             }
             else {
                 # special case
                 $block = QBitcoin::Block->best_block;
+                push @blocks, $block if $block;
             }
-            if ($block) {
-                Debugf("No block for any locator found, send block %s height %u", $block->hash_str, $block->height);
-                $self->send_message("block", $block->serialize);
+            if (@blocks == 1) {
+                Debugf("No block for any locator found, send block height %u to %s",
+                    $blocks[0]->height, $self->peer->id);
+                $self->send_message("block", $blocks[0]->serialize);
+            }
+            elsif (@blocks) {
+                Debugf("No block for any locator found, send blocks height %u .. %u to %s",
+                    $blocks[0]->height, $blocks[-1]->height, $self->peer->id);
+                $self->send_message("blocks", pack("C", scalar(@blocks)) . join('', map { $_->serialize } @blocks));
             }
             else {
                 Warningf("I have no block with height %d requested by peer %s", $height, $self->peer->id);
