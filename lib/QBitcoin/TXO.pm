@@ -116,7 +116,7 @@ sub load {
     $sql .= " FROM `" . $class->TABLE . "` AS t JOIN `" . QBitcoin::RedeemScript->TABLE . "` AS s ON (t.scripthash = s.id)";
     $sql .= " JOIN `" . TRANSACTION_TABLE . "` AS tx_in ON (tx_in.id = t.tx_in)";
     $sql .= " LEFT JOIN `" . TRANSACTION_TABLE . "` AS tx_out ON (tx_out.id = t.tx_out)";
-    $sql .= " WHERE " . join(" OR ", ("(tx_in.hash = ? AND num = ?)")x@in);
+    $sql .= " WHERE (tx_in.hash, num) IN (" . (dbh->get_info(17) eq "SQLite" ? "VALUES" : "") . join(",",("(?,?)")x@in) . ")";
     DEBUG_ORM && Debugf("sql: [%s] values [%s]", $sql, join(',', map { "X'" . unpack("H*", $_->{tx_out}) . "'", $_->{num} } @in));
     my $sth = dbh->prepare($sql);
     $sth->execute(map { $_->{tx_out}, $_->{num} } @in);
@@ -124,6 +124,7 @@ sub load {
     while (my $hash = $sth->fetchrow_hashref()) {
         push @txo, $class->new_saved($hash);
     }
+    DEBUG_ORM && Debugf("found %u entries", scalar(@txo));
     return @txo;
 }
 
@@ -204,6 +205,7 @@ sub load_stored_inputs {
             or die sprintf("Cached txo %s:%u has no tx_out %s\n", $txo->tx_in_str, $txo->num, unpack("H*", substr($tx_hash, 0, 4)));
         push @txo, $txo;
     }
+    DEBUG_ORM && Debugf("found %u entries", scalar(@txo));
     return @txo;
 }
 
@@ -225,6 +227,7 @@ sub load_stored_outputs {
         my $txo = $class->new_saved($hash);
         push @txo, $txo;
     }
+    DEBUG_ORM && Debugf("found %u entries", scalar(@txo));
     return @txo;
 }
 
