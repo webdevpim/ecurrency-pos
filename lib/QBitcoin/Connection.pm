@@ -3,6 +3,7 @@ use warnings;
 use strict;
 
 use Socket;
+use POSIX qw(:errno_h);
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
@@ -90,8 +91,13 @@ sub send {
     if ($self->sendbuf eq '' && $self->socket) {
         my $n = syswrite($self->socket, $data);
         if (!defined($n)) {
-            Errf("Error write to socket: %s", $!);
-            return -1;
+            if ($! == EAGAIN) {
+                Debugf("Error write to socket: %s", $!);
+            }
+            else {
+                Warningf("Error write to socket: %s", $!);
+            }
+            # May be EAGAIN (Resource temporarily unavailable), save data in savebuf and try to send it later
         }
         elsif ($n > 0) {
             return 0 if $n == length($data);
