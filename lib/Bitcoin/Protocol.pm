@@ -233,8 +233,10 @@ sub request_transactions {
     }
     else {
         if ($self->syncing) {
-            Infof("BTC syncing done");
             $self->syncing(0);
+        }
+        if (!btc_synced()) {
+            Infof("BTC syncing done");
             btc_synced(1);
             foreach my $connection (QBitcoin::ConnectionList->connected(PROTOCOL_QBITCOIN)) {
                 blockchain_synced() ? $connection->protocol->request_mempool : $connection->protocol->request_new_block();
