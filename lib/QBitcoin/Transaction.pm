@@ -45,6 +45,7 @@ use constant ATTR => qw(
     rcvd
     in_raw
     block_time
+    drop_immune
 );
 
 mk_accessors(keys %{&FIELDS}, ATTR);
@@ -262,10 +263,14 @@ sub drop {
         Debugf("Transaction %s is in loaded unconfirmed blocks, do not drop", $self->hash_str);
         return;
     }
+    if ($self->drop_immune) {
+        Debugf("Transaction %s is drop-immune, do not drop", $self->hash_str);
+        return;
+    }
     foreach my $out (@{$self->out}) {
         foreach my $dep_tx ($out->spent_list, $out->spent_pending) {
             Infof("Drop transaction %s dependent on %s", $dep_tx->hash_str, $self->hash_str);
-            $dep_tx->drop
+            $dep_tx->drop()
                 or return; # Do not drop the tx if any dependent transaction is in unconfirmed block, at any depth
         }
     }
@@ -591,14 +596,17 @@ sub load_txo {
         foreach my $in (map { @$_ } values %{$self->input_detached // {}}) {
             $in->{txo}->spent_add($self);
         }
+        $self->drop_immune = 1;
         if (keys %PENDING_TX_INPUT > MAX_PENDING_TX) {
             foreach my $old_pending_tx (values %PENDING_TX_INPUT) {
+                next unless $old_pending_tx->is_pending; # already dropped as dependent in this loop
                 if ($old_pending_tx->drop()) {
                     Debugf("Drop old pending transaction %s", $old_pending_tx->hash_str);
-                    last;
+                    last if %PENDING_TX_INPUT <= MAX_PENDING_TX;
                 }
             }
         }
+        delete $self->{drop_immune};
     }
     else {
         $self->calculate_fee();
