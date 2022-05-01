@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `tx_data` (
 -- Actually these are qbt addresses
 CREATE TABLE IF NOT EXISTS `redeem_script` (
   id integer NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  hash VARBINARY(32) NOT NULL,
+  hash varbinary(32) NOT NULL,
   script blob NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS `redeem_script_hash` ON `redeem_script` (hash);
