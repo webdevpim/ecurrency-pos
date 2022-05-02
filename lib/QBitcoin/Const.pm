@@ -11,6 +11,7 @@ use constant BTC_TESTNET        => 1;
 
 use constant QBITCOIN_CONST => {
     VERSION                 => "0.1",
+    DB_VERSION              => 1,
     BLOCK_INTERVAL          => 10, # sec
     GENESIS_TIME            => 1635933000, # must be divided by BLOCK_INTERVAL*FORCE_BLOCKS
     FORCE_BLOCKS            => 100, # generate each 100th block even if empty

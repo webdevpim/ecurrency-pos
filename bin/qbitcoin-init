@@ -1,0 +1,77 @@
+#! /usr/bin/perl
+use warnings;
+use strict;
+
+use Getopt::Long qw(:config bundling no_ignore_case no_auto_abbrev require_order);
+use QBitcoin::Const;
+use QBitcoin::WarnWrapper;
+use QBitcoin::Config qw($config read_config);
+use QBitcoin::ORM qw(dbh);
+
+sub usage {
+    print "Initialize or update qbitcoin database\n";
+    print "Usage: qbitcoin-init [options] <db-dir>\n";
+    print "Options:\n";
+    print "   --database=<database>  - db name,\n";
+    print "   --dbi=<dbms>           - dbms (by default 'mysql'),\n";
+    print "   -f, --config=<file>    - configuration file.\n";
+}
+
+sub main {
+    my ($help, $conffile);
+    my %opts;
+    unless (GetOptions(
+        'help|h|?'   => \$help,
+        'database=s' => \$opts{database},
+        'dbi=s'      => \$opts{dbi},
+        'config|f=s' => \$conffile,
+    )) {
+        select STDERR;
+        usage();
+        return 1;
+    }
+    if ($help || @ARGV != 1) {
+        usage();
+        return 0;
+    }
+    my $db_dir = $ARGV[0];
+    read_config($conffile);
+    $config->set($_ => $opts{$_}) foreach grep { defined $opts{$_} } keys %opts;
+    my $dbh = dbh();
+    my $ver;
+    {
+        local $dbh->{HandleError} = sub { 1 };
+        ($ver) = $dbh->selectrow_array("select max(version) from version");
+    }
+    if ($dbh->err) {
+        # Database was not initialized, create new by schema
+        apply_file("$db_dir/qbitcoin.sql");
+        $dbh->do("insert into version (version) values (?)", undef, DB_VERSION);
+        $dbh->disconnect;
+        print "Database initialized\n";
+    }
+    elsif (($ver // 0) < DB_VERSION) {
+        foreach my $update (($ver // 0) + 1 .. DB_VERSION) {
+            apply_file("$db_dir/updates/$ver.sql");
+            $dbh->do("insert into version (version) values (?)", undef, $update);
+        }
+        print "Database updated\n";
+    }
+    return 0;
+}
+
+sub apply_file {
+    my ($sql_file) = @_;
+    my $dbh = dbh();
+    my $dbms_name = $dbh->get_info(17);
+    open my $fh, '<', $sql_file
+        or die "Can't open $sql_file: $!\n";
+    local $/ = ";\n";
+    while (my $statement = <$fh>) {
+        # $statement =~ s/\blongblob\b/blob/gi if $dbms_name eq "SQLite";
+        $dbh->do($statement);
+    }
+    close($fh);
+}
+
+exit main(@ARGV);

@@ -111,3 +111,9 @@ CREATE TABLE IF NOT EXISTS `peer` (
   PRIMARY KEY (type_id, ip)
 );
 CREATE INDEX IF NOT EXISTS `peer_reputation` ON `peer` (reputation);
+
+CREATE TABLE IF NOT EXISTS `version` (
+  time timestamp not null DEFAULT CURRENT_TIMESTAMP,
+  version int unsigned NOT NULL,
+  PRIMARY KEY (version)
+);
