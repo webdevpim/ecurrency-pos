@@ -15,6 +15,9 @@ install::
 	#mkdir -p ${DST_ETC} && ${INSTALL} -n etc/* ${DST_ETC} || true
 	@echo "Install done"
 
+docker:: Dockerfile libcrypt-pk-ecc-schnorr-perl_0.01-1_all.deb libencode-base58-gmp-perl_1.00-1_all.deb libmath-gmpz-perl_0.54-1_amd64.deb
+	docker build -t qbitcoin:latest .
+
 PM_FILES := $(shell find lib -type f -name '*.pm')
 
 check_syntax:: bin/* ${PM_FILES}
