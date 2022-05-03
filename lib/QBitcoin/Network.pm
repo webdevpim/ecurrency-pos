@@ -370,7 +370,8 @@ sub set_pinned_peers {
             type_id    => PROTOCOL_QBITCOIN,
             pinned     => 1,
             reputation => 1000,
-        );
+        )
+            or next;
         delete $pinned_qbtc{$peer->ip};
     }
     $_->update(pinned => 0) foreach values %pinned_qbtc;
@@ -381,7 +382,8 @@ sub set_pinned_peers {
             host    => $peer_host,
             type_id => PROTOCOL_BITCOIN,
             pinned  => 1,
-        );
+        )
+            or next;
         delete $pinned_btc{$peer->ip};
     }
     $_->update(pinned => 0) foreach values %pinned_btc;

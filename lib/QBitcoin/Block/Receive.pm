@@ -342,7 +342,7 @@ sub receive {
         $self->received_from->peer->add_reputation(blockchain_synced() ? 2 : 0.02);
         if ($self->rcvd && $self->rcvd ne $self->received_from->peer->ip && $self->rcvd ne "\x00"x16) {
             my $src_peer = QBitcoin::Peer->get_or_create(type_id => PROTOCOL_QBITCOIN, ip => $self->rcvd);
-            $src_peer->add_reputation(blockchain_synced() ? 1 : 0.01);
+            $src_peer->add_reputation(blockchain_synced() ? 1 : 0.01) if $src_peer;
         }
     }
 

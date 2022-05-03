@@ -420,7 +420,7 @@ sub process_tx {
                 }
                 if ($tx->rcvd && $tx->rcvd ne "\x00"x16 && (!$recv_peer || $recv_peer->ip ne $tx->rcvd)) {
                     my $src_peer = QBitcoin::Peer->get_or_create(type_id => PROTOCOL_QBITCOIN, ip => $tx->rcvd);
-                    $src_peer->add_reputation($tx->up ? 100 : 1);
+                    $src_peer->add_reputation($tx->up ? 100 : 1) if $src_peer;
                 }
             }
         }
