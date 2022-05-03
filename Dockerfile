@@ -19,7 +19,10 @@ RUN apt-get update -qq && apt-get install -qqy apt-utils && \
 
 ENV PERL5LIB=/qbitcoin/lib
 ENV PATH=${PATH}:/qbitcoin/bin
-CMD qbitcoin-init --dbi=${dbi} --database=${database} /qbitcoin/db && \
-    exec /qbitcoin/bin/qbitcoind --peer=node.qcoin.info --dbi=${dbi} --database=${database} --log=/dev/null --verbose
+CMD if mount | grep -q " on /database "; then \
+      qbitcoin-init --dbi=${dbi} --database=${database} /qbitcoin/db && \
+      exec /qbitcoin/bin/qbitcoind --peer=node.qcoin.info --dbi=${dbi} --database=${database} --log=/dev/null --verbose; \
+    else echo "Please mount /database as external volume"; \
+    fi
 
 EXPOSE 9555
