@@ -26,6 +26,8 @@ our @EXPORT_OK = qw(script_eval op_pushdata);
 # https://developer.bitcoin.org/devguide/transactions.html
 # https://academy.bit2me.com/en/what-is-bitcoin-script/# (?)
 
+use constant LOCKTIME_THRESHOLD => 500000000;
+
 # Allow attributes "in1", "in2", etc
 sub MODIFY_CODE_ATTRIBUTES {
     my ($class, $code, @attrs) = @_;
@@ -222,7 +224,7 @@ foreach my $opcode (0x01 .. 0x4b) {
     $OP_CMD[$opcode] = sub { pushdatan($opcode, @_) };
 }
 foreach (1 .. 10) {
-    my $opcode = OPCODES->{"OP_NOP$_"} or die "No opcode for OP_NOP$_\n";
+    my $opcode = OPCODES->{"OP_NOP$_"} or next;
     $OP_CMD[$opcode] = sub { undef };
 }
 
@@ -407,6 +409,42 @@ sub cmd_within($) {
     @$stack >= 3 or return 0;
     my ($x, $min, $max) = map { unpack_int($_) // return 0 } splice(@$stack, -3);
     push @$stack, $x >= $min && $x < $max ? TRUE : FALSE;
+    return undef;
+}
+
+# BIP-0065
+sub cmd_checklocktimeverify($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    @$stack or return 0;
+    my $n = unpack_int($stack->[-1]) // return 0;
+    $n >= 0 or return 0;
+    if ($n < LOCKTIME_THRESHOLD) {
+        if ($state->tx->can("nLockTime")) {
+            # Bitcoin
+            if ($state->tx->nLockTime >= LOCKTIME_THRESHOLD || $state->tx->nLockTime < $n) {
+                return 0;
+            }
+        }
+        else {
+            # QBitcoin
+            $state->tx->set_min_tx_block_height($n);
+        }
+    }
+    else {
+        if ($state->tx->can("nLockTime")) {
+            if ($state->tx->nLockTime < $n) {
+                return 0;
+            }
+        }
+        else {
+            # QBitcoin
+            $state->tx->set_min_tx_time($n);
+        }
+    }
+    # Also for Bitcoin we have to check that input nSequense is not 0xffffffff
+    # This does not matter for qBitcoin
     return undef;
 }
 

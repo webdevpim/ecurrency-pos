@@ -862,7 +862,9 @@ sub validate {
 sub valid_for_block {
     my $self = shift;
     my ($block) = @_;
-    ($self->min_tx_time // return -1) <= timeslot($block->time)
+    ( $self->min_tx_time // "Inf" ) <= timeslot($block->time)
+        or return -1;
+    ( $self->min_tx_block_height // "Inf" ) <= $block->height
         or return -1;
     if ($self->is_stake) {
         $self->block_sign_data = $block->sign_data;
@@ -874,6 +876,8 @@ sub valid_for_block {
 
 sub check_input_script {
     my $self = shift;
+    $self->{min_tx_time} = -1;
+    $self->{min_tx_block_height} = -1;
     foreach my $num (0 .. $#{$self->in}) {
         my $in = $self->in->[$num];
         if ($in->{txo}->check_script($in->{siglist}, $self, $num) != 0) {
@@ -1068,10 +1072,55 @@ sub new_coinbase {
     return $self;
 }
 
+# For standard transaction this can be set by check_input_script() if it execute "checklocktimeverify" opcode
+sub set_min_tx_time {
+    my $self = shift;
+    my ($val) = @_;
+
+    if (defined($self->{min_tx_time}) && $self->{min_tx_time} < $val) {
+        $self->{min_tx_time} = $val;
+    }
+}
+
 sub min_tx_time {
     my $self = shift;
 
-    return $self->up ? $self->up->min_tx_time : 0;
+    if (exists $self->{min_tx_time}) {
+        return $self->{min_tx_time};
+    }
+    elsif ($self->up) {
+        return $self->{min_tx_time} = $self->up->min_tx_time;
+    }
+    else {
+        # min_tx_time may be unknown if the transaction was loaded from database
+        # and then unconfirmed (moved to mempool)
+        $self->check_input_script;
+        return $self->{min_tx_time};
+    }
+}
+
+sub set_min_tx_block_height {
+    my $self = shift;
+    my ($val) = @_;
+
+    if (defined($self->{min_tx_block_height}) && $self->{min_tx_block_height} < $val) {
+        $self->{min_tx_block_height} = $val;
+    }
+}
+
+sub min_tx_block_height {
+    my $self = shift;
+
+    if (exists $self->{min_tx_block_height}) {
+        return $self->{min_tx_block_height};
+    }
+    elsif ($self->up) {
+        return -1;
+    }
+    else {
+        $self->check_input_script;
+        return $self->{min_tx_block_height};
+    }
 }
 
 sub drop_all_pending {

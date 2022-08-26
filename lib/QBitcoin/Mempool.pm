@@ -29,9 +29,10 @@ sub coinbase_list {
 
 sub choose_for_block {
     my $class = shift;
-    my ($size, $block_time, $can_consume) = @_;
+    my ($size, $block_time, $block_height, $can_consume) = @_;
     my @mempool = sort { compare_tx($a, $b) }
-        grep { defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
+        grep { defined($_->min_tx_block_height) && $_->min_tx_block_height <= $block_height &&
+               defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
             QBitcoin::Transaction->mempool_list()
                 or return ();
     Debugf("Mempool: %s", join(',', map { $_->hash_str } @mempool));
@@ -100,8 +101,8 @@ sub compare_tx {
     # coinbase first
     return
         ( $a->coins_created ? 0 : 1 ) <=> ( $b->coins_created ? 0 : 1 ) || # coinbase first
-        $b->fee * $a->size    <=> $a->fee * $b->size    ||
-        $a->received_time     <=> $b->received_time     ||
+        $b->fee * $a->size <=> $a->fee * $b->size ||
+        $a->received_time  <=> $b->received_time  ||
         $a->hash cmp $b->hash;
 }
 

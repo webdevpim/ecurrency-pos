@@ -112,8 +112,8 @@ use constant OPCODES => {
     OP_CHECKMULTISIG       => 0xae, # +
     OP_CHECKMULTISIGVERIFY => 0xaf, # +
 
-    OP_NOP2                => 0xb1, # + previously OP_CHECKLOCKTIMEVERIFY
-    OP_NOP3                => 0xb2, # + previously OP_CHECKSEQUENCEVERIFY
+    OP_CHECKLOCKTIMEVERIFY => 0xb1, # + previously OP_NOP2
+    OP_CHECKSEQUENCEVERIFY => 0xb2, # + previously OP_NOP3
 
     OP_PUBKEYHASH          => 0xfd, # +
     OP_PUBKEY              => 0xfe, # +

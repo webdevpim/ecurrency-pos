@@ -69,14 +69,20 @@ my $out = QBitcoin::TXO->new_txo({
     value      => int($value * (1 - UPGRADE_FEE)),
     scripthash => $open_script,
 });
-my $tx = QBitcoin::Transaction->new({
-    in      => [],
-    out     => [ $out ],
-    up      => $up,
-    fee     => 0,
-    tx_type => TX_TYPE_COINBASE,
-});
-$tx->calculate_hash;
+
+sub tx {
+    my $tx = QBitcoin::Transaction->new({
+        in      => [],
+        out     => [ $out ],
+        up      => $up,
+        fee     => 0,
+        tx_type => TX_TYPE_COINBASE,
+    });
+    $tx->calculate_hash;
+    return $tx;
+}
+
+my $tx = tx();
 $out->tx_out = $tx->hash;
 $out->num = 0;
 
@@ -121,11 +127,15 @@ SKIP: {
 
 is($tx->validate(), 0, "Correct coinbase");
 
-my $block = QBitcoin::Block->new( time => $btc_block[7]->time + 2*3600 - 15 );
+# valid_for_block() saves min_tx_time in the transaction object, so rebuild it
+$tx = tx();
+my $block = QBitcoin::Block->new( time => $btc_block[7]->time + 2*3600 - 15, height => 1 );
 isnt($tx->valid_for_block($block), 0, "Early block");
+$tx = tx();
 $block->time = $btc_block[7]->time + 2*3600 + 15;
 is($tx->valid_for_block($block), 0, "Valid for block");
 
+$tx = tx();
 $btc_block[7]->delete;
 delete $up->{btc_confirm_time};
 isnt($tx->valid_for_block($block), 0, "Not enough confirmations");
