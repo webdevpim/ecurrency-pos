@@ -50,6 +50,7 @@ use constant ATTR => qw(
 mk_accessors(keys %{&FIELDS}, ATTR);
 
 my %TRANSACTION;      # in-memory cache transaction objects by tx_hash
+my %TX_SEQ_DEPENDS;   # txo depends min_rel_time or min_rel_height
 my %PENDING_INPUT_TX; # 2-level hash $pending_hash => $hash; value - transaction object
 my %PENDING_TX_INPUT; # hash of pending transaction objects by tx_hash
 tie(%PENDING_TX_INPUT, 'Tie::IxHash'); # Ordered by age, to remove oldest
@@ -102,6 +103,18 @@ sub add_to_cache {
     foreach my $in (@{$self->in}) {
         $in->{txo}->spent_add($self);
     }
+}
+
+sub delete_from_cache {
+    my $self = shift;
+
+    foreach my $in (@{$self->in}) {
+        my $txo = $in->{txo};
+        if (delete $TX_SEQ_DEPENDS{$txo->tx_in}->{$self->hash}) {
+            delete $TX_SEQ_DEPENDS{$txo->tx_in} unless %{$TX_SEQ_DEPENDS{$txo->tx_in}};
+        }
+    }
+    delete $TRANSACTION{$self->hash};
 }
 
 sub save {
@@ -241,7 +254,7 @@ sub free {
     foreach my $in (@{$self->in}) {
         $in->{txo}->spent_del($self);
     }
-    delete $TRANSACTION{$self->hash};
+    $self->delete_from_cache;
 }
 
 # Drop the transaction from mempool and all dependent transactions if any
@@ -297,7 +310,7 @@ sub drop {
                 }
             }
         }
-        delete $TRANSACTION{$self->hash};
+        $self->delete_from_cache;
     }
     return 1;
 }
@@ -338,8 +351,7 @@ sub store {
     # we are in sql transaction
     $self->create();
     foreach my $in (@{$self->in}) {
-        my $txo = $in->{txo};
-        $txo->store_spend($self),
+        $in->{txo}->store_spend($self),
     }
     foreach my $txo (@{$self->out}) {
         $txo->store($self);
@@ -862,15 +874,15 @@ sub validate {
 sub valid_for_block {
     my $self = shift;
     my ($block) = @_;
-    ( $self->min_tx_time // "Inf" ) <= timeslot($block->time)
-        or return -1;
-    ( $self->min_tx_block_height // "Inf" ) <= $block->height
-        or return -1;
     if ($self->is_stake) {
         $self->block_sign_data = $block->sign_data;
         $self->check_input_script == 0
             or return -1;
     }
+    ( $self->min_tx_time(ref $block) // "Inf" ) <= timeslot($block->time)
+        or return -1;
+    ( $self->min_tx_block_height // "Inf" ) <= $block->height
+        or return -1;
     return 0;
 }
 
@@ -951,6 +963,31 @@ sub on_load {
     return $self;
 }
 
+sub confirm {
+    my $self = shift;
+    my ($block, $pos) = @_;
+
+    $self->block_height = $block->height;
+    $self->block_pos = $pos;
+    $self->block_time = $block->time;
+    foreach my $in (@{$self->in}) {
+        my $txo = $in->{txo};
+        $txo->tx_out = $self->hash;
+        $txo->siglist = $in->{siglist};
+        $txo->del_my_utxo if $txo->is_my; # for stake transaction
+    }
+    foreach my $txo (@{$self->out}) {
+        $txo->add_my_utxo if $txo->is_my && $txo->unspent;
+    }
+    # min proper block_height and time should be recalculated for depended transactions
+    if (exists $TX_SEQ_DEPENDS{$self->hash}) {
+        foreach my $tx (values %{$TX_SEQ_DEPENDS{$self->hash}}) {
+            delete $tx->{min_tx_rel_time};
+            delete $tx->{min_tx_rel_block_height};
+        }
+    }
+}
+
 sub unconfirm {
     my $self = shift;
     Debugf("unconfirm transaction %s (confirmed in block height %u)", $self->hash_str, $self->block_height);
@@ -973,12 +1010,56 @@ sub unconfirm {
         # $self->delete;
         $self->id = undef;
     }
+    # dependent transactions with seq limits should not be confirmed
+    if (exists $TX_SEQ_DEPENDS{$self->hash}) {
+        foreach my $tx (values %{$TX_SEQ_DEPENDS{$self->hash}}) {
+            $tx->{min_tx_rel_time} = undef if exists $tx->{min_tx_rel_time};
+            $tx->{min_tx_rel_block_height} = undef if exists $tx->{min_tx_rel_block_height};
+        }
+    }
 }
 
 sub is_cached {
     my $self = shift;
 
     return exists($TRANSACTION{$self->hash}) && refaddr($TRANSACTION{$self->hash}) == refaddr($self);
+}
+
+sub txo_height {
+    my $class = shift;
+    my ($txo) = @_;
+    my $block_time;
+    my $block_height;
+    if (my $tx_in = $class->get($txo->tx_in)) {
+        # block_time may be differ from the time of the best block with block_height if we're checking alternative branch
+        $block_time = $tx_in->block_time;
+        if (!defined($block_height = $tx_in->block_height)) {
+            return undef;
+        }
+    }
+    elsif (my ($tx_hashref) = $class->fetch(hash => $txo->tx_in)) {
+        $block_height = $tx_hashref->{block_height};
+    }
+    else {
+        # tx generated this txo should be loaded during tx validation
+        Errf("No input transaction %s for txo", $txo->tx_in_str);
+        return undef;
+    }
+    return wantarray ? ($block_height, $block_time) : $block_height;
+}
+
+sub txo_time {
+    my $class = shift;
+    my ($txo, $class_block) = @_;
+
+    my ($block_height, $block_time) = $class->txo_height($txo);
+    if (!$block_time) {
+        defined($block_height) or return undef;
+        my $block = $class_block->best_block($block_height) // $class_block->find(height => $block_height)
+            or die "Can't find block height $block_height\n";
+        $block_time = $block->time;
+    }
+    return $block_time;
 }
 
 sub stake_weight {
@@ -989,29 +1070,11 @@ sub stake_weight {
         my $class = ref $self;
         my $class_block = ref $block;
         foreach my $in (map { $_->{txo} } @{$self->in}) {
-            my $in_block_time;
-            my $in_block_height;
-            if (my $tx_in = $class->get($in->tx_in)) {
-                # block_time may be differ from the time of the best block with block_height if we're checking alternative branch
-                $in_block_time = $tx_in->block_time;
-                if (!defined($in_block_height = $tx_in->block_height)) {
-                    Warningf("Can't get stake_weight for %s with unconfirmed input %s:%u",
-                        $self->hash_str, $in->tx_in_str, $in->num);
-                    return undef;
-                }
-            }
-            elsif (my ($tx_hashref) = $class->fetch(hash => $in->tx_in)) {
-                $in_block_height = $tx_hashref->{block_height};
-            }
-            else {
-                # tx generated this txo should be loaded during tx validation
-                Warningf("No input transaction %s for txo", $in->tx_in_str);
-                return undef;
-            }
-            if (!$in_block_time) {
-                my $in_block = $class_block->best_block($in_block_height) // $class_block->find(height => $in_block_height)
-                    or die "Can't find block height $in_block_height\n";
-                $in_block_time = $in_block->time;
+            my $in_block_time = $class->txo_time($in, $class_block);
+            if (!defined($in_block_time)) {
+                Warningf("Can't get stake_weight for %s with unconfirmed input %s:%u",
+                    $self->hash_str, $in->tx_in_str, $in->num);
+                next;
             }
             $weight += $in->value * (timeslot($block->time) - timeslot($in_block_time)) / BLOCK_INTERVAL;
         }
@@ -1084,19 +1147,34 @@ sub set_min_tx_time {
 
 sub min_tx_time {
     my $self = shift;
+    my ($class_block) = @_;
 
-    if (exists $self->{min_tx_time}) {
-        return $self->{min_tx_time};
+    if ($self->up) {
+        return $self->up->min_tx_time;
     }
-    elsif ($self->up) {
-        return $self->{min_tx_time} = $self->up->min_tx_time;
+    if (exists $self->{min_tx_rel_time}) {
+        return $self->{min_tx_rel_time};
     }
-    else {
+    if (!exists $self->{min_tx_time}) {
         # min_tx_time may be unknown if the transaction was loaded from database
         # and then unconfirmed (moved to mempool)
         $self->check_input_script;
-        return $self->{min_tx_time};
     }
+    my $min_tx_time = $self->{min_tx_time};
+    foreach my $in (@{$self->in}) {
+        my $txo = $in->{txo};
+        my $min_rel_time = $txo->min_rel_time
+            or next;
+        $TX_SEQ_DEPENDS{$txo->tx_in}->{$self->hash} = $self; # reset $self->{min_tx_rel_time} if previous tx confirmed or unconfirmed
+        my $txo_time = QBitcoin::Transaction->txo_time($txo, $class_block);
+        if (defined($txo_time)) {
+            $min_tx_time = $min_rel_time + $txo_time if defined($min_tx_time) && $min_tx_time < $min_rel_time + $txo_time;
+        }
+        else {
+            $min_tx_time = undef;
+        }
+    }
+    return $self->{min_tx_rel_time} = $min_tx_time;
 }
 
 sub set_min_tx_block_height {
@@ -1111,16 +1189,32 @@ sub set_min_tx_block_height {
 sub min_tx_block_height {
     my $self = shift;
 
-    if (exists $self->{min_tx_block_height}) {
-        return $self->{min_tx_block_height};
-    }
-    elsif ($self->up) {
+    if ($self->up) {
         return -1;
     }
-    else {
-        $self->check_input_script;
-        return $self->{min_tx_block_height};
+    if (exists $self->{min_tx_rel_height}) {
+        return $self->{min_tx_rel_height};
     }
+    if (!exists $self->{min_tx_block_height}) {
+        # min_tx_block_height may be unknown if the transaction was loaded from database
+        # and then unconfirmed (moved to mempool)
+        $self->check_input_script;
+    }
+    my $min_tx_height = $self->{min_tx_block_height};
+    foreach my $in (@{$self->in}) {
+        my $txo = $in->{txo};
+        my $min_rel_height = $txo->min_rel_block_height
+            or next;
+        $TX_SEQ_DEPENDS{$txo->tx_in}->{$self->hash} = $self; # reset $self->{min_tx_rel_height} if previous tx confirmed or unconfirmed
+        my $txo_height = QBitcoin::Transaction->txo_height($txo);
+        if (defined($txo_height)) {
+            $min_tx_height = $min_rel_height + $txo_height if defined($min_tx_height) && $min_tx_height < $min_rel_height + $txo_height;
+        }
+        else {
+            $min_tx_height = undef;
+        }
+    }
+    return $self->{min_tx_rel_block_height} = $min_tx_height;
 }
 
 sub drop_all_pending {

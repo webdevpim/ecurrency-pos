@@ -26,7 +26,12 @@ use constant FIELDS => {
 use constant TABLE => "txo";
 use constant TRANSACTION_TABLE => "transaction";
 
-mk_accessors(keys %{&FIELDS});
+use constant ATTR => qw(
+    min_rel_time
+    min_rel_block_height
+);
+
+mk_accessors(keys %{&FIELDS}, ATTR);
 
 # hash by tx and out-num
 my %TXO;

@@ -27,6 +27,7 @@ our @EXPORT_OK = qw(script_eval op_pushdata);
 # https://academy.bit2me.com/en/what-is-bitcoin-script/# (?)
 
 use constant LOCKTIME_THRESHOLD => 500000000;
+use constant SEQUENCE_LOCKTIME_TYPE_FLAG => 1 << 22;
 
 # Allow attributes "in1", "in2", etc
 sub MODIFY_CODE_ATTRIBUTES {
@@ -445,6 +446,42 @@ sub cmd_checklocktimeverify($) {
     }
     # Also for Bitcoin we have to check that input nSequense is not 0xffffffff
     # This does not matter for qBitcoin
+    return undef;
+}
+
+# BIP-0112
+sub cmd_checksequenceverify($) {
+    my ($state) = @_;
+    return unless $state->ifstate;
+    my $stack = $state->stack;
+    @$stack or return 0;
+    my $val = unpack_int($stack->[-1]) // return 0;
+    my $n = $val & 0xffff;
+    my $in = $state->tx->in->[$state->input_num]->{txo};
+    if ($val & SEQUENCE_LOCKTIME_TYPE_FLAG) {
+        if ($in->can("nSequence")) {
+            # Bitcoin
+            if (($in->nSequence & SEQUENCE_LOCKTIME_TYPE_FLAG) == 0 || ($in->nSequence & 0xffff) < $n) {
+                return 0;
+            }
+        }
+        else {
+            # QBitcoin
+            $in->min_rel_time = $n*512 if ($in->min_rel_time // -1) < $n*512;
+        }
+    }
+    else {
+        if ($in->can("nSequence")) {
+            # Bitcoin
+            if (($in->nSequence & SEQUENCE_LOCKTIME_TYPE_FLAG) != 0 || ($in->nSequence & 0xffff) < $n) {
+                return 0;
+            }
+        }
+        else {
+            # QBitcoin
+            $in->min_rel_block_height = $n if ($in->min_rel_block_height // -1) < $n;
+        }
+    }
     return undef;
 }
 

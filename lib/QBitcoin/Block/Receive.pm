@@ -228,18 +228,7 @@ sub receive {
                 }
             }
             last if $fail_tx;
-            $tx->block_height = $b->height;
-            $tx->block_pos = $num;
-            $tx->block_time = $b->time; # needed for calculate stake_weight for this branch
-            foreach my $in (@{$tx->in}) {
-                my $txo = $in->{txo};
-                $txo->tx_out = $tx->hash;
-                $txo->siglist = $in->{siglist};
-                $txo->del_my_utxo if $txo->is_my; # for stake transaction
-            }
-            foreach my $txo (@{$tx->out}) {
-                $txo->add_my_utxo if $txo->is_my && $txo->unspent;
-            }
+            $tx->confirm($b, $num);
             if (UPGRADE_POW && UPGRADE_FEE && $tx->coins_created) {
                 if (my $dst_fee = $tx->up->fee_dst($new_best)) {
                     $coinbase_fee->{$dst_fee} += $tx->fee;
@@ -299,18 +288,7 @@ sub receive {
                 Debugf("Return block %s height %u to the best branch", $b1->hash_str, $b1->height);
                 my $num = 0;
                 foreach my $tx (@{$b1->transactions}) {
-                    $tx->block_height = $b1->height;
-                    $tx->block_pos = $num++;
-                    $tx->block_time = $b1->time;
-                    foreach my $in (@{$tx->in}) {
-                        my $txo = $in->{txo};
-                        $txo->tx_out = $tx->hash;
-                        $txo->siglist = $in->{siglist};
-                        $txo->del_my_utxo if $txo->is_my;
-                    }
-                    foreach my $txo (@{$tx->out}) {
-                        $txo->add_my_utxo if $txo->is_my && $txo->unspent;
-                    }
+                    $tx->confirm($b1, $num++);
                 }
             }
             $b->drop_branch();
