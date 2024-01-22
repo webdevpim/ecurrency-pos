@@ -90,7 +90,8 @@ sub make_stake_tx {
                 last if $my_address;
             }
         }
-        $my_address //= (my_address())[0];
+        $my_address //= (my_address())[0]
+            or return undef;
         push @out, QBitcoin::TXO->new_txo(
             value      => $my_amount + $fee->{""},
             scripthash => scalar(scripthash_by_address($my_address->address)),
@@ -124,11 +125,6 @@ sub generate {
     if ($timeslot < GENESIS_TIME) {
         die "Genesis time " . GENESIS_TIME . " is in future\n";
     }
-    if (!my_address()) {
-        Errf("my_address is not set, disable block generation");
-        $config->{generate} = 0;
-        return;
-    }
     my $prev_block;
     my $height = QBitcoin::Block->blockchain_height() // -1;
     if ($height >= 0) {
@@ -155,8 +151,7 @@ sub generate {
     }
     # Just get upper limit for stake tx size
     my @coinbase = UPGRADE_POW && UPGRADE_FEE ? QBitcoin::Mempool->coinbase_list($timeslot) : ();
-    my $stake_tx = make_stake_tx({ "" => 0, map { $_->hash => 0 } @coinbase }, "")
-        or return;
+    my $stake_tx = make_stake_tx({ "" => 0, map { $_->hash => 0 } @coinbase }, "");
     my $size = $stake_tx ? $stake_tx->size : 0;
     # TODO: add transactions from block of the same timeslot, it's not ancestor
     my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $stake_tx && $stake_tx->in);
@@ -178,8 +173,7 @@ sub generate {
         # Generate new stake_tx with correct output value
         my $block_sign_data = $prev_block ? $prev_block->hash : ZERO_HASH;
         $block_sign_data .= $_->hash foreach @transactions;
-        $stake_tx = make_stake_tx($fee, $block_sign_data)
-            or return;
+        $stake_tx = make_stake_tx($fee, $block_sign_data);
         Infof("Generated stake tx %s with input amount %lu, consume %lu fee", $stake_tx->hash_str,
             sum0(map { $_->{txo}->value } @{$stake_tx->in}), -$stake_tx->fee);
         # It's possible that the $stake_tx has no my_txo, so it may be not unique, already received or pending
