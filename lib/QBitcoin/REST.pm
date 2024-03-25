@@ -10,6 +10,7 @@ use Time::HiRes;
 use List::Util qw(sum0);
 use HTTP::Headers;
 use HTTP::Response;
+use Tie::IxHash;
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Log;
@@ -125,7 +126,7 @@ sub process_request {
             return $self->get_address_stats($path[1]);
         }
         elsif ($path[2] eq "txs") {
-            return $self->get_address_txs($path[1], ($path[3] // "") eq "mempool" ? 0 : 24, ($path[3] // "") eq "chain" ? 0 : 50, $path[4]);
+            return $self->get_address_txs($path[1], ($path[3] // "") eq "mempool" ? 0 : 25, ($path[3] // "") eq "chain" ? 0 : 50, $path[4]);
         }
         elsif ($path[2] eq "utxo") {
             @path == 3
@@ -383,8 +384,9 @@ sub get_address_txo {
     my $scripthash = eval { scripthash_by_address($address) }
         or return ();
     my %txo_chain;
+    tie %txo_chain, "Tie::IxHash"; # preserve order of keys
     if (my $script = QBitcoin::RedeemScript->find(hash => $scripthash)) {
-        foreach my $txo (dbh->selectall_array("SELECT tx.hash, num, tx_out, value FROM `" . QBitcoin::TXO->TABLE . "` JOIN `" . QBitcoin::Transaction->TABLE . "` tx ON (tx_in = tx.id) WHERE scripthash = ?", undef, $script->id)) {
+        foreach my $txo (dbh->selectall_array("SELECT tx.hash, num, tx_out, value FROM `" . QBitcoin::TXO->TABLE . "` JOIN `" . QBitcoin::Transaction->TABLE . "` tx ON (tx_in = tx.id) WHERE scripthash = ? ORDER BY block_height ASC, block_pos ASC", undef, $script->id)) {
             $txo_chain{$txo->[0]}->[$txo->[1]] = [ $txo->[2], $txo->[3] ];
         }
     }
@@ -404,6 +406,7 @@ sub get_address_txo {
         }
     }
     my %txo_mempool;
+    tie %txo_mempool, "Tie::IxHash";
     foreach my $tx (QBitcoin::Transaction->mempool_list()) {
         foreach my $in (@{$tx->in}) {
             next if $in->{txo}->scripthash ne $scripthash;
@@ -442,7 +445,7 @@ sub get_address_txs {
         or return $self->http_response(404, "Incorrect address");
     my @tx;
     if ($mempool_cnt) {
-        foreach my $txid (keys %$txo_mempool) {
+        foreach my $txid (reverse keys %$txo_mempool) {
             my $tx = QBitcoin::Transaction->get($txid)
                 or next;
             push @tx, tx_obj($tx);
@@ -450,8 +453,18 @@ sub get_address_txs {
         }
     }
     if ($chain_cnt) {
-        # TODO: check by $last_seen, make hash %$txo_chain ordered
-        foreach my $txid (keys %$txo_chain) {
+        my $skip_until_tx;
+        if ($last_seen && $last_seen =~ /^[0-9a-f]{64}\z/) {
+            my $last_seen_bin = pack("H*", $last_seen);
+            if ($txo_chain->{$last_seen_bin}) {
+                $skip_until_tx = $last_seen_bin;
+            }
+        }
+        foreach my $txid (reverse keys %$txo_chain) {
+            if ($skip_until_tx) {
+                $skip_until_tx = undef if $skip_until_tx eq $txid;
+                next;
+            }
             my $tx = QBitcoin::Transaction->get_by_hash($txid)
                 or next;
             push @tx, tx_obj($tx);
