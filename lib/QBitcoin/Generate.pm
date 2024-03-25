@@ -153,7 +153,7 @@ sub generate {
     my @coinbase = UPGRADE_POW && UPGRADE_FEE ? QBitcoin::Mempool->coinbase_list($timeslot) : ();
     my $stake_tx = make_stake_tx({ "" => 0, map { $_->hash => 0 } @coinbase }, "");
     my $size = $stake_tx ? $stake_tx->size : 0;
-    # TODO: add transactions from block of the same timeslot, it's not ancestor
+    # TODO: add transactions from block of the same timeslot, it's not an ancestor
     my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $stake_tx && $stake_tx->in);
     if (!@transactions && ($timeslot - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
         return;
