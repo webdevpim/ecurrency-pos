@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS `transaction` (
   FOREIGN KEY (block_height) REFERENCES `block` (height) ON DELETE CASCADE
 );
 CREATE UNIQUE INDEX IF NOT EXISTS `tx_hash` ON `transaction` (hash);
-CREATE INDEX IF NOT EXISTS `tx_block_height` ON `transaction` (block_height);
+CREATE UNIQUE INDEX IF NOT EXISTS `tx_block_height_pos` ON `transaction` (block_height, block_pos);
 
 CREATE TABLE IF NOT EXISTS `tx_data` (
   id int unsigned NOT NULL PRIMARY KEY,
