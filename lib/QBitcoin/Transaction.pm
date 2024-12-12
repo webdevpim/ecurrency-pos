@@ -2,7 +2,6 @@ package QBitcoin::Transaction;
 use warnings;
 use strict;
 
-use JSON::XS;
 use Tie::IxHash;
 use List::Util qw(sum0);
 use Scalar::Util qw(refaddr);
@@ -49,8 +48,6 @@ use constant ATTR => qw(
 );
 
 mk_accessors(keys %{&FIELDS}, ATTR);
-
-my $JSON = JSON::XS->new->utf8(1)->convert_blessed(1)->canonical(1);
 
 my %TRANSACTION;      # in-memory cache transaction objects by tx_hash
 my %PENDING_INPUT_TX; # 2-level hash $pending_hash => $hash; value - transaction object
