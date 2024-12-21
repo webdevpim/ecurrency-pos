@@ -19,7 +19,7 @@ sub ifstate :lvalue { $_[0]->[3] }
 sub ifstack   { $_[0]->[4] }
 sub altstack  { $_[0]->[5] }
 sub tx        { $_[0]->[6] }
-sub input_num { $_->[7] }
+sub input_num { $_[0]->[7] }
 
 sub get_script {
     my ($self, $len) = @_;
