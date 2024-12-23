@@ -3,7 +3,7 @@
 # Example for run container from this image:
 # docker run --volume $(pwd)/database:/database --read-only --rm --detach -p 9555:9555 --name qbitcoin qbitcoin
 # then you can run "docker exec qbitcoin qbitcoin-cli help"
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 WORKDIR /database
 ENV dbi=sqlite
 ENV database=qbitcoin
