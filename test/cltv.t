@@ -76,6 +76,9 @@ sub send_block {
 # 4. Send spend-tx1 and spend-tx2 in block 6; check that the block accepted
 # 5. Switch branch to new block 4, spend txs go to mempool
 # 6. Generate blocks 5 and 6; check that the both spend txs are in block 6
+# 7. Switch branch to new block 3; tx1 and tx2 goes to mempool
+# 8. Generate blocks 4, check that it contains tx1 and tx2
+# 9. Generate blocks 5, 6 and 7; check that spend-tx1 is in block 6 and spend-tx2 is in block 7
 
 # height, hash, prev_hash, weight, $tx
 send_block(0, "a0", undef, 50, send_tx());
@@ -113,5 +116,28 @@ my $stx2 = QBitcoin::Transaction->get_by_hash($spend_tx2->hash);
 
 is($stx1 && $stx1->block_height, 6, "transaction 1 confirmed");
 is($stx2 && $stx2->block_height, 6, "transaction 2 confirmed");
+
+$prev_tx = undef;
+send_block(3, "c3", "a2", 1000, send_tx());
+block_hash("c4");
+QBitcoin::Generate->generate(GENESIS_TIME + 4 * BLOCK_INTERVAL * FORCE_BLOCKS);
+
+$stx1 = QBitcoin::Transaction->get_by_hash($tx1->hash);
+$stx2 = QBitcoin::Transaction->get_by_hash($tx2->hash);
+is($stx1 && $stx1->block_height, 4, "transaction 1 confirmed");
+is($stx2 && $stx2->block_height, 4, "transaction 2 confirmed");
+
+block_hash("c5");
+QBitcoin::Generate->generate(GENESIS_TIME + 5 * BLOCK_INTERVAL * FORCE_BLOCKS);
+block_hash("c6");
+QBitcoin::Generate->generate(GENESIS_TIME + 6 * BLOCK_INTERVAL * FORCE_BLOCKS);
+block_hash("c7");
+QBitcoin::Generate->generate(GENESIS_TIME + 7 * BLOCK_INTERVAL * FORCE_BLOCKS);
+
+$stx1 = QBitcoin::Transaction->get_by_hash($spend_tx1->hash);
+$stx2 = QBitcoin::Transaction->get_by_hash($spend_tx2->hash);
+
+is($stx1 && $stx1->block_height, 6, "transaction 1 confirmed");
+is($stx2 && $stx2->block_height, 7, "transaction 2 confirmed");
 
 done_testing();
