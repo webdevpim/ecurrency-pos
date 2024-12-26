@@ -1192,8 +1192,8 @@ sub min_tx_block_height {
     if ($self->up) {
         return -1;
     }
-    if (exists $self->{min_tx_rel_height}) {
-        return $self->{min_tx_rel_height};
+    if (exists $self->{min_tx_rel_block_height}) {
+        return $self->{min_tx_rel_block_height};
     }
     if (!exists $self->{min_tx_block_height}) {
         # min_tx_block_height may be unknown if the transaction was loaded from database
@@ -1205,7 +1205,7 @@ sub min_tx_block_height {
         my $txo = $in->{txo};
         my $min_rel_height = $txo->min_rel_block_height
             or next;
-        $TX_SEQ_DEPENDS{$txo->tx_in}->{$self->hash} = $self; # reset $self->{min_tx_rel_height} if previous tx confirmed or unconfirmed
+        $TX_SEQ_DEPENDS{$txo->tx_in}->{$self->hash} = $self; # reset $self->{min_tx_rel_block_height} if previous tx confirmed or unconfirmed
         my $txo_height = QBitcoin::Transaction->txo_height($txo);
         if (defined($txo_height)) {
             $min_tx_height = $min_rel_height + $txo_height if defined($min_tx_height) && $min_tx_height < $min_rel_height + $txo_height;
