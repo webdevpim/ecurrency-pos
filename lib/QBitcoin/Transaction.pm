@@ -50,7 +50,7 @@ use constant ATTR => qw(
 mk_accessors(keys %{&FIELDS}, ATTR);
 
 my %TRANSACTION;      # in-memory cache transaction objects by tx_hash
-my %TX_SEQ_DEPENDS;   # txo depends min_rel_time or min_rel_height
+my %TX_SEQ_DEPENDS;   # txo depends min_rel_time or min_rel_block_height
 my %PENDING_INPUT_TX; # 2-level hash $pending_hash => $hash; value - transaction object
 my %PENDING_TX_INPUT; # hash of pending transaction objects by tx_hash
 tie(%PENDING_TX_INPUT, 'Tie::IxHash'); # Ordered by age, to remove oldest
@@ -1134,6 +1134,14 @@ sub new_coinbase {
     }
     return $self;
 }
+
+# $self->{min_tx_time}, $self->{min_tx_block_height}: minimal time and block_height for transaction set by checklocktimeverify opcode
+# Set to -1 if unlimited (default), undef if unknown (loaded from database, need to check)
+# $self->{min_tx_rel_time}, $self->{min_tx_rel_block_height}: minimal time and block_height for transaction
+# These set by both checklocktimeverify and checksequenceverify opcode to minimum block height and time of all inputs
+# Methods min_tx_time and min_tx_block_height cache calculated values to $self->{min_tx_rel_time} and $self->{min_tx_rel_block_height} keys
+# Set these values to undef means that dependent transaction is not confirmed, so the transaction should not be confirmed too
+# Delete these values means these values are unknown and should be recalculated in input scripts
 
 # For standard transaction this can be set by check_input_script() if it execute "checklocktimeverify" opcode
 sub set_min_tx_time {
