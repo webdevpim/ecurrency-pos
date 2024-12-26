@@ -25,9 +25,15 @@ sub init {
     $loglevel = $config->{loglevel} ?
         $level_numeric{$config->{loglevel}} // die "Incorrect loglevel [$config->{loglevel}]\n" :
         $config->{debug} ? LOG_DEBUG : LOG_INFO;
-    $config->set(log => 'syslog') unless defined $config->{log};
-    if ($config->{log} eq 'syslog') {
-        openlog('qbitcoin', 'nofatal,pid', LOG_LOCAL0);
+    if ($ENV{LOG_NULL}) {
+        $loglevel = LOG_CRIT;
+        $config->set(log => '/dev/null');
+    }
+    else {
+        $config->set(log => 'syslog') unless defined $config->{log};
+        if ($config->{log} eq 'syslog') {
+            openlog('qbitcoin', 'nofatal,pid', LOG_LOCAL0);
+        }
     }
 }
 
