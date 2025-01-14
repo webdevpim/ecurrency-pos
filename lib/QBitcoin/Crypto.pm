@@ -27,6 +27,7 @@ use QBitcoin::Log;
 use constant CRYPTO_MODULE => {
     &CRYPT_ALGO_ECDSA   => 'ECDSA::secp256k1',
     &CRYPT_ALGO_SCHNORR => 'Schnorr::secp256k1',
+    &CRYPT_ALGO_FALCON  => 'PQ::Falcon512',
 };
 
 sub _crypto_module {
@@ -92,7 +93,7 @@ sub pk_alg {
         my $module = _crypto_module($algo);
         push @algo, $algo if $module->is_valid_pk($private_key);
     }
-die "No suitable algorithms for private key length " . length($private_key) . "\n" if !@algo;
+    Errf("No suitable algorithms for private key length %u", length($private_key)) if !@algo;
     return @algo;
 }
 

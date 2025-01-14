@@ -14,7 +14,7 @@ use QBitcoin::Transaction;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
-use QBitcoin::Address qw(scripthash_by_address address_by_pubkey);
+use QBitcoin::Address qw(scripthash_by_address address_by_pubkey wallet_import_format);
 use QBitcoin::MyAddress;
 use QBitcoin::Generate;
 use QBitcoin::Protocol;
@@ -1058,7 +1058,7 @@ sub cmd_dumpprivkey {
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "The address is not correct");
     my $my_address = QBitcoin::MyAddress->get_by_hash($scripthash)
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Private key is unknown for this address");
-    return $self->response_ok($my_address->private_key);
+    return $self->response_ok(wallet_import_format($my_address->private_key));
 }
 
 # getmemoryinfo

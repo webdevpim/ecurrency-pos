@@ -101,6 +101,7 @@ use constant TX_TYPES_CONST => {
 use constant CRYPT_ALGO => {
     CRYPT_ALGO_ECDSA   => 1,
     CRYPT_ALGO_SCHNORR => 2,
+    CRYPT_ALGO_FALCON  => 32,
 };
 
 # use constant TX_TYPES_NAMES  => [ "unknown", "standard", "stake", "coinbase" ];
