@@ -457,29 +457,29 @@ sub cmd_checksequenceverify($) {
     @$stack or return 0;
     my $val = unpack_int($stack->[-1]) // return 0;
     my $n = $val & 0xffff;
-    my $in = $state->tx->in->[$state->input_num]->{txo};
+    my $in = $state->tx->in->[$state->input_num];
     if ($val & SEQUENCE_LOCKTIME_TYPE_FLAG) {
-        if ($in->can("nSequence")) {
+        if ($in->{txo}->can("nSequence")) {
             # Bitcoin
-            if (($in->nSequence & SEQUENCE_LOCKTIME_TYPE_FLAG) == 0 || ($in->nSequence & 0xffff) < $n) {
+            if (($in->{txo}->nSequence & SEQUENCE_LOCKTIME_TYPE_FLAG) == 0 || ($in->{txo}->nSequence & 0xffff) < $n) {
                 return 0;
             }
         }
         else {
             # QBitcoin
-            $in->min_rel_time = $n*512 if ($in->min_rel_time // -1) < $n*512;
+            $in->{min_rel_time} = $n*512 if ($in->{min_rel_time} // -1) < $n*512;
         }
     }
     else {
-        if ($in->can("nSequence")) {
+        if ($in->{txo}->can("nSequence")) {
             # Bitcoin
-            if (($in->nSequence & SEQUENCE_LOCKTIME_TYPE_FLAG) != 0 || ($in->nSequence & 0xffff) < $n) {
+            if (($in->{txo}->nSequence & SEQUENCE_LOCKTIME_TYPE_FLAG) != 0 || ($in->nSequence & 0xffff) < $n) {
                 return 0;
             }
         }
         else {
             # QBitcoin
-            $in->min_rel_block_height = $n if ($in->min_rel_block_height // -1) < $n;
+            $in->{min_rel_block_height} = $n if ($in->{min_rel_block_height} // -1) < $n;
         }
     }
     return undef;

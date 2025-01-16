@@ -1170,9 +1170,9 @@ sub min_tx_time {
     }
     my $min_tx_time = $self->{min_tx_time};
     foreach my $in (@{$self->in}) {
-        my $txo = $in->{txo};
-        my $min_rel_time = $txo->min_rel_time
+        my $min_rel_time = $in->{min_rel_time}
             or next;
+        my $txo = $in->{txo};
         $TX_SEQ_DEPENDS{$txo->tx_in}->{$self->hash} = $self; # reset $self->{min_tx_rel_time} if previous tx confirmed or unconfirmed
         my $txo_time = QBitcoin::Transaction->txo_time($txo, $class_block);
         if (defined($txo_time)) {
@@ -1210,9 +1210,9 @@ sub min_tx_block_height {
     }
     my $min_tx_height = $self->{min_tx_block_height};
     foreach my $in (@{$self->in}) {
-        my $txo = $in->{txo};
-        my $min_rel_height = $txo->min_rel_block_height
+        my $min_rel_height = $in->{min_rel_block_height}
             or next;
+        my $txo = $in->{txo};
         $TX_SEQ_DEPENDS{$txo->tx_in}->{$self->hash} = $self; # reset $self->{min_tx_rel_block_height} if previous tx confirmed or unconfirmed
         my $txo_height = QBitcoin::Transaction->txo_height($txo);
         if (defined($txo_height)) {
