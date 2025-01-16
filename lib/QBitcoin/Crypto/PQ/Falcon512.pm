@@ -7,16 +7,22 @@ use Crypt::PQClean::Sign qw(falcon512_keypair falcon512_sign falcon512_verify);
 use constant PRIVATE_KEY_LENGTH => 1281;
 use constant PUBLIC_KEY_LENGTH  => 897;
 
+sub generate_keypair {
+    my $class = shift;
+    my ($pk, $sk) = falcon512_keypair();
+    return $class->new($sk, $pk);
+}
+
 sub verify_signature {
     my $class = shift;
     my ($data, $signature, $pubkey) = @_;
-    falcon512_verify($signature, $data, $pubkey);
+    return falcon512_verify($signature, $data, $pubkey);
 }
 
 sub signature {
     my $self = shift;
     my ($data) = @_;
-    falcon512_sign($data, $self->[0]);
+    return falcon512_sign($data, $self->[0]);
 }
 
 sub new {
@@ -27,7 +33,7 @@ sub new {
 
 sub pk_serialize {
     my $self = shift;
-    print $self->[0] . $self->[1];
+    return $self->[0] . $self->[1];
 }
 
 sub pubkey_by_privkey {

@@ -16,6 +16,7 @@ our @EXPORT_OK = qw(
     pk_serialize
     pk_import
     pk_alg
+    generate_keypair
 );
 
 use Digest::SHA qw(sha1 sha256);
@@ -102,6 +103,16 @@ sub signature {
     my $pk = $address->privkey($algo)
         or return undef;
     return pack("C", $algo) . $pk->signature(hash256($data));
+}
+
+sub generate_keypair {
+    my ($algo) = @_;
+    my $module = _crypto_module($algo);
+    if (!$module) {
+        Warningf("Unsupported crypto module %s for keypair generation", $algo);
+        return undef;
+    }
+    return $module->generate_keypair;
 }
 
 1;

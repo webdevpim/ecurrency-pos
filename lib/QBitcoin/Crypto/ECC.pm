@@ -48,4 +48,11 @@ sub pubkey_by_privkey {
     return $self->pk->export_key_raw('public_compressed');
 }
 
+sub generate_keypair {
+    my $class = shift;
+    my $pk = $class->CRYPT_ECC_MODULE->new;
+    $pk->generate_key($class->CURVE);
+    return $class->new($pk);
+}
+
 1;

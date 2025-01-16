@@ -11,10 +11,9 @@ use QBitcoin::Config;
 use QBitcoin::Const;
 use QBitcoin::Script::OpCodes qw(:OPCODES);
 use QBitcoin::Script qw(script_eval op_pushdata);
-use QBitcoin::Crypto qw(signature hash160);
+use QBitcoin::Crypto qw(signature hash160 generate_keypair);
 use QBitcoin::Address qw(wallet_import_format);
 use QBitcoin::MyAddress;
-use Crypt::PK::ECC;
 
 $config->{debug} = 0;
 
@@ -49,9 +48,8 @@ foreach my $check_data (@scripts_fail) {
     ok(!$res, $name);
 }
 
-my $pk_ecc = Crypt::PK::ECC->new();
-$pk_ecc->generate_key('secp256k1');
-my $myaddr = QBitcoin::MyAddress->new( private_key => wallet_import_format($pk_ecc->export_key_raw('private')) );
+my $pk_ecc = generate_keypair(CRYPT_ALGO_ECDSA);
+my $myaddr = QBitcoin::MyAddress->new( private_key => wallet_import_format($pk_ecc->pk_serialize) );
 my $sign_data = "\x55\xaa" x 700;
 my $redeem_script = OP_DUP . OP_HASH160 . op_pushdata(hash160($myaddr->pubkey)) . OP_EQUALVERIFY . OP_CHECKSIG;
 my $signature = signature($sign_data, $myaddr, CRYPT_ALGO_ECDSA);
