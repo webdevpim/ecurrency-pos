@@ -20,15 +20,14 @@ use Role::Tiny::With;
 with 'Bitcoin::Protocol::ProcessBlock';
 
 use constant {
-    PROTOCOL_VERSION  => 70011,
-    #PROTOCOL_FEATURES => 0x409,
-    PROTOCOL_FEATURES => 0x1,
+    PROTOCOL_VERSION    => 70011,
+    #PROTOCOL_FEATURES   => 0x409,
+    PROTOCOL_FEATURES   => 0x1,
     # https://en.bitcoin.it/wiki/Protocol_documentation#Message_structure
-    MAGIC             => pack("V", BTC_TESTNET ? 0x0709110B : 0xD9B4BEF9),
-#    BTC_GENESIS       => scalar reverse pack("H*",
-#        BTC_TESTNET ?
-#            "000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943" :
-#            "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"),
+    MAGIC               => pack("V", 0xD9B4BEF9),
+    MAGIC_TESTNET       => pack("V", 0x0709110B ),
+#    BTC_GENESIS         => scalar reverse pack("H*", "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+#    BTC_GENESIS_TESTNET => scalar reverse pack("H*", "000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943");
 };
 
 use constant {

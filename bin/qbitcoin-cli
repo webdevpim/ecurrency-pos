@@ -14,10 +14,11 @@ sub main {
     my ( $help, $conffile );
     my %opts;
     unless (GetOptions(
-        'help|h|?'   => \$help,
-        'config|f=s' => \$conffile,
-        'rpc|J=s'    => \$opts{rpc},
-        'rpc-port=s' => \$opts{rpc_port},
+        'help|h|?'    => \$help,
+        'config|f=s'  => \$conffile,
+        'rpc|J=s'     => \$opts{rpc},
+        'rpc-port=s'  => \$opts{rpc_port},
+        'testnet|t=s' => \$opts{testnet},
     )) {
         select STDERR;
         usage();
@@ -40,12 +41,13 @@ sub usage {
     print "   -h, -? --help           - print this help message and exit,\n";
     print "   -f, --config <file>     - config file, 'key = value' format (default " . CONFIG_DIR . "/" . CONFIG_NAME . "),\n";
     print "   -J, --rpc <addr[:port]> - request JSON RPC API on <address> and <port> (default " . RPC_ADDR . ":" . RPC_PORT . "),\n";
+    print "   -t, --testnet           - run for testnet (default mainnet),\n";
 }
 
 sub call_rpc {
     my ($method, @params) = @_;
     my ($address, $port) = split(/:/, $config->{rpc} // RPC_ADDR);
-    $port //= $config->{rpc_port} // getservbyname(SERVICE_NAME, 'tcp') // RPC_PORT;
+    $port //= $config->{rpc_port} // getservbyname(SERVICE_NAME, 'tcp') // ($config->{testnet} ? RPC_PORT_TESTNET : RPC_PORT);
     my $url = "http://$address:$port";
     my $ua = HTTP::Tiny->new;
     my $response = $ua->post($url, {

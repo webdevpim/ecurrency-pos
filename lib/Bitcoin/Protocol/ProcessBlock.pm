@@ -7,11 +7,10 @@ use Role::Tiny;
 use List::Util qw(max);
 use QBitcoin::Const;
 use QBitcoin::Log;
+use QBitcoin::Config;
 use QBitcoin::ProtocolState qw(btc_synced);
 use QBitcoin::ConnectionList;
 use Bitcoin::Block;
-
-use constant MAINNET => !BTC_TESTNET;
 
 # these values shared between QBitcoin::Protocol and Bitcoin::Protocol, they are related to btc blockchain, not to protocol
 sub have_block0 :lvalue {
@@ -38,7 +37,7 @@ sub process_btc_block {
         $prev_block = $LAST_BLOCK if $LAST_BLOCK && $LAST_BLOCK->hash eq $block->prev_hash;
         $prev_block //= Bitcoin::Block->find(hash => $block->prev_hash);
         if ($prev_block) {
-            if (MAINNET) {
+            if (!$config->{btc_testnet}) {
                 # check difficulty, it should not be less than max(last N blocks)/4 for mainnet
                 # it's only for prevent spam by many blocks with small difficulty
                 my $prev_difficulty = max map { $_->difficulty } $prev_block, Bitcoin::Block->find(hash => $prev_block->prev_hash);

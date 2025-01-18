@@ -33,6 +33,7 @@ sub main {
         'fake-coinbase' => \$opts{fake_coinbase},
         'produce'       => \$opts{produce},
         'database=s'    => \$opts{database},
+        'testnet|t=s'   => \$opts{testnet},
         'dbi=s'         => \$opts{dbi},
         'log=s'         => \$opts{log},
         'loglevel=s'    => \$opts{loglevel},
@@ -53,6 +54,7 @@ sub main {
     $config->set($_ => $opts{$_}) foreach grep { defined $opts{$_} } keys %opts;
     $config->set(peer    => @peer_hosts) if @peer_hosts;
     $config->set(btcnode => @btc_hosts)  if @btc_hosts;
+    $config->set(btc_testnet => 1) if $opts{testnet} && !defined $config->{btc_testnet};
 
     if ($config->{daemonize}) {
         if ($opts{verbose}) {
@@ -105,6 +107,7 @@ sub usage {
     print "   -D, --daemonize             - daemonize,\n";
     print "   -g, --generate              - generate blocks (private key must be stored in the database),\n";
     print "   -G, --genesis               - run as genesis node, do not need to synchronize with other nodes for authoritative answers,\n";
+    print "   -t, --testnet               - run for testnet, by default mainnet,\n";
     print "   --log <file>                - write log to <file>, 'syslog' for syslog (default),\n";
     print "   --loglevel <prio>           - set log level: 'debug', 'info' (default), 'notice', 'warning', 'err', 'crit'.\n";
 }

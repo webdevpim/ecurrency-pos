@@ -22,7 +22,7 @@ sub bind_addr {
     my $class = shift;
 
     my ($address, $port) = split(/:/, $config->{bind} // BIND_ADDR);
-    $port //= $config->{port} // getservbyname(SERVICE_NAME, 'tcp') // PORT;
+    $port //= $config->{port} // getservbyname(SERVICE_NAME, 'tcp') // ($config->{testnet} ? PORT_TESTNET : PORT);
     return listen_socket($address, $port);
 }
 
@@ -30,7 +30,7 @@ sub bind_rpc_addr {
     my $class = shift;
 
     my ($address, $port) = split(/:/, $config->{rpc} // RPC_ADDR);
-    $port //= $config->{rpc_port} // RPC_PORT;
+    $port //= $config->{rpc_port} // ($config->{testnet} ? RPC_PORT_TESTNET : RPC_PORT);
     return listen_socket($address, $port);
 }
 
@@ -39,7 +39,7 @@ sub bind_rest_addr {
 
     $config->{rest} or return undef;
     my ($address, $port) = split(/:/, $config->{rest});
-    $port //= $config->{rest_port} // REST_PORT;
+    $port //= $config->{rest_port} // ($config->{testnet} ? REST_PORT_TESTNET : REST_PORT);
     return listen_socket($address, $port);
 }
 

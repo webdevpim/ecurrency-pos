@@ -5,6 +5,7 @@ use strict;
 use Scalar::Util qw(weaken);
 use QBitcoin::Const;
 use QBitcoin::Log;
+use QBitcoin::Config;
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::Crypto qw(checksum32);
 
@@ -39,6 +40,8 @@ sub type_id {
 
 sub type { PROTOCOL2NAME->{shift->type_id} }
 
+sub magic { $config->{testnet} ? $_[0]->MAGIC_TESTNET : $_[0]->MAGIC }
+
 sub receive {
     my $self = shift;
     while (length($self->connection->sendbuf) < WRITE_BUFFER_SIZE) {
@@ -47,8 +50,8 @@ sub receive {
         my ($magic, $command, $length, $checksum) = unpack("a4a12Va4", substr($self->connection->recvbuf, 0, 24));
         $command =~ s/\x00+\z//;
         $self->command = $command;
-        if ($magic ne $self->MAGIC) {
-            Errf("Incorrect magic: 0x%08X, expected 0x%08X", $magic, $self->MAGIC);
+        if ($magic ne $self->magic) {
+            Errf("Incorrect magic: 0x%08X, expected 0x%08X", $magic, $self->magic);
             $self->abort("protocol_error");
             return -1;
         }
@@ -101,7 +104,7 @@ sub send_message {
     }
     else {
         Debugf("Send [%s] to %s peer %s", $cmd, $self->type, $self->peer->id);
-        return $self->connection->send(pack("a4a12Va4", $self->MAGIC, $cmd, length($data), checksum32($data)) . $data);
+        return $self->connection->send(pack("a4a12Va4", $self->magic, $cmd, length($data), checksum32($data)) . $data);
     }
 }
 

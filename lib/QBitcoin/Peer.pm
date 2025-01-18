@@ -75,7 +75,9 @@ sub get_or_create {
     }
     my $port = $args->{port} //
         getservbyname(lc PROTOCOL2NAME->{$args->{type_id}}, 'tcp') //
-        ($args->{type_id} == PROTOCOL_QBITCOIN ? PORT : BTC_PORT);
+        ($args->{type_id} == PROTOCOL_QBITCOIN ?
+            ($config->{testnet}     ? PORT_TESTNET     : PORT    ) :
+            ($config->{btc_testnet} ? BTC_PORT_TESTNET : BTC_PORT));
     $class->load();
     if (my $peer = $PEERS[$args->{type_id}]->{$args->{ip}}) {
         $peer->update(port => $port) if $peer->port != $port;

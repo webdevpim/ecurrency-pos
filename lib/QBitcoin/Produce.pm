@@ -4,7 +4,7 @@ use strict;
 use feature 'state';
 
 # This module is for testing only!
-# It generate random coinbase transactions (without inputs) and other mempool transactions
+# It generates random coinbase transactions (without inputs) and other mempool transactions
 
 use List::Util qw(sum shuffle);
 use QBitcoin::Const;

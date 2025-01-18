@@ -48,6 +48,7 @@ with 'QBitcoin::Protocol::BTC' if UPGRADE_POW;
 
 use constant {
     MAGIC             => "QBTC",
+    MAGIC_TESTNET     => "QBTT",
     PROTOCOL_VERSION  => 1,
     PROTOCOL_FEATURES => 0,
 };
