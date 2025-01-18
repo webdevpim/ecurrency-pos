@@ -48,7 +48,7 @@ BEGIN {
 
 sub check_sig {
     my ($data, $signature, $pubkey) = @_;
-    my $sig_alg = unpack("C", substr($signature, 0, 1));
+    my $sig_alg = unpack("C", $signature);
     my $crypto_module = _crypto_module($sig_alg);
     if (!$crypto_module) {
         Debugf("Unsupported signature type %u", $sig_alg);
@@ -99,10 +99,12 @@ sub pk_alg {
 }
 
 sub signature {
-    my ($data, $address, $algo) = @_;
+    my ($data, $address, $algo, $sighash_type) = @_;
+    #defined($algo) && defined($sighash_type)
+    #    or die "Incorrect params for signature";
     my $pk = $address->privkey($algo)
         or return undef;
-    return pack("C", $algo) . $pk->signature(hash256($data));
+    return pack("CC", $sighash_type, $algo) . $pk->signature(hash256($data));
 }
 
 sub generate_keypair {

@@ -65,7 +65,8 @@ sub cmd_checkmultisigverify($) {
 
 sub check_tx_signature {
     my ($pubkey, $signature, $tx, $input_num) = @_;
-    return check_sig($tx->sign_data($input_num), $signature, $pubkey);
+    my $sighash_type = unpack('C', $signature);
+    return check_sig($tx->sign_data($input_num, $sighash_type), substr($signature, 1), $pubkey);
 }
 
 1;

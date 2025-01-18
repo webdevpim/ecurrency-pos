@@ -3,6 +3,7 @@ use warnings;
 use strict;
 
 use QBitcoin::MyAddress;
+use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Config;
 use QBitcoin::Script qw(op_pushdata);
@@ -47,7 +48,8 @@ sub make_sign {
     else {
         $sign_alg = $pk_alg[0];
     }
-    my $signature = signature($self->sign_data($input_num), $address, $sign_alg);
+    my $sighash_type = SIGHASH_ALL;
+    my $signature = signature($self->sign_data($input_num, $sighash_type), $address, $sign_alg, $sighash_type);
     $in->{txo}->set_redeem_script($redeem_script);
     my $script_type = QBitcoin::RedeemScript->script_type($redeem_script);
     if ($script_type eq "P2PKH") {

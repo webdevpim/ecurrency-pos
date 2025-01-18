@@ -99,9 +99,19 @@ use constant TX_TYPES_CONST => {
 };
 
 use constant CRYPT_ALGO => {
+    # 1..127 for pre-quantum (ECC), 129..255 for post-quantum (Lattice)
     CRYPT_ALGO_ECDSA   => 1,
     CRYPT_ALGO_SCHNORR => 2,
-    CRYPT_ALGO_FALCON  => 32,
+    CRYPT_ALGO_FALCON  => 129,
+
+    CRYPT_ALGO_POSTQUANTUM => 0x80, # bit-flag
+};
+
+use constant SIGHASH_TYPES => {
+    SIGHASH_ALL          => 1,
+    SIGHASH_NONE         => 2,
+    SIGHASH_SINGLE       => 3,
+    SIGHASH_ANYONECANPAY => 0x80, # bit-flag
 };
 
 # use constant TX_TYPES_NAMES  => [ "unknown", "standard", "stake", "coinbase" ];
@@ -116,6 +126,7 @@ use constant PROTOCOL_CONST;
 use constant PEER_STATUS_CONST;
 use constant TX_TYPES_CONST;
 use constant CRYPT_ALGO;
+use constant SIGHASH_TYPES;
 
 use constant PROTOCOL2NAME => {
     map { s/BITCOIN/Bitcoin/r } map { s/PROTOCOL_//r } reverse %{&PROTOCOL_CONST}
@@ -135,6 +146,7 @@ our @EXPORT = (
     keys %{&PEER_STATUS_CONST},
     keys %{&TX_TYPES_CONST},
     keys %{&CRYPT_ALGO},
+    keys %{&SIGHASH_TYPES},
     'TX_TYPES_NAMES',
     'PROTOCOL2NAME',
 );

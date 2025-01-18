@@ -52,7 +52,7 @@ my $pk_ecc = generate_keypair(CRYPT_ALGO_ECDSA);
 my $myaddr = QBitcoin::MyAddress->new( private_key => wallet_import_format($pk_ecc->pk_serialize) );
 my $sign_data = "\x55\xaa" x 700;
 my $redeem_script = OP_DUP . OP_HASH160 . op_pushdata(hash160($myaddr->pubkey)) . OP_EQUALVERIFY . OP_CHECKSIG;
-my $signature = signature($sign_data, $myaddr, CRYPT_ALGO_ECDSA);
+my $signature = signature($sign_data, $myaddr, CRYPT_ALGO_ECDSA, SIGHASH_ALL);
 my $siglist = [ $signature, $myaddr->pubkey ];
 my $tx = TestTx->new(sign_data => $sign_data);
 my $res = script_eval($siglist, $redeem_script, $tx, 0);

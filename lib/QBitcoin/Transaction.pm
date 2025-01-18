@@ -399,15 +399,33 @@ sub serialize_unsigned {
 
 sub sign_data {
     my $self = shift;
+    my ($input_num, $sighash_type) = @_;
 
     my $data;
-    if (!defined($data = $self->{sign_data})) {
-        $data = varint(scalar @{$self->in});
-        $data .= serialize_input_for_sign($_) foreach @{$self->in};
-        $data .= varint(scalar @{$self->out});
-        $data .= serialize_output($_) foreach @{$self->out};
+    if (!defined($data = $self->{sign_data}->[$sighash_type])) {
+        $data = pack("C", $self->tx_type);
+        if ($sighash_type & SIGHASH_ANYONECANPAY) {
+            # Only the current input is signed, not all inputs
+            $data .= serialize_input_for_sign($self->in->[$input_num]);
+        }
+        else {
+            $data .= varint(scalar @{$self->in});
+            $data .= serialize_input_for_sign($_) foreach @{$self->in};
+        }
+        $sighash_type &= ~SIGHASH_ANYONECANPAY;
+        if ($sighash_type == SIGHASH_ALL) {
+            $data .= varint(scalar @{$self->out});
+            $data .= serialize_output($_) foreach @{$self->out};
+        }
+        elsif ($sighash_type == SIGHASH_SINGLE) {
+            # We do not need to sign coinbase transactions
+            $data .= defined($self->out->[$input_num]) ? serialize_output($self->out->[$input_num]) : "";
+        }
+        elsif ($sighash_type != SIGHASH_NONE) {
+            die "Unsupported sighash type $sighash_type";
+        }
         # We do not need to sign coinbase transactions
-        $self->{sign_data} = $data;
+        $self->{sign_data}->[$sighash_type] = $data;
     }
     if ($self->is_stake) {
         # It's stake tx which signs block, add block info
