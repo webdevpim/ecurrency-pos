@@ -23,12 +23,6 @@ CREATE TABLE IF NOT EXISTS `transaction` (
 CREATE UNIQUE INDEX IF NOT EXISTS `tx_hash` ON `transaction` (hash);
 CREATE UNIQUE INDEX IF NOT EXISTS `tx_block_height_pos` ON `transaction` (block_height, block_pos);
 
-CREATE TABLE IF NOT EXISTS `tx_data` (
-  id int unsigned NOT NULL PRIMARY KEY,
-  data blob NOT NULL,
-  FOREIGN KEY (id) REFERENCES `transaction` (id) ON DELETE CASCADE
-);
-
 -- Actually these are qbt addresses
 CREATE TABLE IF NOT EXISTS `redeem_script` (
   id integer NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -39,11 +33,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS `redeem_script_hash` ON `redeem_script` (hash)
 
 CREATE TABLE IF NOT EXISTS `txo` (
   value      bigint unsigned NOT NULL,
-  num           int unsigned NOT NULL,
-  tx_in         integer NOT NULL,
-  tx_out        integer DEFAULT NULL,
-  scripthash    integer NOT NULL,
-  siglist      blob DEFAULT NULL,
+  num        int unsigned NOT NULL,
+  tx_in      integer NOT NULL,
+  tx_out     integer DEFAULT NULL,
+  scripthash integer NOT NULL,
+  siglist    blob DEFAULT NULL,
+  data       blob NOT NULL DEFAULT '',
   PRIMARY KEY (tx_in, num),
   FOREIGN KEY (tx_in)      REFERENCES `transaction`   (id) ON DELETE CASCADE,
   FOREIGN KEY (tx_out)     REFERENCES `transaction`   (id) ON DELETE SET NULL,

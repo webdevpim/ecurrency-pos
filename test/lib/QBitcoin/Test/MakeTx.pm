@@ -28,7 +28,7 @@ sub make_tx {
     my $scripthash = hash160($script);
     $SCRIPT{$scripthash} = $script;
     $_->{redeem_script} = ($SCRIPT{$_->scripthash} // die "Unknown redeem script\n") foreach @in;
-    my $out = QBitcoin::TXO->new_txo( value => $out_value - $fee, scripthash => $scripthash, num => 0 );
+    my $out = QBitcoin::TXO->new_txo( value => $out_value - $fee, scripthash => $scripthash, num => 0, data => "" );
     my $tx = QBitcoin::Transaction->new(
         out     => [ $out ],
         in      => [ map +{ txo => $_, siglist => [] }, @in ],

@@ -359,7 +359,6 @@ sub store {
     if (my $coinbase = $self->up) {
         $coinbase->store_published($self);
     }
-    # TODO: store tx data (smartcontract)
 }
 
 sub hash_str {
@@ -367,8 +366,6 @@ sub hash_str {
     my $hash = ref($arg) ? $arg->hash : $arg;
     return unpack("H*", substr($hash, 0, 4));
 }
-
-sub data { "" } # TODO
 
 sub serialize {
     my $self = shift;
@@ -381,7 +378,6 @@ sub serialize {
     if ($self->is_coinbase) {
         $data .= UPGRADE_POW ? serialize_coinbase($self->up) : pack("Q<", $self->coins_created);
     }
-    $data .= varstr($self->data);
     return $data;
 }
 
@@ -398,7 +394,6 @@ sub serialize_unsigned {
     }
     $data .= varint(scalar @{$self->out});
     $data .= serialize_output($_) foreach @{$self->out};
-    $data .= varstr($self->data);
     return $data;
 }
 
@@ -412,7 +407,6 @@ sub sign_data {
         $data .= varint(scalar @{$self->out});
         $data .= serialize_output($_) foreach @{$self->out};
         # We do not need to sign coinbase transactions
-        $data .= varstr($self->data);
         $self->{sign_data} = $data;
     }
     if ($self->is_stake) {
@@ -511,7 +505,7 @@ sub deserialize_input {
 
 sub serialize_output {
     my $out = shift;
-    return pack("Q<", $out->value) . varstr($out->scripthash);
+    return pack("Q<", $out->value) . varstr($out->scripthash) . varstr($out->data);
 }
 
 sub deserialize_output {
@@ -519,6 +513,7 @@ sub deserialize_output {
     return {
         value      => unpack("Q<", $data->get(8) // return undef),
         scripthash => ( $data->get_string() // return undef ),
+        data       => ( $data->get_string() // return undef ),
     };
 }
 
@@ -527,6 +522,7 @@ sub output_as_hashref {
     return {
         value   => $out->value / DENOMINATOR,
         address => $out->address,
+        data    => $out->data,
     };
 }
 
@@ -551,7 +547,6 @@ sub deserialize {
     if ($tx_type == TX_TYPE_COINBASE) {
         $up = UPGRADE_POW ? (deserialize_coinbase($data) // return undef) : unpack("Q<", $data->get(8) // return undef);
     }
-    my $tx_data = $data->get_string() // return undef;
     my $end_index = $data->index;
     $data->index = $start_index;
     my $tx_raw_data = $data->get($end_index - $start_index);
@@ -653,6 +648,7 @@ sub create_outputs {
         my $txo = QBitcoin::TXO->new_txo({
             value      => $out->{value},
             scripthash => $out->{scripthash},
+            data       => $out->{data},
             tx_in      => $hash,
             num        => $num++,
         });
@@ -777,7 +773,7 @@ sub validate_coinbase {
         Warningf("Incorrect coinbase transaction %s: %u outputs, must be 1", $self->hash_str, scalar @{$self->out});
         return -1;
     }
-    if ($self->data ne '') {
+    if ($self->out->[0]->data ne '') {
         Warningf("Incorrect transaction %s, coinbase can't contain data", $self->hash_str);
         return -1;
     }

@@ -68,6 +68,7 @@ my $up = QBitcoin::Coinbase->new({
 my $out = QBitcoin::TXO->new_txo({
     value      => int($value * (1 - UPGRADE_FEE)),
     scripthash => $open_script,
+    data       => "",
 });
 
 sub tx {
@@ -97,7 +98,7 @@ $out->num = 0;
     isnt($tx->validate(), 0, "Incorrect scripthash");
 }
 {
-    my $extra_out = QBitcoin::TXO->new_txo({ value => 10, scripthash => hash160("\x01\x02"), num => 1 });
+    my $extra_out = QBitcoin::TXO->new_txo({ value => 10, scripthash => hash160("\x01\x02"), num => 1, data => "" });
     local $tx->{out} = [ $out, $extra_out ];
     local $tx->{hash};
     $tx->calculate_hash;
@@ -105,7 +106,7 @@ $out->num = 0;
     isnt($tx->validate(), 0, "Extra output");
 }
 {
-    my $extra_in = QBitcoin::TXO->new_txo({ value => 10, redeem_script => "\x01\x02", scripthash => hash160("\x01\x02"), tx_out => "\xaa" x 32, num => 1 });
+    my $extra_in = QBitcoin::TXO->new_txo({ value => 10, redeem_script => "\x01\x02", scripthash => hash160("\x01\x02"), tx_out => "\xaa" x 32, num => 1, data => "" });
     local $tx->{in} = [ { txo => $extra_in, siglist => [] } ];
     isnt($tx->validate(), 0, "Extra input");
 }

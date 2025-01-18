@@ -47,7 +47,7 @@ sub send_blocks {
         $connection->protocol->command("tx");
         foreach (1 .. $tx_num) {
             my $tx = QBitcoin::Transaction->new(
-                out           => [ QBitcoin::TXO->new_txo( value => $value, scripthash => hash160("txo_$tx_num") ) ],
+                out           => [ QBitcoin::TXO->new_txo( value => $value, scripthash => hash160("txo_$tx_num"), data => "" ) ],
                 in            => [],
                 coins_created => $value,
                 tx_type       => TX_TYPE_COINBASE,
