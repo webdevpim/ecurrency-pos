@@ -34,13 +34,13 @@ my $btc_tx = Bitcoin::Transaction->deserialize($data_obj);
 my $prev_hash = ZERO_HASH;
 my $time = time();
 my @btc_block;
-for (my $height = 1; $height <= 7; $height++) {
+for (my $height = 1; $height <= COINBASE_CONFIRM_BLOCKS + 1; $height++) {
     my $blk = Bitcoin::Block->new(
         version      => 1,
         height       => $height,
         prev_hash    => $prev_hash,
         transactions => $height == 1 ? [ $btc_tx ] : [],
-        time         => $time - 6*3600 + $height*60,
+        time         => $time - COINBASE_CONFIRM_TIME - (COINBASE_CONFIRM_BLOCKS+2)*60 + $height*60,
         bits         => 1234,
         chainwork    => 11112222,
         nonce        => 0,
@@ -116,7 +116,7 @@ $out->num = 0;
     isnt($tx->validate(), 0, "Extra input");
 }
 {
-    local $up->{btc_block_height} = 14;
+    local $up->{btc_block_height} = COINBASE_CONFIRM_BLOCKS + 8;
     delete local $up->{btc_block_hash};
     isnt($tx->validate(), 0, "Incorrect btc block");
 }
@@ -130,14 +130,14 @@ is($tx->validate(), 0, "Correct coinbase");
 
 # valid_for_block() saves min_tx_time in the transaction object, so rebuild it
 $tx = tx();
-my $block = QBitcoin::Block->new( time => $btc_block[7]->time + 2*3600 - 15, height => 1 );
+my $block = QBitcoin::Block->new( time => $btc_block[COINBASE_CONFIRM_BLOCKS + 1]->time + COINBASE_CONFIRM_TIME - 15, height => 1 );
 isnt($tx->valid_for_block($block), 0, "Early block");
 $tx = tx();
-$block->time = $btc_block[7]->time + 2*3600 + 15;
+$block->time = $btc_block[COINBASE_CONFIRM_BLOCKS + 1]->time + COINBASE_CONFIRM_TIME + 15;
 is($tx->valid_for_block($block), 0, "Valid for block");
 
 $tx = tx();
-$btc_block[7]->delete;
+$btc_block[COINBASE_CONFIRM_BLOCKS + 1]->delete;
 delete $up->{btc_confirm_time};
 isnt($tx->valid_for_block($block), 0, "Not enough confirmations");
 
