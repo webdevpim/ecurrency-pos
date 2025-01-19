@@ -1,18 +1,16 @@
 
-DST_BASE=/usr/local
-DST_BIN=${DST_BASE}/bin
-DST_LIB=${DST_BASE}/lib
-DST_ETC=${DST_BASE}/etc
-
-INSTALL=cp -r
+DESTDIR=/usr/local
+DST_BIN=${DESTDIR}/bin
+DST_LIB=${DESTDIR}/lib
+DST_ETC=${DESTDIR}/etc
 
 all:
 	@echo 'Did you mean "make test" or "make install"?'
 
 install::
-	mkdir -p ${DST_LIB} && ${INSTALL} lib/* ${DST_LIB}
-	mkdir -p ${DST_BIN} && ${INSTALL} bin/* ${DST_BIN}
-	#mkdir -p ${DST_ETC} && ${INSTALL} -n etc/* ${DST_ETC} || true
+	mkdir -p ${DST_LIB} && cp -r lib/* ${DST_LIB}
+	mkdir -p ${DST_BIN} && cp -r bin/* ${DST_BIN}
+	#mkdir -p ${DST_ETC} && cp -r -n etc/* ${DST_ETC} || true
 	@echo "Install done"
 
 docker:: Dockerfile libcrypt-pk-ecc-schnorr-perl_0.01-1_all.deb libencode-base58-gmp-perl_1.00-1_all.deb libmath-gmpz-perl_0.54-1_amd64.deb
