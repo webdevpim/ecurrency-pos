@@ -7,20 +7,23 @@ FROM ubuntu:24.04
 WORKDIR /database
 ENV dbi=sqlite
 ENV database=qbitcoin
+COPY .cpan /root/.cpan
 COPY . /qbitcoin
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -qq && apt-get install -qqy apt-utils && \
     apt-get install -qqy \
         perl-base librole-tiny-perl libjson-xs-perl libdbi-perl libjson-xs-perl libhash-multivalue-perl \
         libtie-ixhash-perl libparams-validate-perl libhttp-message-perl libcryptx-perl \
-        libsqlite3-0 libdbd-sqlite3-perl \
-        /qbitcoin/*.deb && \
-    rm -rf /var/lib/apt/lists/*
+        libsqlite3-0 libdbd-sqlite3-perl make gcc libgmp-dev && \
+    rm -rf /var/lib/apt/lists/* && \
+    cpan Encode::Base58::GMP Math::GMPz Crypt::PK::ECC::Schnorr Crypt::PQClean::Sign && \
+    rm -rf /root/.cpan && \
+    apt-get -qqy remove make gcc libgmp-dev && apt-get -qqy auto-remove
 
 ENV PERL5LIB=/qbitcoin/lib
 ENV PATH=${PATH}:/qbitcoin/bin
 CMD if mount | grep -q " on /database "; then \
-      qbitcoin-init --dbi=${dbi} --database=${database} /qbitcoin/db && \
+      /qbitcoin/bin/qbitcoin-init --dbi=${dbi} --database=${database} /qbitcoin/db && \
       exec /qbitcoin/bin/qbitcoind --peer=node.qcoin.info --dbi=${dbi} --database=${database} --log=/dev/null --verbose; \
     else echo "Please mount /database as external volume"; \
     fi
