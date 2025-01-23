@@ -129,4 +129,10 @@ sub hash_str {
     return unpack("H*", substr($hash, 0, 4));
 }
 
+sub reward {
+    my $class = shift;
+    my ($height) = @_;
+    return $height ? 0 : GENESIS_REWARD;
+}
+
 1;

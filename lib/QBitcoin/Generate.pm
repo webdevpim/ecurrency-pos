@@ -158,7 +158,12 @@ sub generate {
     if (!@transactions && ($timeslot - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
         return;
     }
+    # $fee is a hash with fee destination as a key and fee amount as a value
+    # "" is a key for my reward
     my $fee = {};
+    if (my $reward = QBitcoin::Block->reward($height)) {
+        $fee->{""} = $reward;
+    }
     foreach my $tx (grep { $_->fee } @transactions) {
         $fee->{UPGRADE_POW && UPGRADE_FEE && $tx->up ? $tx->up->fee_dst($prev_block) // "" : ""} += $tx->fee;
     }

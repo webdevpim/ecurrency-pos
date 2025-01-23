@@ -44,6 +44,7 @@ use constant QBITCOIN_CONST => {
     BTC_PORT_TESTNET        => 18333,
     GENESIS_HASH            => pack('H*', GENESIS_BLOCK_HASH),
     GENESIS_HASH_TESTNET    => pack('H*', GENESIS_BLOCK_HASH_TESTNET),
+    GENESIS_REWARD          => 50 * 100000000, # 50 QBTC
     MAX_BLOCK_SIZE          => 8*1024*1024,
     MAX_TX_IN_BLOCK         => 65535,
     BLOCK_HEADER_SIZE       => 200, # TODO: calculate precise value

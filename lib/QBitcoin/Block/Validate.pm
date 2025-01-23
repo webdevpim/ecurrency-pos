@@ -55,7 +55,7 @@ sub validate {
             $fee += $transaction->fee;
         }
     }
-    $fee == 0
+    $fee == -(ref $block)->reward($block->height)
         or return "Total block fee is $fee (not 0)";
     return "";
 }
