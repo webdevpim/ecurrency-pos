@@ -68,15 +68,15 @@ sub txo_confirmed {
 }
 
 sub make_stake_tx {
-    my ($fee, $block_sign_data) = @_;
+    my ($reward, $block_sign_data) = @_;
 
-    my $total_fee = 0;
+    my $total_reward = 0;
     my @out;
     my @my_txo;
-    if (exists $fee->{""}) {
+    if (exists $reward->{""}) {
         @my_txo = grep { txo_confirmed($_) } QBitcoin::TXO->my_utxo();
         # It's possible to create stake tx without inputs if the block contains only coinbase and zero-fee tx
-        return undef if !@my_txo && keys(%$fee) == 1 && !$fee->{""}; # No coinbase and no my txo -> no stake tx needed
+        return undef if !@my_txo && keys(%$reward) == 1 && !$reward->{""}; # No coinbase and no my txo -> no stake tx needed
         my $my_amount = sum0 map { $_->value } @my_txo;
         my $my_address;
         if ($config->{sign_alg}) {
@@ -93,22 +93,22 @@ sub make_stake_tx {
         $my_address //= (my_address())[0]
             or return undef;
         push @out, QBitcoin::TXO->new_txo(
-            value      => $my_amount + $fee->{""},
+            value      => $my_amount + $reward->{""},
             scripthash => scalar(scripthash_by_address($my_address->address)),
         );
-        $total_fee += $fee->{""};
+        $total_reward += $reward->{""};
     }
-    foreach my $fee_dst (sort grep { $_ ne "" } keys %$fee) {
+    foreach my $reward_dst (sort grep { $_ ne "" } keys %$reward) {
         push @out, QBitcoin::TXO->new_txo(
-            value      => $fee->{$fee_dst},
-            scripthash => $fee_dst,
+            value      => $reward->{$reward_dst},
+            scripthash => $reward_dst,
         );
-        $total_fee += $fee->{$fee_dst};
+        $total_reward += $reward->{$reward_dst};
     }
     my $tx = QBitcoin::Transaction->new(
         in              => [ map +{ txo => $_ }, @my_txo ],
         out             => \@out,
-        fee             => -$total_fee,
+        fee             => -$total_reward,
         tx_type         => TX_TYPE_STAKE,
         block_sign_data => $block_sign_data,
         received_time   => time(),
