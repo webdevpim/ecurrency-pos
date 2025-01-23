@@ -5,6 +5,7 @@ use strict;
 use QBitcoin::Script::OpCodes qw(:OPCODES);
 
 use constant GENESIS_BLOCK_HASH => "1234";
+use constant GENESIS_BLOCK_HASH_TESTNET => "1234";
 use constant QBT_SCRIPT_START   => OP_RETURN . "QBTC";
 use constant QBT_BURN_HASH      => pack("H*", "fe5205472fb87124923f4be64292ef289478b06d"); # 1QBitcoin1QBitcoin1QBitcoin1pSAg3e
 
@@ -42,7 +43,7 @@ use constant QBITCOIN_CONST => {
     BTC_PORT                => 8333,
     BTC_PORT_TESTNET        => 18333,
     GENESIS_HASH            => pack('H*', GENESIS_BLOCK_HASH),
-    GENESIS_HASH_HEX        => GENESIS_BLOCK_HASH,
+    GENESIS_HASH_TESTNET    => pack('H*', GENESIS_BLOCK_HASH_TESTNET),
     MAX_BLOCK_SIZE          => 8*1024*1024,
     MAX_TX_IN_BLOCK         => 65535,
     BLOCK_HEADER_SIZE       => 200, # TODO: calculate precise value

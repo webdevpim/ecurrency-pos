@@ -24,6 +24,7 @@ use QBitcoin::TXO;
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });
+$config->{regtest} = 1;
 
 my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => IPV6_V4_PREFIX . pack("C4", split(/\./, "127.0.0.1")));
 my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);

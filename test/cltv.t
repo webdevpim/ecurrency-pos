@@ -30,6 +30,7 @@ use QBitcoin::Script::OpCodes qw(:OPCODES);
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });
+$config->{regtest} = 1;
 
 my $transaction_module = Test::MockModule->new('QBitcoin::Transaction');
 $transaction_module->mock('validate_coinbase', sub { $_[0]->{min_tx_time} = $_[0]->{min_tx_block_height} = -1; return 0; });

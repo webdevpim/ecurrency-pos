@@ -22,6 +22,7 @@ use Bitcoin::Serialized;
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });
+$config->{regtest} = 1;
 
 # parent process accept and check results; child execute subchilds and wait them
 pipe my $rh, my $wh;

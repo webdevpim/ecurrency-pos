@@ -9,6 +9,7 @@ use strict;
 
 use Time::HiRes;
 use QBitcoin::Const;
+use QBitcoin::Config;
 use Role::Tiny;
 
 sub validate {
@@ -18,8 +19,11 @@ sub validate {
     $now >= $block->time
         or return "Block time " . $block->time . " is too early for now";
     if (!$block->prev_hash || $block->prev_hash eq ZERO_HASH) {
-#        $block->hash eq GENESIS_HASH
-#            or return "Incorrect genesis block hash " . unpack("H*", $block->hash) . ", must be " . GENESIS_HASH_HEX;
+        if (!$config->{regtest}) {
+            my $genesis_hash = $config->{testnet} ? GENESIS_HASH_TESTNET : GENESIS_HASH;
+            $block->hash eq $genesis_hash
+                or return "Incorrect genesis block hash " . unpack("H*", $block->hash) . ", must be " . unpack("H*", $genesis_hash);
+        }
         return ""; # Not needed to validate genesis block with correct hash
     }
     if (!@{$block->transactions} && (timeslot($block->time) - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS) {

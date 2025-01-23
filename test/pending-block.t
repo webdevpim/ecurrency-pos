@@ -27,6 +27,7 @@ use Bitcoin::Serialized;
 
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });
+$config->{regtest} = 1;
 
 my $transaction_module = Test::MockModule->new('QBitcoin::Transaction');
 $transaction_module->mock('validate_coinbase', sub { 0 });
