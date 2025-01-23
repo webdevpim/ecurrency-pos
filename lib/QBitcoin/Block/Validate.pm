@@ -60,10 +60,4 @@ sub validate {
     return "";
 }
 
-sub validate_tx {
-    my $self = shift;
-    # TODO
-    return 0;
-}
-
 1;
