@@ -382,7 +382,7 @@ sub want_cleanup_branch {
     my ($block) = @_;
     while (1) {
         return 0 if $block->received_from && $block->received_from->syncing;
-        return 0 if $block->height > $HEIGHT - INCORE_LEVELS;
+        return 0 if $block->height > ($HEIGHT // -1) - INCORE_LEVELS;
         my @descendants = $block->descendants;
         # avoid too deep recursion
         my $next_block = pop @descendants
@@ -402,10 +402,10 @@ sub want_cleanup_branch {
 
 sub cleanup_old_blocks {
     my $class = shift;
-    my $first_free_height = $HEIGHT - INCORE_LEVELS;
+    my $first_free_height = ($HEIGHT // -1) - INCORE_LEVELS;
     my $max_db_height = $class->max_db_height;
     $first_free_height = $max_db_height if $first_free_height > $max_db_height;
-    for (my $free_height = $MIN_INCORE_HEIGHT; $free_height <= $first_free_height; $free_height++) {
+    for (my $free_height = $MIN_INCORE_HEIGHT // -1; $free_height <= $first_free_height; $free_height++) {
         if ($free_height < $first_free_height) {
             foreach my $b (values %{$block_pool[$free_height+1]}) {
                 next if $best_block[$free_height+1] && $b->hash eq $best_block[$free_height+1]->hash; # cleanup best branch after all other

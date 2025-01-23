@@ -96,6 +96,6 @@ send_blocks(map [ $_, "b$_", "b" . ($_-1), 1, $_*120-70 ], 31 .. 35);
 QBitcoin::Block->store_blocks();
 QBitcoin::Block->cleanup_old_blocks();
 my $incore = QBitcoin::Block->min_incore_height;
-is($incore, QBitcoin::Block->blockchain_height-INCORE_LEVELS+1, "incore levels");
+is($incore, (QBitcoin::Block->blockchain_height // -1) - INCORE_LEVELS + 1, "incore levels");
 
 done_testing();
