@@ -31,7 +31,7 @@ use constant FIELDS => {
 };
 
 mk_accessors(keys %{&FIELDS});
-mk_accessors(qw(tx_hash));
+mk_accessors(qw(tx_hash value_btc));
 
 my %COINBASE; # just short-live cache for recently produced entries
 
@@ -50,6 +50,21 @@ sub store {
     my $res = dbh->do($sql, undef, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, $self->btc_tx_hash, $self->btc_tx_data, $self->merkle_path, $self->value, $scripthash->id);
     $res == 1
         or die "Can't store coinbase " . $self->btc_tx_num . ":" . $self->btc_out_num . ": " . (dbh->errstr // "no error") . "\n";
+}
+
+sub upgrade_value {
+    my ($value, $btc_block_height, $btc_tx_num, $btc_out_num) = @_;
+    return $value;
+}
+
+sub create {
+    my $class = shift;
+    my $args = @_ == 1 ? $_[0] : { @_ };
+    my $attr = @_ == 1 ? { %$args } : $args;
+    $attr->{value} = upgrade_value($args->{value_btc}, $args->{btc_block_height}, $args->{btc_tx_num}, $args->{btc_out_num});
+    my $coinbase = $class->new($attr);
+    $coinbase->store;
+    return $coinbase;
 }
 
 sub store_published {
@@ -157,20 +172,23 @@ sub validate {
 sub as_hashref {
     my $self = shift;
     return {
-        btc_block_hash => unpack("H*", $self->btc_block_hash),
-        btc_tx_num     => $self->btc_tx_num+0,
-        btc_out_num    => $self->btc_out_num+0,
-        btc_tx_data    => unpack("H*", $self->btc_tx_data),
-        merkle_path    => unpack("H*", $self->merkle_path),
-        value          => $self->value / DENOMINATOR,
-        scripthash     => unpack("H*", $self->scripthash),
+        btc_block_hash   => unpack("H*", $self->btc_block_hash),
+        btc_block_height => $self->btc_block_height+0,
+        btc_tx_num       => $self->btc_tx_num+0,
+        btc_out_num      => $self->btc_out_num+0,
+        btc_tx_data      => unpack("H*", $self->btc_tx_data),
+        merkle_path      => unpack("H*", $self->merkle_path),
+        value            => $self->value / DENOMINATOR,
+        scripthash       => unpack("H*", $self->scripthash),
     };
 }
 
 sub serialize {
     my $self = shift;
     # value and scripthash is matched transaction output and can be fetched from btc_tx_data and btc_out_num
-    return $self->btc_block_hash .
+    return
+        (varint($self->btc_block_height) // return undef) .
+        $self->btc_block_hash .
         (varint($self->btc_tx_num)  // return undef) .
         (varint($self->btc_out_num) // return undef) .
         (varstr($self->btc_tx_data) // return undef) .
@@ -257,7 +275,8 @@ sub get_scripthash {
 sub deserialize {
     my $class = shift;
     my ($data) = @_;
-    my $btc_block_hash = $data->get(32)   // return undef;
+    my $btc_block_height = $data->get_varint() // return undef;
+    my $btc_block_hash   = $data->get(32)      // return undef;
     my $btc_tx_num  = $data->get_varint() // return undef;
     my $btc_out_num = $data->get_varint() // return undef;
     my $btc_tx_data = $data->get_string() // return undef;
@@ -281,15 +300,18 @@ sub deserialize {
         $scripthash = ZERO_HASH;
     }
 
+    my $value = upgrade_value($out->{value}, $btc_block_height, $btc_tx_num, $btc_out_num);
     return $class->new({
-        btc_block_hash => $btc_block_hash,
-        btc_tx_num     => $btc_tx_num,
-        btc_out_num    => $btc_out_num,
-        btc_tx_data    => $btc_tx_data,
-        btc_tx_hash    => $transaction->hash,
-        merkle_path    => $merkle_path,
-        value          => $out->{value},
-        scripthash     => $scripthash,
+        btc_block_height => $btc_block_height,
+        btc_block_hash   => $btc_block_hash,
+        btc_tx_num       => $btc_tx_num,
+        btc_out_num      => $btc_out_num,
+        btc_tx_data      => $btc_tx_data,
+        btc_tx_hash      => $transaction->hash,
+        merkle_path      => $merkle_path,
+        value_btc        => $out->{value},
+        value            => $value,
+        scripthash       => $scripthash,
     });
 }
 

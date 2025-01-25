@@ -315,7 +315,7 @@ sub add_coinbase($$$$) {
         return;
     }
     Infof("Add coinbase: block %s tx %s value %lu", $block->hash_hex, $tx->hash_str, $out->{value});
-    my $coinbase = QBitcoin::Coinbase->new(
+    my $coinbase = QBitcoin::Coinbase->create(
         btc_block_height => $block->height,
         btc_block_hash   => $block->hash,
         btc_tx_num       => $tx_num,
@@ -323,10 +323,9 @@ sub add_coinbase($$$$) {
         btc_tx_hash      => $tx->hash,
         btc_tx_data      => $tx->data,
         merkle_path      => $block->merkle_path($tx_num),
-        value            => $out->{value},
+        value_btc        => $out->{value},
         scripthash       => $scripthash,
     );
-    $coinbase->store();
 }
 
 sub process_transactions {
