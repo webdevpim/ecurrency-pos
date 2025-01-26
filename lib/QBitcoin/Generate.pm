@@ -171,7 +171,7 @@ sub generate {
         return unless $stake_tx;
         if ($fee->{""} && !@{$stake_tx->in}) {
             # Genesis node can validate block with the very first coinbase transaction without validation amount
-            if (!$config->{genesis} || QBitcoin::Block->best_weight) {
+            if (!$config->{genesis} || QBitcoin::Block->best_weight || GENESIS_REWARD) {
                 return;
             }
         }
