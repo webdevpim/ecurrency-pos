@@ -120,11 +120,6 @@ $out->num = 0;
     delete local $up->{btc_block_hash};
     isnt($tx->validate(), 0, "Incorrect btc block");
 }
-SKIP: {
-    skip "tx->data not implemented", 1;
-    local $tx->{data} = "Coinbase data";
-    isnt($tx->validate(), 0, "Coinbase with data");
-}
 
 is($tx->validate(), 0, "Correct coinbase");
 
