@@ -45,6 +45,7 @@ use constant ATTR => qw(
     in_raw
     block_time
     drop_immune
+    upgrade_level
 );
 
 mk_accessors(keys %{&FIELDS}, ATTR);
@@ -376,7 +377,7 @@ sub serialize {
     $data .= varint(scalar @{$self->out});
     $data .= serialize_output($_) foreach @{$self->out};
     if ($self->is_coinbase) {
-        $data .= UPGRADE_POW ? serialize_coinbase($self->up) : pack("Q<", $self->coins_created);
+        $data .= UPGRADE_POW ? varint($self->upgrade_level) . serialize_coinbase($self->up) : pack("Q<", $self->coins_created);
     }
     return $data;
 }
@@ -562,8 +563,15 @@ sub deserialize {
     my @input  = map { deserialize_input($data)  // return undef } 1 .. ($data->get_varint // return undef);
     my @output = map { deserialize_output($data) // return undef } 1 .. ($data->get_varint // return undef);
     my $up;
+    my $upgrade_level;
     if ($tx_type == TX_TYPE_COINBASE) {
-        $up = UPGRADE_POW ? (deserialize_coinbase($data) // return undef) : unpack("Q<", $data->get(8) // return undef);
+        if (UPGRADE_POW) {
+            my $upgrade_level = $data->get_varint;
+            $up = deserialize_coinbase($data, $upgrade_level) // return undef;
+        }
+        else {
+            $up = unpack("Q<", $data->get(8) // return undef);
+        }
     }
     my $end_index = $data->index;
     $data->index = $start_index;
@@ -573,7 +581,7 @@ sub deserialize {
     my $self = $class->new(
         in_raw        => \@input,
         out           => create_outputs(\@output, $hash),
-        $up ? UPGRADE_POW ? ( up => $up ) : ( coins_created => $up ) : (),
+        $up ? UPGRADE_POW ? ( up => $up, upgrade_level => $upgrade_level ) : ( coins_created => $up ) : (),
         tx_type       => $tx_type,
         # data          => $tx_data, # TODO
         hash          => $hash,
@@ -1118,10 +1126,11 @@ sub coinbase_value {
 # Create a transaction with already exising coinbase output
 sub new_coinbase {
     my $class = shift;
-    my ($coinbase) = @_;
+    my ($coinbase, $upgrade_level) = @_;
 
+    my $value = upgrade_value($coinbase->value_btc, $upgrade_level);
     my $txo = QBitcoin::TXO->new_txo({
-        value      => coinbase_value($coinbase->value),
+        value      => coinbase_value($value),
         scripthash => $coinbase->scripthash,
     });
     my $self = $class->new(
@@ -1131,6 +1140,7 @@ sub new_coinbase {
         tx_type       => TX_TYPE_COINBASE,
         fee           => $coinbase->value - $txo->value,
         received_time => time(),
+        upgrade_level => $upgrade_level,
     );
     $self->calculate_hash;
     if (my $cached = $class->get($self->hash)) {

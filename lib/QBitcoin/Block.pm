@@ -24,6 +24,7 @@ use constant FIELDS => {
     prev_hash   => BINARY,
     merkle_root => BINARY,
     weight      => NUMERIC,
+    upgraded    => NUMERIC,
 };
 
 use constant ATTR => qw(

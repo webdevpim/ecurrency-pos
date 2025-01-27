@@ -28,6 +28,7 @@ use constant FIELDS => {
     value            => NUMERIC,
     scripthash       => NUMERIC,
     tx_out           => NUMERIC,
+    upgrade_level    => NUMERIC,
 };
 
 mk_accessors(keys %{&FIELDS});
@@ -45,7 +46,7 @@ sub store {
     );
     return if $coinbase;
     my $scripthash = QBitcoin::RedeemScript->store($self->scripthash);
-    my $sql = "INSERT INTO `" . TABLE . "` (btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, btc_tx_data, merkle_path, value, scripthash, tx_out) VALUES (?,?,?,?,?,?,?,?,NULL)";
+    my $sql = "INSERT INTO `" . TABLE . "` (btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, btc_tx_data, merkle_path, value, scripthash, tx_out, upgrade_level) VALUES (?,?,?,?,?,?,?,?,NULL,NULL)";
     DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%s,%s,%s,%lu,%u]", $sql, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, for_log($self->btc_tx_hash), for_log($self->btc_tx_data), for_log($self->merkle_path), $self->value, $scripthash->id);
     my $res = dbh->do($sql, undef, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, $self->btc_tx_hash, $self->btc_tx_data, $self->merkle_path, $self->value, $scripthash->id);
     $res == 1
@@ -53,7 +54,7 @@ sub store {
 }
 
 sub upgrade_value {
-    my ($value, $btc_block_height, $btc_tx_num, $btc_out_num) = @_;
+    my ($value, $upgrade_level) = @_;
     return $value;
 }
 
@@ -61,7 +62,7 @@ sub create {
     my $class = shift;
     my $args = @_ == 1 ? $_[0] : { @_ };
     my $attr = @_ == 1 ? { %$args } : $args;
-    $attr->{value} = upgrade_value($args->{value_btc}, $args->{btc_block_height}, $args->{btc_tx_num}, $args->{btc_out_num});
+    $attr->{value} = upgrade_value($args->{value}, $args->{upgrade_level});
     my $coinbase = $class->new($attr);
     $coinbase->store;
     return $coinbase;
@@ -71,9 +72,9 @@ sub store_published {
     my $self = shift;
     my ($tx) = @_;
 
-    my $sql = "UPDATE `" . TABLE . "` SET tx_out = ? WHERE btc_tx_hash = ? AND btc_out_num = ? AND tx_out IS NULL";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%u]", $sql, $tx->id, for_log($self->btc_tx_hash), $self->btc_out_num);
-    my $res = dbh->do($sql, undef, $tx->id, $self->btc_tx_hash, $self->btc_out_num);
+    my $sql = "UPDATE `" . TABLE . "` SET tx_out = ?, upgrade_level = ? WHERE btc_tx_hash = ? AND btc_out_num = ? AND tx_out IS NULL";
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%u,%u]", $sql, $tx->id, for_log($self->btc_tx_hash), $self->btc_out_num, $tx->upgrade_level);
+    my $res = dbh->do($sql, undef, $tx->id, $self->btc_tx_hash, $self->btc_out_num, $tx->upgrade_level);
     $res == 1
         or die "Can't store coinbase " . for_log($self->btc_tx_hash) . ":" . $self->btc_out_num . " as processed: " . (dbh->errstr // "no error") . "\n";
 }
@@ -120,7 +121,9 @@ sub DESTROY {
     delete $COINBASE{$key};
 }
 
-# Coinbase can be included in only one transaction (unlike txo), so we do not need to build separate singleton cache for coinbase
+# We do not need to build separate singleton cache for coinbase as we do for txo
+# b/c coinbase cannot be dropped, only confirmed
+# But tx_out and upgrade_level may vary, these are not attributes of the coinbase, but attributes of the transaction
 # save them just as links from related transactions
 sub load_stored_coinbase {
     my $class = shift;
@@ -180,6 +183,7 @@ sub as_hashref {
         merkle_path      => unpack("H*", $self->merkle_path),
         value            => $self->value / DENOMINATOR,
         scripthash       => unpack("H*", $self->scripthash),
+        upgrade_level    => $self->upgrade_level+0,
     };
 }
 
@@ -274,7 +278,7 @@ sub get_scripthash {
 
 sub deserialize {
     my $class = shift;
-    my ($data) = @_;
+    my ($data, $upgrade_level) = @_;
     my $btc_block_height = $data->get_varint() // return undef;
     my $btc_block_hash   = $data->get(32)      // return undef;
     my $btc_tx_num  = $data->get_varint() // return undef;
@@ -300,7 +304,6 @@ sub deserialize {
         $scripthash = ZERO_HASH;
     }
 
-    my $value = upgrade_value($out->{value}, $btc_block_height, $btc_tx_num, $btc_out_num);
     return $class->new({
         btc_block_height => $btc_block_height,
         btc_block_hash   => $btc_block_hash,
@@ -309,8 +312,9 @@ sub deserialize {
         btc_tx_data      => $btc_tx_data,
         btc_tx_hash      => $transaction->hash,
         merkle_path      => $merkle_path,
+        upgrade_level    => $upgrade_level,
         value_btc        => $out->{value},
-        value            => $value,
+        value            => upgrade_value($out->{value}, $upgrade_level),
         scripthash       => $scripthash,
     });
 }

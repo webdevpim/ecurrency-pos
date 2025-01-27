@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS `block` (
   time int unsigned NOT NULL,
   hash binary(32) NOT NULL,
   weight bigint unsigned NOT NULL,
+  upgraded bigint unsigned NOT NULL DEFAULT 0,
   prev_hash binary(32) DEFAULT NULL,
   merkle_root binary(32) NOT NULL
 );
@@ -78,6 +79,7 @@ CREATE TABLE IF NOT EXISTS `coinbase` (
   value bigint unsigned NOT NULL,
   scripthash integer NOT NULL,
   tx_out integer DEFAULT NULL,
+  upgrade_level integer DEFAULT NULL,
   PRIMARY KEY (btc_tx_hash, btc_out_num),
   FOREIGN KEY (btc_block_height) REFERENCES `btc_block`     (height) ON DELETE RESTRICT, -- should never happens
   FOREIGN KEY (tx_out)           REFERENCES `transaction`   (id)     ON DELETE SET NULL,

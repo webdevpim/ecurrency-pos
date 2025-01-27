@@ -61,7 +61,9 @@ my $up = QBitcoin::Coinbase->new({
     btc_tx_hash      => $btc_tx->hash,
     btc_tx_data      => $btc_tx->data,
     merkle_path      => $btc_block[1]->merkle_path($btc_tx_num),
+    value_btc        => $value,
     value            => $value,
+    upgrade_level    => 0,
     scripthash       => substr($btc_tx->out->[$btc_out_num]->{open_script}, QBT_SCRIPT_START_LEN),
 });
 
@@ -73,11 +75,12 @@ my $out = QBitcoin::TXO->new_txo({
 
 sub tx {
     my $tx = QBitcoin::Transaction->new({
-        in      => [],
-        out     => [ $out ],
-        up      => $up,
-        fee     => 0,
-        tx_type => TX_TYPE_COINBASE,
+        in            => [],
+        out           => [ $out ],
+        up            => $up,
+        fee           => 0,
+        tx_type       => TX_TYPE_COINBASE,
+        upgrade_level => 0,
     });
     $tx->calculate_hash;
     return $tx;

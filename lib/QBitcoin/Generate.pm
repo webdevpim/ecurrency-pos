@@ -14,6 +14,7 @@ use QBitcoin::Coinbase;
 use QBitcoin::Address qw(scripthash_by_address);
 use QBitcoin::MyAddress qw(my_address);
 use QBitcoin::Transaction;
+use QBitcoin::ValueUpgraded qw(level_by_total);
 use QBitcoin::Generate::Control;
 
 sub load_utxo {
@@ -145,16 +146,18 @@ sub generate {
         }
     }
     $height++;
+    my $upgraded_total = $prev_block ? $prev_block->upgraded : 0;
+    my $upgrade_level = level_by_total($upgraded_total);
     foreach my $coinbase (QBitcoin::Coinbase->get_new($timeslot)) {
         # Create new coinbase transaction and add it to mempool (if it's not there)
-        QBitcoin::Transaction->new_coinbase($coinbase);
+        QBitcoin::Transaction->new_coinbase($coinbase, $upgrade_level);
     }
     # Just get upper limit for stake tx size
     my @coinbase = UPGRADE_POW && UPGRADE_FEE ? QBitcoin::Mempool->coinbase_list($timeslot) : ();
     my $stake_tx = make_stake_tx({ "" => 0, map { $_->hash => 0 } @coinbase }, "");
     my $size = $stake_tx ? $stake_tx->size : 0;
     # TODO: add transactions from block of the same timeslot, it's not an ancestor
-    my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $height, $stake_tx && $stake_tx->in);
+    my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $height, $stake_tx && $stake_tx->in, $upgraded_total);
     if (!@transactions && ($timeslot - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
         return;
     }

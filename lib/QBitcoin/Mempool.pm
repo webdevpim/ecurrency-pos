@@ -29,7 +29,7 @@ sub coinbase_list {
 
 sub choose_for_block {
     my $class = shift;
-    my ($size, $block_time, $block_height, $can_consume) = @_;
+    my ($size, $block_time, $block_height, $can_consume, $upgraded_total) = @_;
     my @mempool = sort { compare_tx($a, $b) }
         grep { defined($_->min_tx_block_height) && $_->min_tx_block_height <= $block_height &&
                defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
@@ -46,6 +46,15 @@ sub choose_for_block {
     my %spent;
     my %mempool_out; # for allow spend unconfirmed in the same block
     for (my $i=0; $i<=$#mempool; $i++) {
+        if (UPGRADE_POW && $mempool[$i]->is_coinbase) {
+            my $upgrade_level = level_by_total($upgraded_total += $mempool[$i]->value_btc);
+            if ($mempool[$i]->upgrade_level != $upgrade_level) {
+                # Re-create coinbase transaction with new upgrade level and drop old one
+                my $new_tx = QBitcoin::Transaction->new_coinbase($mempool[$i]->up, $upgrade_level);
+                $mempool[$i]->drop();
+                $mempool[$i] = $new_tx;
+            }
+        }
         my $skip = 0;
         foreach my $in (@{$mempool[$i]->in}) {
             my $txo = $in->{txo};

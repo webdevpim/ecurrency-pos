@@ -35,12 +35,18 @@ sub validate {
     my $fee = 0;
     my %tx_in_block;
     my $empty_tx = 0;
+    my $upgraded = $block->prev_block->upgraded // 0;
     foreach my $transaction (@{$block->transactions}) {
         if ($tx_in_block{$transaction->hash}++) {
             return "Transaction " . $transaction->hash_str . " included in the block twice";
         }
         if ($transaction->valid_for_block($block) != 0) {
             return "Transaction " . $transaction->hash_str . " can't be included in block " . $block->height;
+        }
+        if (UPGRADE_POW && $transaction->coins_created) {
+            if ($transaction->upgrade_level != level_by_total($upgraded += $transaction->up->value_btc)) {
+                return "Incorrect upgrade level for transaction " . $transaction->hash_str;
+            }
         }
         # NB: we do not check that the $txin is unspent in this branch;
         # we will check this on include this block into the best branch
@@ -57,6 +63,7 @@ sub validate {
     }
     $fee == -(ref $block)->reward($block->height)
         or return "Total block fee is $fee (not 0)";
+    $block->upgraded = $upgraded;
     return "";
 }
 
