@@ -11,6 +11,7 @@ use strict;
 
 use QBitcoin::Const;
 use QBitcoin::Log;
+use QBitcoin::ValueUpgraded qw(level_by_total);
 
 sub want_tx {
     my $class = shift;

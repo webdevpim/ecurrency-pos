@@ -12,6 +12,7 @@ use QBitcoin::Crypto qw(hash256);
 use QBitcoin::ProtocolState qw(btc_synced);
 use QBitcoin::Script::OpCodes qw(:OPCODES);
 use QBitcoin::RedeemScript;
+use QBitcoin::ValueUpgraded qw(upgrade_value);
 use Bitcoin::Serialized;
 use Bitcoin::Transaction;
 use Bitcoin::Block;
@@ -46,23 +47,24 @@ sub store {
     );
     return if $coinbase;
     my $scripthash = QBitcoin::RedeemScript->store($self->scripthash);
-    my $sql = "INSERT INTO `" . TABLE . "` (btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, btc_tx_data, merkle_path, value, scripthash, tx_out, upgrade_level) VALUES (?,?,?,?,?,?,?,?,NULL,NULL)";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%s,%s,%s,%lu,%u]", $sql, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, for_log($self->btc_tx_hash), for_log($self->btc_tx_data), for_log($self->merkle_path), $self->value, $scripthash->id);
-    my $res = dbh->do($sql, undef, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, $self->btc_tx_hash, $self->btc_tx_data, $self->merkle_path, $self->value, $scripthash->id);
+    my $sql = "INSERT INTO `" . TABLE . "` (btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, btc_tx_data, merkle_path, value, scripthash, tx_out, upgrade_level) VALUES (?,?,?,?,?,?,?,?,NULL,?)";
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%s,%s,%s,%lu,%u]", $sql, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, for_log($self->btc_tx_hash), for_log($self->btc_tx_data), for_log($self->merkle_path), $self->value, $scripthash->id, $self->upgrade_level);
+    my $res = dbh->do($sql, undef, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, $self->btc_tx_hash, $self->btc_tx_data, $self->merkle_path, $self->value, $scripthash->id, $self->upgrade_level);
     $res == 1
         or die "Can't store coinbase " . $self->btc_tx_num . ":" . $self->btc_out_num . ": " . (dbh->errstr // "no error") . "\n";
 }
 
-sub upgrade_value {
-    my ($value, $upgrade_level) = @_;
-    return $value;
+sub get_value {
+    my $self = shift;
+    my ($upgrade_level) = @_;
+    return upgrade_value($self->value_btc, $upgrade_level);
 }
 
 sub create {
     my $class = shift;
     my $args = @_ == 1 ? $_[0] : { @_ };
     my $attr = @_ == 1 ? { %$args } : $args;
-    $attr->{value} = upgrade_value($args->{value}, $args->{upgrade_level});
+    $attr->{value} = upgrade_value($args->{value_btc}, $attr->{upgrade_level} //= 0);
     my $coinbase = $class->new($attr);
     $coinbase->store;
     return $coinbase;
@@ -71,9 +73,9 @@ sub create {
 sub store_published {
     my $self = shift;
 
-    my $sql = "UPDATE `" . TABLE . "` SET tx_out = ?, upgrade_level = ? WHERE btc_tx_hash = ? AND btc_out_num = ? AND tx_out IS NULL";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%u,%u]", $sql, $self->tx_out, for_log($self->btc_tx_hash), $self->btc_out_num, $self->upgrade_level);
-    my $res = dbh->do($sql, undef, $self->tx_out, $self->btc_tx_hash, $self->btc_out_num, $self->upgrade_level);
+    my $sql = "UPDATE `" . TABLE . "` SET tx_out = ?, upgrade_level = ?, value = ? WHERE btc_tx_hash = ? AND btc_out_num = ? AND tx_out IS NULL";
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%u,%u]", $sql, $self->tx_out, $self->upgrade_level, $self->value, for_log($self->btc_tx_hash), $self->btc_out_num);
+    my $res = dbh->do($sql, undef, $self->tx_out, $self->upgrade_level, $self->value, $self->btc_tx_hash, $self->btc_out_num);
     $res == 1
         or die "Can't store coinbase " . for_log($self->btc_tx_hash) . ":" . $self->btc_out_num . " as processed: " . (dbh->errstr // "no error") . "\n";
 }
@@ -105,6 +107,10 @@ sub get_new {
     while (my $hash = $sth->fetchrow_hashref()) {
         my $key = $hash->{btc_tx_hash} . $hash->{btc_out_num};
         next if $COINBASE{$key}; # transaction for this coinbase already generated (but not stored yet)
+        my $btc_tx_data_obj = Bitcoin::Serialized->new($hash->{btc_tx_data});
+        my $btc_transaction = Bitcoin::Transaction->deserialize($btc_tx_data_obj);
+        my $out = $btc_transaction->out->[$hash->{btc_out_num}];
+        $hash->{value_btc} = $out->{value};
         my $coinbase = $class->new($hash);
         $COINBASE{$key} = $coinbase;
         weaken($COINBASE{$key});
@@ -304,7 +310,8 @@ sub deserialize {
         $scripthash = ZERO_HASH;
     }
 
-    return $class->new({
+    my $key = $transaction->hash . $btc_out_num;
+    return $COINBASE{$key} //= $class->new({
         btc_block_height => $btc_block_height,
         btc_block_hash   => $btc_block_hash,
         btc_tx_num       => $btc_tx_num,

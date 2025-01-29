@@ -10,6 +10,7 @@ use strict;
 use Time::HiRes;
 use QBitcoin::Const;
 use QBitcoin::Config;
+use QBitcoin::ValueUpgraded qw(level_by_total);
 use Role::Tiny;
 
 sub validate {

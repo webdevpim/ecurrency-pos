@@ -10,7 +10,7 @@ use QBitcoin::ORM qw(find create :types);
 use QBitcoin::ValueUpgraded::PriceByLevel qw(@price_by_level);
 
 use Exporter qw(import);
-our @EXPORT_OK = qw(level_by_total price_by_level upgrade_value);
+our @EXPORT_OK = qw(level_by_total upgrade_value);
 
 use constant TABLE => 'value_upgraded';
 

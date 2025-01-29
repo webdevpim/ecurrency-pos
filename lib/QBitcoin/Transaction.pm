@@ -659,7 +659,7 @@ sub coins_created {
     my $self = shift;
 
     if (UPGRADE_POW) {
-        return $self->up ? $self->up->value : 0;
+        return $self->up ? $self->up_value : 0;
     }
     else {
         return $self->{coins_created} // 0;
@@ -815,7 +815,7 @@ sub validate_coinbase {
             return -1 unless $config->{fake_coinbase};
             $self->up->scripthash = $self->out->[0]->scripthash;
         }
-        if ($self->out->[0]->value != coinbase_value($self->up->value)) {
+        if ($self->out->[0]->value != coinbase_value($self->up_value)) {
             Warningf("Mismatch value for coinbase transaction %s", $self->hash_str);
             return -1;
         }
@@ -995,6 +995,7 @@ sub confirm {
     if (my $coinbase = $self->up) {
         $coinbase->tx_out = $self->hash;
         $coinbase->upgrade_level = $self->upgrade_level;
+        $coinbase->value = $self->up_value;
     }
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
@@ -1119,10 +1120,15 @@ sub coinbase_weight {
         # Early confirmation should have more weight than later
         my $base_time = timeslot($coinbase->btc_confirm_time);
         my $virtual_time = timeslot($coinbase->btc_confirm_time - COINBASE_WEIGHT_TIME); # MB negative, it's ok
-        $weight = $coinbase->value * ($base_time - $virtual_time) / BLOCK_INTERVAL;
+        $weight = $self->up_value * ($base_time - $virtual_time) / BLOCK_INTERVAL;
         $weight *= ($base_time - $virtual_time) / (timeslot($block_time) - $virtual_time);
     }
     return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
+}
+
+sub up_value {
+    my $self = shift;
+    return $self->up->get_value($self->upgrade_level);
 }
 
 sub coinbase_value {
@@ -1135,7 +1141,7 @@ sub new_coinbase {
     my $class = shift;
     my ($coinbase, $upgrade_level) = @_;
 
-    my $value = upgrade_value($coinbase->value_btc, $upgrade_level);
+    my $value = $coinbase->get_value($upgrade_level);
     my $txo = QBitcoin::TXO->new_txo({
         value      => coinbase_value($value),
         scripthash => $coinbase->scripthash,
@@ -1145,7 +1151,7 @@ sub new_coinbase {
         out           => [ $txo ],
         up            => $coinbase,
         tx_type       => TX_TYPE_COINBASE,
-        fee           => $coinbase->value - $txo->value,
+        fee           => $value - $txo->value,
         received_time => time(),
         upgrade_level => $upgrade_level,
     );
