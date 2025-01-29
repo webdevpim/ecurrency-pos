@@ -169,7 +169,7 @@ sub receive {
     }
 
     # reset all txo in the current best branch (started from the fork block) as unspent;
-    # then set output in all txo in new branch and check it against possible double-spend
+    # then set output in all txo in the new branch and check it against possible double-spend
     for (my $b = $class->best_block($HEIGHT // $new_best->height); $b && $b->height >= $new_best->height; $b = $b->prev_block_load) {
         $b->prev_block_load->next_block = $b;
         Debugf("Remove block %s height %u from the best branch", $b->hash_str, $b->height);
@@ -189,6 +189,13 @@ sub receive {
                 Warningf("Transaction %s included in blocks %u and %u", $tx->hash_str, $tx->block_height, $b->height);
                 $fail_tx = $tx->hash;
                 last;
+            }
+            if (my $coinbase = $tx->up) {
+                if ($coinbase->tx_out && $coinbase->tx_out ne $tx->hash) {
+                    Warningf("Coinbase transaction %s has already been spent in %s", $coinbase->hash_str, $coinbase->tx_out_str);
+                    $fail_tx = $tx->hash;
+                    last;
+                }
             }
             if (!@{$tx->in} && !$tx->coins_created) {
                 if ($num > 0) {

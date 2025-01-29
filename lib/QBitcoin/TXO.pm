@@ -14,6 +14,7 @@ use Role::Tiny::With;
 with 'QBitcoin::TXO::My';
 
 use constant PRIMARY_KEY => qw(tx_in num);
+
 use constant FIELDS => {
     value      => NUMERIC,
     num        => NUMERIC,
@@ -30,6 +31,8 @@ use constant TRANSACTION_TABLE => "transaction";
 mk_accessors(keys %{&FIELDS});
 
 # hash by tx and out-num
+# tx_out and siglist are saved for the best chain for prevent double-spending
+# but reference to the TXO object may be from multiple transactions
 my %TXO;
 
 sub key {

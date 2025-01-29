@@ -70,11 +70,10 @@ sub create {
 
 sub store_published {
     my $self = shift;
-    my ($tx) = @_;
 
     my $sql = "UPDATE `" . TABLE . "` SET tx_out = ?, upgrade_level = ? WHERE btc_tx_hash = ? AND btc_out_num = ? AND tx_out IS NULL";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%u,%u]", $sql, $tx->id, for_log($self->btc_tx_hash), $self->btc_out_num, $tx->upgrade_level);
-    my $res = dbh->do($sql, undef, $tx->id, $self->btc_tx_hash, $self->btc_out_num, $tx->upgrade_level);
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%u,%u]", $sql, $self->tx_out, for_log($self->btc_tx_hash), $self->btc_out_num, $self->upgrade_level);
+    my $res = dbh->do($sql, undef, $self->tx_out, $self->btc_tx_hash, $self->btc_out_num, $self->upgrade_level);
     $res == 1
         or die "Can't store coinbase " . for_log($self->btc_tx_hash) . ":" . $self->btc_out_num . " as processed: " . (dbh->errstr // "no error") . "\n";
 }
@@ -107,7 +106,8 @@ sub get_new {
         my $key = $hash->{btc_tx_hash} . $hash->{btc_out_num};
         next if $COINBASE{$key}; # transaction for this coinbase already generated (but not stored yet)
         my $coinbase = $class->new($hash);
-        $COINBASE{$key} = 1;
+        $COINBASE{$key} = $coinbase;
+        weaken($COINBASE{$key});
         push @coinbase, $coinbase;
     }
     DEBUG_ORM && Debugf("sql: found %u coinbase entries", scalar(@coinbase));

@@ -358,7 +358,7 @@ sub store {
         $txo->store($self);
     }
     if (my $coinbase = $self->up) {
-        $coinbase->store_published($self);
+        $coinbase->store_published();
     }
 }
 
@@ -376,7 +376,7 @@ sub serialize {
     $data .= serialize_input($_) foreach @{$self->in};
     $data .= varint(scalar @{$self->out});
     $data .= serialize_output($_) foreach @{$self->out};
-    if ($self->is_coinbase) {
+    if (my $coinbase = $self->is_coinbase) {
         $data .= UPGRADE_POW ? varint($self->upgrade_level) . serialize_coinbase($self->up) : pack("Q<", $self->coins_created);
     }
     return $data;
@@ -992,6 +992,10 @@ sub confirm {
     $self->block_height = $block->height;
     $self->block_pos = $pos;
     $self->block_time = $block->time;
+    if (my $coinbase = $self->up) {
+        $coinbase->tx_out = $self->hash;
+        $coinbase->upgrade_level = $self->upgrade_level;
+    }
     foreach my $in (@{$self->in}) {
         my $txo = $in->{txo};
         $txo->tx_out = $self->hash;
@@ -1031,6 +1035,9 @@ sub unconfirm {
         # Transaction will be deleted by "foreign key (block_height) references block (height) on delete cascade" on replace block
         # $self->delete;
         $self->id = undef;
+    }
+    if (my $coinbase = $self->up) {
+        $coinbase->tx_out = undef;
     }
     # dependent transactions with seq limits should not be confirmed
     if (exists $TX_SEQ_DEPENDS{$self->hash}) {

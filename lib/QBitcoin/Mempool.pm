@@ -47,10 +47,16 @@ sub choose_for_block {
     my %mempool_out; # for allow spend unconfirmed in the same block
     for (my $i=0; $i<=$#mempool; $i++) {
         if (UPGRADE_POW && $mempool[$i]->is_coinbase) {
-            my $upgrade_level = level_by_total($upgraded_total += $mempool[$i]->value_btc);
+            my $coinbase = $mempool[$i]->up;
+            if ($coinbase->tx_out) {
+                # Already confirmed spent (MB not dropped from mempool b/c it included in some other block in alternate branch)
+                $mempool[$i] = undef;
+                next;
+            }
+            my $upgrade_level = level_by_total($upgraded_total += $coinbase->value_btc);
             if ($mempool[$i]->upgrade_level != $upgrade_level) {
                 # Re-create coinbase transaction with new upgrade level and drop old one
-                my $new_tx = QBitcoin::Transaction->new_coinbase($mempool[$i]->up, $upgrade_level);
+                my $new_tx = QBitcoin::Transaction->new_coinbase($coinbase, $upgrade_level);
                 $mempool[$i]->drop();
                 $mempool[$i] = $new_tx;
             }
