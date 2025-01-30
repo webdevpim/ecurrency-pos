@@ -3,25 +3,39 @@
 # Example for run container from this image:
 # docker run --volume $(pwd)/database:/database --read-only --rm --detach -p 9555:9555 --name qbitcoin qbitcoin
 # then you can run "docker exec qbitcoin qbitcoin-cli help"
-FROM ubuntu:24.04
+FROM alpine:latest AS builder
+
+WORKDIR /build
+
+RUN apk add --no-cache \
+    perl perl-dev make clang gmp-dev \
+    libressl-dev curl wget git
+
+# pqclean does not muild with alpine gcc due to musl; clang is ok
+RUN ln -s -f /usr/bin/clang /usr/bin/cc
+
+RUN cpan -i Encode::Base58::GMP Math::GMPz Crypt::PK::ECC::Schnorr Crypt::PQClean::Sign
+
+# Final minimized image
+FROM alpine:latest
+
 WORKDIR /database
-ENV dbi=sqlite
-ENV database=qbitcoin
-COPY .cpan /root/.cpan
+
+RUN apk add --no-cache \
+    perl libressl sqlite-libs gmp-dev \
+    perl-json-xs perl-dbd-sqlite perl-dbi \
+    perl-http-message perl-hash-multivalue perl-params-validate \
+    perl-role-tiny perl-tie-ixhash perl-cryptx
+
+COPY --from=builder /usr/local/lib/perl5 /usr/local/lib/perl5
+COPY --from=builder /usr/local/share/perl5 /usr/local/share/perl5
 COPY . /qbitcoin
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update -qq && apt-get install -qqy apt-utils && \
-    apt-get install -qqy \
-        perl-base librole-tiny-perl libjson-xs-perl libdbi-perl libjson-xs-perl libhash-multivalue-perl \
-        libtie-ixhash-perl libparams-validate-perl libhttp-message-perl libcryptx-perl \
-        libsqlite3-0 libdbd-sqlite3-perl make gcc libgmp-dev && \
-    rm -rf /var/lib/apt/lists/* && \
-    cpan Encode::Base58::GMP Math::GMPz Crypt::PK::ECC::Schnorr Crypt::PQClean::Sign && \
-    rm -rf /root/.cpan && \
-    apt-get -qqy remove make gcc libgmp-dev && apt-get -qqy auto-remove
 
 ENV PERL5LIB=/qbitcoin/lib
 ENV PATH=${PATH}:/qbitcoin/bin
+ENV dbi=sqlite
+ENV database=qbitcoin
+
 CMD if mount | grep -q " on /database "; then \
       /qbitcoin/bin/qbitcoin-init --dbi=${dbi} --database=${database} /qbitcoin/db && \
       exec /qbitcoin/bin/qbitcoind --peer=node.qcoin.info --dbi=${dbi} --database=${database} --log=/dev/null --verbose; \
