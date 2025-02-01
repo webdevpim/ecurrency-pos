@@ -3,6 +3,7 @@ use warnings;
 use strict;
 
 use QBitcoin::Log;
+use QBitcoin::Const;
 use QBitcoin::Crypto qw(hash160 ripemd160 sha1 sha256 hash256);
 use QBitcoin::Script::OpCodes qw(OPCODES :OPCODES);
 use QBitcoin::Script::Const;
@@ -27,7 +28,9 @@ our @EXPORT_OK = qw(script_eval op_pushdata);
 # https://academy.bit2me.com/en/what-is-bitcoin-script/# (?)
 
 use constant LOCKTIME_THRESHOLD => 500000000;
-use constant SEQUENCE_LOCKTIME_TYPE_FLAG => 1 << 22;
+use constant SEQUENCE_LOCKTIME_DISABLE_FLAG  => 1 << 31;
+use constant SEQUENCE_LOCKTIME_TYPE_FLAG     => 1 << 22;
+use constant QBT_SEQUENCE_LOCKTIME_TYPE_FLAG => 1 << 27;
 
 # Allow attributes "in1", "in2", etc
 sub MODIFY_CODE_ATTRIBUTES {
@@ -444,8 +447,8 @@ sub cmd_checklocktimeverify($) {
             $state->tx->set_min_tx_time($n);
         }
     }
-    # Also for Bitcoin we have to check that input nSequense is not 0xffffffff
-    # This does not matter for qBitcoin
+    # Also for Bitcoin we have to check that input nSequense is not SEQUENCE_FINAL (0xffffffff),
+    # but it does not make sense for QBitcoin
     return undef;
 }
 
@@ -456,29 +459,32 @@ sub cmd_checksequenceverify($) {
     my $stack = $state->stack;
     @$stack or return 0;
     my $val = unpack_int($stack->[-1]) // return 0;
-    my $n = $val & 0xffff;
     my $in = $state->tx->in->[$state->input_num];
-    if ($val & SEQUENCE_LOCKTIME_TYPE_FLAG) {
-        if ($in->{txo}->can("nSequence")) {
-            # Bitcoin
-            if (($in->{txo}->nSequence & SEQUENCE_LOCKTIME_TYPE_FLAG) == 0 || ($in->{txo}->nSequence & 0xffff) < $n) {
+    if ($state->tx->isa("Bitcoin::Transaction")) {
+        # Bitcoin
+        my $nSequence = $in->{txo}->nSequence;
+        if ($nSequence & SEQUENCE_LOCKTIME_DISABLE_FLAG) {
+            return 0;
+        }
+        my $n = $val & (SEQUENCE_LOCKTIME_TYPE_FLAG - 1);
+        if ($val & SEQUENCE_LOCKTIME_TYPE_FLAG) {
+            if (($nSequence & SEQUENCE_LOCKTIME_TYPE_FLAG) == 0 || $nSequence < $n) {
                 return 0;
             }
         }
         else {
-            # QBitcoin
-            $in->{min_rel_time} = $n*512 if ($in->{min_rel_time} // -1) < $n*512;
+            if (($nSequence & SEQUENCE_LOCKTIME_TYPE_FLAG) != 0 || $nSequence < $n) {
+                return 0;
+            }
         }
     }
     else {
-        if ($in->{txo}->can("nSequence")) {
-            # Bitcoin
-            if (($in->{txo}->nSequence & SEQUENCE_LOCKTIME_TYPE_FLAG) != 0 || ($in->nSequence & 0xffff) < $n) {
-                return 0;
-            }
+        # QBitcoin
+        my $n = $val & (QBT_SEQUENCE_LOCKTIME_TYPE_FLAG - 1);
+        if ($val & QBT_SEQUENCE_LOCKTIME_TYPE_FLAG) {
+            $in->{min_rel_time} = $n*BLOCK_INTERVAL if ($in->{min_rel_time} // -1) < $n*BLOCK_INTERVAL;
         }
         else {
-            # QBitcoin
             $in->{min_rel_block_height} = $n if ($in->{min_rel_block_height} // -1) < $n;
         }
     }
