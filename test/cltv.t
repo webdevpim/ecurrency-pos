@@ -21,7 +21,6 @@ use QBitcoin::Protocol;
 use QBitcoin::Block;
 use QBitcoin::Transaction;
 use QBitcoin::ProtocolState qw(blockchain_synced);
-use QBitcoin::TXO;
 use QBitcoin::Generate;
 use QBitcoin::Script qw(op_pushdata);
 use QBitcoin::Script::OpCodes qw(:OPCODES);
