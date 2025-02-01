@@ -785,7 +785,7 @@ sub calculate_hash {
 }
 
 sub is_standard { $_[0]->{tx_type} == TX_TYPE_STANDARD }
-sub is_stake    { $_[0]->{tx_type} == TX_TYPE_STAKE }
+sub is_stake    { $_[0]->{tx_type} == TX_TYPE_STAKE    }
 sub is_coinbase { $_[0]->{tx_type} == TX_TYPE_COINBASE }
 
 sub validate_coinbase {
@@ -919,8 +919,34 @@ sub check_input_script {
                 $in->{txo}->tx_in_str, $in->{txo}->num, $self->hash_str);
             return -1;
         }
+        # Set txo min_rel_time to STAKE_MATURITY if previous tx is stake
+        if ($self->is_standard && ($in->{min_rel_time} // -1) < STAKE_MATURITY) {
+            my $tx_in_type = (ref $self)->type_by_hash($in->{txo}->tx_in);
+            if (!defined($tx_in_type)) {
+                Errf("No input transaction %s for txo", $in->{txo}->tx_in_str);
+                return -1;
+            }
+            if ($tx_in_type == TX_TYPE_STAKE) {
+                $in->{min_rel_time} = STAKE_MATURITY;
+            }
+        }
     }
     return 0;
+}
+
+sub type_by_hash {
+    my $class = shift;
+    my ($hash) = @_;
+
+    if (my $tx = $class->get($hash)) {
+        return $tx->tx_type;
+    }
+    elsif (my ($tx_hashref) = $class->fetch(hash => $hash)) {
+        return $tx_hashref->{tx_type};
+    }
+    else {
+        return undef;
+    }
 }
 
 sub announce {
