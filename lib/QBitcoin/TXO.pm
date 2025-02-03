@@ -76,6 +76,7 @@ sub get {
 sub new_txo {
     my $class = shift;
     my $hash = @_ == 1 ? $_[0] : { @_ };
+    $hash->{data} //= "";
     return bless $hash, $class;
 }
 
