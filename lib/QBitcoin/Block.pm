@@ -5,6 +5,7 @@ use strict;
 use QBitcoin::Const;
 use QBitcoin::ORM qw(:types);
 use QBitcoin::Accessors qw(mk_accessors new);
+use QBitcoin::Config;
 use QBitcoin::Transaction;
 
 use Role::Tiny::With;
@@ -133,7 +134,7 @@ sub hash_str {
 sub reward {
     my $class = shift;
     my ($height) = @_;
-    return $height ? 0 : GENESIS_REWARD;
+    return $height ? 0 : $config->{regtest} ? $config->{genesis_reward} // 0 : GENESIS_REWARD;
 }
 
 1;

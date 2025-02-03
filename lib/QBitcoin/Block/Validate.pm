@@ -24,8 +24,9 @@ sub validate {
             my $genesis_hash = $config->{testnet} ? GENESIS_HASH_TESTNET : GENESIS_HASH;
             $block->hash eq $genesis_hash
                 or return "Incorrect genesis block hash " . unpack("H*", $block->hash) . ", must be " . unpack("H*", $genesis_hash);
+            $block->upgraded = 0; # Genesis block has no upgrades
+            return ""; # Not needed to validate genesis block with correct hash
         }
-        return ""; # Not needed to validate genesis block with correct hash
     }
     if (!@{$block->transactions} && (timeslot($block->time) - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS) {
         return "Empty block";
@@ -36,7 +37,7 @@ sub validate {
     my $fee = 0;
     my %tx_in_block;
     my $empty_tx = 0;
-    my $upgraded = $block->prev_block->upgraded // 0;
+    my $upgraded = $block->prev_block ? $block->prev_block->upgraded // 0 : 0;
     foreach my $transaction (@{$block->transactions}) {
         if ($tx_in_block{$transaction->hash}++) {
             return "Transaction " . $transaction->hash_str . " included in the block twice";
@@ -63,7 +64,7 @@ sub validate {
         }
     }
     $fee == -(ref $block)->reward($block->height)
-        or return "Total block fee is $fee (not 0)";
+        or return "Total block fee is $fee (not " . -(ref $block)->reward($block->height) . ")";
     $block->upgraded = $upgraded;
     return "";
 }

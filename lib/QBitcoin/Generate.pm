@@ -179,6 +179,10 @@ sub generate {
                 return;
             }
         }
+        if (UPGRADE_POW && $height == 0 && !$config->{regtest}) {
+            # Genesis block should not have coinbase transactions
+            @transactions = grep { !$_->is_coinbase } @transactions;
+        }
         # Generate new stake_tx with correct output value
         my $block_sign_data = $prev_block ? $prev_block->hash : ZERO_HASH;
         $block_sign_data .= $_->hash foreach @transactions;
