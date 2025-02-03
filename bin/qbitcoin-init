@@ -52,7 +52,7 @@ sub main {
     }
     elsif (($ver // 0) < DB_VERSION) {
         foreach my $update (($ver // 0) + 1 .. DB_VERSION) {
-            apply_file("$db_dir/updates/$ver.sql");
+            apply_file("$db_dir/updates/$update.sql") if -f "$db_dir/updates/$update.sql";
             $dbh->do("insert into version (version) values (?)", undef, $update);
         }
         print "Database updated\n";
