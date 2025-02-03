@@ -148,7 +148,7 @@ sub main_loop {
                 my $time_next_block = timeslot($blockchain_time > $now ? $blockchain_time : $now) + BLOCK_INTERVAL;
                 $timeout = $time_next_block - $now;
             }
-            Debugf("Have blockchain height %d, last block time %s, weight %u", QBitcoin::Block->blockchain_height // -1, scalar(localtime QBitcoin::Block->blockchain_time), QBitcoin::Block->best_weight);
+            Debugf("Have blockchain height %d, last block time %s, weight %d", QBitcoin::Block->blockchain_height // -1, defined(QBitcoin::Block->blockchain_height) ? scalar(localtime QBitcoin::Block->blockchain_time) : "undef", QBitcoin::Block->best_weight);
         }
         $rin = $win = $ein = '';
         vec($rin, fileno($listen_socket), 1) = 1 if $listen_socket;
