@@ -16,7 +16,7 @@ use QBitcoin::Config;
 use QBitcoin::Log;
 use QBitcoin::ORM qw(dbh);
 use QBitcoin::Accessors qw(mk_accessors);
-use QBitcoin::Address qw(ADDRESS_RE ADDRESS_TESTNET_RE address_by_hash scripthash_by_address);
+use QBitcoin::Address qw(address_by_hash scripthash_by_address);
 use QBitcoin::RedeemScript;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;

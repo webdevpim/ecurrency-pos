@@ -8,7 +8,7 @@ use Scalar::Util qw(looks_like_number);
 use QBitcoin::Const;
 use QBitcoin::RPC::Const;
 use QBitcoin::Config;
-use QBitcoin::Address qw(ADDRESS_RE ADDRESS_TESTNET_RE wif_to_pk);
+use QBitcoin::Address qw(wif_to_pk);
 use QBitcoin::Accessors qw(mk_accessors);
 
 mk_accessors(qw(validate_message));

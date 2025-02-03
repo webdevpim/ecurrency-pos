@@ -7,16 +7,13 @@ use strict;
 use Math::GMPz;
 use Encode::Base58::GMP qw(encode_base58 decode_base58);
 use QBitcoin::Config;
+use QBitcoin::Const;
 use QBitcoin::Crypto qw(hash160 checksum32);
 use QBitcoin::Script qw(op_pushdata);
 use QBitcoin::Script::OpCodes qw(:OPCODES);
 
-use constant MAGIC              => "1234";
-use constant MAGIC_TESTNET      => "1235";
-use constant MAGIC_LEN          => length(MAGIC);
-use constant CHECKSUM_LEN       => 4;
-use constant ADDRESS_RE         => qr/.*/; # TODO
-use constant ADDRESS_TESTNET_RE => qr/.*/; # TODO
+use constant ADDR_MAGIC_LEN => length(ADDR_MAGIC);
+use constant CHECKSUM_LEN   => 4;
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(
@@ -28,13 +25,11 @@ our @EXPORT_OK = qw(
     script_by_pubkey
     script_by_pubkeyhash
     scripthash_by_address
-    ADDRESS_RE
-    ADDRESS_TESTNET_RE
 );
 
 # https://en.bitcoin.it/wiki/Wallet_import_format
 sub address_version() {
-    return $config->{testnet} ? "\xEF" : "\x80";
+    return $config->{testnet} ? ADDRESS_VER_TESTNET : ADDRESS_VER;
 }
 
 sub wallet_import_format($) {
@@ -59,7 +54,7 @@ sub wif_to_pk($) {
 # qbitcoin part, incompatible with bitcoin
 
 sub magic() {
-    return $config->{testnet} ? MAGIC_TESTNET : MAGIC;
+    return $config->{testnet} ? ADDR_MAGIC_TESTNET : ADDR_MAGIC;
 }
 
 sub script_by_pubkey {
@@ -98,7 +93,7 @@ sub validate_address($) {
     my $crc = substr($bin, -CHECKSUM_LEN, CHECKSUM_LEN, "");
     checksum32($bin) eq $crc
         or return 0;
-    return substr($bin, 0, MAGIC_LEN) eq magic;
+    return substr($bin, 0, ADDR_MAGIC_LEN) eq magic;
 }
 
 sub scripthash_by_address($) {
@@ -110,7 +105,7 @@ sub scripthash_by_address($) {
     my $crc = substr($bin, -CHECKSUM_LEN, CHECKSUM_LEN, "");
     checksum32($bin) eq $crc
         or die "Incorrect address checksum\n";
-    substr($bin, 0, MAGIC_LEN, "") eq magic
+    substr($bin, 0, ADDR_MAGIC_LEN, "") eq magic
         or die "Incorrect address version\n";
     return $bin;
 }
