@@ -154,18 +154,18 @@ sub generate {
     }
     # Just get upper limit for stake tx size
     my @coinbase = UPGRADE_POW && UPGRADE_FEE ? QBitcoin::Mempool->coinbase_list($timeslot) : ();
-    my $stake_tx = make_stake_tx({ "" => 0, map { $_->hash => 0 } @coinbase }, "");
-    my $size = $stake_tx ? $stake_tx->size : 0;
-    # TODO: add transactions from block of the same timeslot, it's not an ancestor
-    my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $height, $stake_tx && $stake_tx->in, $upgraded_total);
-    if (!@transactions && ($timeslot - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
-        return;
-    }
     # $fee is a hash with fee destination as a key and fee amount as a value
     # "" is a key for my reward
     my $fee = {};
     if (my $reward = QBitcoin::Block->reward($height)) {
         $fee->{""} = $reward;
+    }
+    my $stake_tx = make_stake_tx({ %$fee, map { $_->hash => 0 } @coinbase }, "");
+    my $size = $stake_tx ? $stake_tx->size : 0;
+    # TODO: add transactions from block of the same timeslot, it's not an ancestor
+    my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $height, $stake_tx && $stake_tx->in, $upgraded_total);
+    if (!@transactions && ($timeslot - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
+        return;
     }
     foreach my $tx (grep { $_->fee } @transactions) {
         $fee->{UPGRADE_POW && UPGRADE_FEE && $tx->up ? $tx->up->fee_dst($prev_block) // "" : ""} += $tx->fee;
@@ -173,8 +173,9 @@ sub generate {
     if (%$fee) {
         return unless $stake_tx;
         if ($fee->{""} && !@{$stake_tx->in}) {
-            # Genesis node can validate block with the very first coinbase transaction without validation amount
-            if (!$config->{genesis} || QBitcoin::Block->best_weight || GENESIS_REWARD) {
+            # Genesis node can validate block with the very first coinbase transaction
+            # or create genesis block without validation amount
+            if (!$config->{genesis} || QBitcoin::Block->best_weight > 0) {
                 return;
             }
         }
