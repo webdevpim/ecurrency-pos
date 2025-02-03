@@ -18,12 +18,12 @@ our $config = Hash::MultiValue->new();
 sub read_config {
     my ($conffile) = @_;
 
-    if (!defined $conffile) {
-        $conffile = CONFIG_DIR . "/" . CONFIG_NAME;
-        -f $conffile or return; # No config file is OK if it's not explicitly specified in options
+    if (defined $conffile) {
+        $conffile = CONFIG_DIR . "/$conffile" if ref($conffile) eq "" && index($conffile, '/') == -1;
     }
     else {
-        $conffile = CONFIG_DIR . "/$conffile" if ref($conffile) eq "" && index($conffile, '/') == -1;
+        $conffile = CONFIG_DIR . "/" . CONFIG_NAME;
+        -f $conffile or return; # No config file is OK if it's not explicitly specified in options
     }
 
     open(my $conf_fh, '<', $conffile)
