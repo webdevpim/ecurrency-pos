@@ -33,7 +33,7 @@ sub main {
         'fake-coinbase' => \$opts{fake_coinbase},
         'produce'       => \$opts{produce},
         'database=s'    => \$opts{database},
-        'testnet|t=s'   => \$opts{testnet},
+        'testnet|t'     => \$opts{testnet},
         'dbi=s'         => \$opts{dbi},
         'log=s'         => \$opts{log},
         'loglevel=s'    => \$opts{loglevel},

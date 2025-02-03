@@ -14,11 +14,11 @@ sub main {
     my ( $help, $conffile );
     my %opts;
     unless (GetOptions(
-        'help|h|?'    => \$help,
-        'config|f=s'  => \$conffile,
-        'rpc|J=s'     => \$opts{rpc},
-        'rpc-port=s'  => \$opts{rpc_port},
-        'testnet|t=s' => \$opts{testnet},
+        'help|h|?'   => \$help,
+        'config|f=s' => \$conffile,
+        'rpc|J=s'    => \$opts{rpc},
+        'rpc-port=s' => \$opts{rpc_port},
+        'testnet|t'  => \$opts{testnet},
     )) {
         select STDERR;
         usage();
