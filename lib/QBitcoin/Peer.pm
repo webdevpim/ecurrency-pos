@@ -96,11 +96,12 @@ sub get_or_create {
         }
         else {
             push @peers, $PEERS[$args->{type_id}]->{$ip} = $class->create(
-                type_id     => $args->{type_id},
-                ip          => $ip,
-                port        => $port,
-                create_time => time(),
-                update_time => time(),
+                type_id         => $args->{type_id},
+                ip              => $ip,
+                port            => $port,
+                create_time     => time(),
+                update_time     => time(),
+                failed_connects => 0,
             );
         }
     }
