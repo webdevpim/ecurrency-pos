@@ -16,6 +16,7 @@ use QBitcoin::Connection;
 use Bitcoin::Block;
 
 #$config->{debug} = 1;
+$config->{regtest} = 1;
 
 # hash, prev_hash, weight [, self_weight]
 send_blocks([
