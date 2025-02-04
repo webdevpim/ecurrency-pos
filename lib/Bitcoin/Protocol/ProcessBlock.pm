@@ -47,7 +47,7 @@ sub process_btc_block {
                 }
             }
             $block->chainwork = $prev_block->chainwork + $chainwork;
-            $CHAINWORK //= (map { $_->chainwork } Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1))[0];
+            $CHAINWORK //= (map { $_->chainwork } Bitcoin::Block->find(height => { "IS NOT " => undef }, -sortby => 'height DESC', -limit => 1))[0];
             if ($block->chainwork > $CHAINWORK) {
                 my $start_block = $prev_block;
                 my $new_height = 1;

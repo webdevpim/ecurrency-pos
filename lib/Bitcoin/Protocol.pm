@@ -44,7 +44,7 @@ sub type_id() { PROTOCOL_BITCOIN }
 sub startup {
     my $self = shift;
     my $nonce = pack("vvvv", int(rand(0x10000)), int(rand(0x10000)), int(rand(0x10000)), int(rand(0x10000)));
-    my ($last_block) = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1);
+    my ($last_block) = Bitcoin::Block->find(height => { "IS NOT" => undef }, -sortby => 'height DESC', -limit => 1);
     my $height = $last_block ? $last_block->height : -1;
     $self->have_block0(1) if $last_block;
     my $version = pack("VQ<Q<a26a26a8Cl<C", PROTOCOL_VERSION, PROTOCOL_FEATURES, time(),
@@ -72,7 +72,7 @@ sub abort {
 
 sub request_btc_blocks {
     my $self = shift;
-    my @blocks = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 10);
+    my @blocks = Bitcoin::Block->find(height => { "IS NOT" => undef }, -sortby => 'height DESC', -limit => 10);
     my @locators = map { $_->hash } @blocks;
     if (@locators == 0) {
         if ($self->can('BTC_GENESIS')) {
@@ -211,6 +211,10 @@ sub cmd_headers {
     elsif ($known_block && $num == 2000) {
         # All received block are known for us. Was it deep rollback?
         my $start_height = $known_block->height;
+        if (!$start_height) {
+            my ($block) = Bitcoin::Block->find(height => { "IS NOT" => undef }, -sortby => 'height DESC', -limit => 1);
+            $start_height = $block ? $block->height+1 : 0;
+        }
         my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*1900 } 1 .. 250 ], -sortby => "height DESC");
         $self->send_message("getheaders", pack("V", PROTOCOL_VERSION) .
             varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . ZERO_HASH);
@@ -224,7 +228,7 @@ sub cmd_headers {
 sub request_transactions {
     my $self = shift;
 
-    my ($block) = Bitcoin::Block->find(scanned => 0, -sortby => 'height ASC', -limit => 1);
+    my ($block) = Bitcoin::Block->find(scanned => 0, height => { "IS NOT" => undef }, -sortby => 'height ASC', -limit => 1);
     if ($block) {
         Debugf("Request block data: %s", $block->hash_hex);
         $self->send_message("getdata", pack("CVa32", 1, MSG_BLOCK, $block->hash));
