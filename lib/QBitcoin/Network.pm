@@ -45,7 +45,7 @@ sub bind_rest_addr {
 
 sub listen_socket {
     my ($address, $port) = @_;
-    my $bind_addr = sockaddr_in($port, inet_aton($address eq '*' ? "0.0.0.0" : $address));
+    my $bind_addr = pack_sockaddr_in($port, inet_aton($address eq '*' ? "0.0.0.0" : $address));
     my $proto = getprotobyname('tcp');
     socket(my $socket, PF_INET, SOCK_STREAM, $proto)
         or die "Error creating socket: $!\n";
@@ -63,7 +63,7 @@ sub connect_to {
     my $peer = shift;
     my $iaddr = $peer->ipv4
         or die "No ipv4 address for peer " . $peer->id . "\n";
-    my $paddr = sockaddr_in($peer->port, $iaddr);
+    my $paddr = pack_sockaddr_in($peer->port, $iaddr);
     my $proto = getprotobyname('tcp');
     socket(my $socket, PF_INET, SOCK_STREAM, $proto)
         or die "Error creating socket: $!\n";
@@ -365,26 +365,26 @@ sub main_loop {
 sub set_pinned_peers {
     my %pinned_qbtc = map { $_->ip => $_ } grep { $_->pinned } QBitcoin::Peer->get_all(PROTOCOL_QBITCOIN);
     foreach my $peer_host ($config->get_all('peer')) {
-        my $peer = QBitcoin::Peer->get_or_create(
+        my @peers = QBitcoin::Peer->get_or_create(
             host       => $peer_host,
             type_id    => PROTOCOL_QBITCOIN,
             pinned     => 1,
             reputation => 1000,
         )
             or next;
-        delete $pinned_qbtc{$peer->ip};
+        delete @pinned_qbtc{ map { $_->ip } @peers };
     }
     $_->update(pinned => 0) foreach values %pinned_qbtc;
 
     my %pinned_btc = map { $_->ip => $_ } grep { $_->pinned } QBitcoin::Peer->get_all(PROTOCOL_BITCOIN);
     foreach my $peer_host ($config->get_all('btcnode')) {
-        my $peer = QBitcoin::Peer->get_or_create(
+        my @peers = QBitcoin::Peer->get_or_create(
             host    => $peer_host,
             type_id => PROTOCOL_BITCOIN,
             pinned  => 1,
         )
             or next;
-        delete $pinned_btc{$peer->ip};
+        delete @pinned_btc{ map { $_->ip } @peers };
     }
     $_->update(pinned => 0) foreach values %pinned_btc;
 }

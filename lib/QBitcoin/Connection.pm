@@ -2,7 +2,7 @@ package QBitcoin::Connection;
 use warnings;
 use strict;
 
-use Socket;
+use Socket qw(inet_ntoa);
 use POSIX qw(:errno_h);
 use QBitcoin::Const;
 use QBitcoin::Log;

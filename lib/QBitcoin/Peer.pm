@@ -2,7 +2,7 @@ package QBitcoin::Peer;
 use warnings;
 use strict;
 
-use Socket;
+use Socket qw(inet_ntoa getaddrinfo unpack_sockaddr_in AF_INET SOCK_STREAM);
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Log;
@@ -63,15 +63,23 @@ sub get_or_create {
     my $class = shift;
     my $args = @_ == 1 ? $_[0] : { @_ };
     $args->{ip} //= IPV6_V4_PREFIX . $args->{ipv4} if $args->{ipv4};
-    if ($args->{host} && !$args->{ip}) {
+    my @ip;
+    if ($args->{ip}) {
+        @ip = ( $args->{ip} );
+    }
+    elsif ($args->{host}) {
         my ($addr, $port) = split(/:/, $args->{host});
-        my $iaddr = inet_aton($addr);
-        if (!$iaddr) {
-            Errf("Unknown host: %s", $addr);
-            return 0;
+        my ($err, @res) = getaddrinfo($addr, undef, { socktype => SOCK_STREAM, family => AF_INET });
+        if ($err) {
+            Errf("getaddrinfo for %s: %s", $addr, $err);
+            return ();
         }
-        $args->{ip} = IPV6_V4_PREFIX . $iaddr;
+        @ip = map { IPV6_V4_PREFIX . unpack_sockaddr_in($_->[3]) } @res;
         $args->{port} = $port;
+    }
+    else {
+        Errf("Neither peer ip nor host is specified");
+        return ();
     }
     my $port = $args->{port} //
         getservbyname(lc PROTOCOL2NAME->{$args->{type_id}}, 'tcp') //
@@ -79,18 +87,24 @@ sub get_or_create {
             ($config->{testnet}     ? PORT_TESTNET     : PORT    ) :
             ($config->{btc_testnet} ? BTC_PORT_TESTNET : BTC_PORT));
     $class->load();
-    if (my $peer = $PEERS[$args->{type_id}]->{$args->{ip}}) {
-        $peer->update(port => $port) if $peer->port != $port;
-        $peer->update(pinned => $args->{pinned}) if defined($args->{pinned}) && $args->{pinned} != $peer->pinned;
-        return $peer;
+    my @peers;
+    foreach my $ip (@ip) {
+        if (my $peer = $PEERS[$args->{type_id}]->{$ip}) {
+            $peer->update(port => $port) if $peer->port != $port;
+            $peer->update(pinned => $args->{pinned}) if defined($args->{pinned}) && $args->{pinned} != $peer->pinned;
+            push @peers, $peer;
+        }
+        else {
+            push @peers, $PEERS[$args->{type_id}]->{$ip} = $class->create(
+                type_id     => $args->{type_id},
+                ip          => $ip,
+                port        => $port,
+                create_time => time(),
+                update_time => time(),
+            );
+        }
     }
-    return $PEERS[$args->{type_id}]->{$args->{ip}} = $class->create(
-        type_id     => $args->{type_id},
-        ip          => $args->{ip},
-        port        => $port,
-        create_time => time(),
-        update_time => time(),
-    );
+    return wantarray ? @peers : $peers[0];
 }
 
 sub get_all {
