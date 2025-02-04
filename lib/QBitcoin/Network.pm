@@ -398,8 +398,18 @@ sub call_btc_peers {
 }
 
 sub call_qbt_peers {
-    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->get_all(PROTOCOL_QBITCOIN)
-        or return;
+    my @peers = grep { $_->is_connect_allowed } QBitcoin::Peer->get_all(PROTOCOL_QBITCOIN);
+    if (!@peers) {
+        my @fallback_peer = $config->get_all('fallback_peer');
+        @fallback_peer = (SEED_PEER) if SEED_PEER && !@fallback_peer;
+        foreach my $peer_host (@fallback_peer) {
+            push @peers, grep { $_->is_connect_allowed } QBitcoin::Peer->get_or_create(
+                host    => $peer_host,
+                type_id => PROTOCOL_QBITCOIN,
+            )
+        }
+        return unless @peers;
+    }
     my $found_pinned;
     foreach my $peer (grep { $_->pinned } @peers) {
         connect_to($peer);

@@ -50,6 +50,7 @@ use constant QBITCOIN_CONST => {
     PEER_RECONNECT_TIME     => 10,
     BTC_PORT                => 8333,
     BTC_PORT_TESTNET        => 18333,
+    SEED_PEER               => "seed.qbitcoin.net",
     GENESIS_HASH            => pack('H*', GENESIS_BLOCK_HASH),
     GENESIS_HASH_TESTNET    => pack('H*', GENESIS_BLOCK_HASH_TESTNET),
     GENESIS_REWARD          => 50 * 100000000, # 50 QBTC
