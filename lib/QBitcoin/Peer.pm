@@ -74,7 +74,7 @@ sub get_or_create {
             Errf("getaddrinfo for %s: %s", $addr, $err);
             return ();
         }
-        @ip = map { IPV6_V4_PREFIX . unpack_sockaddr_in($_->[3]) } @res;
+        @ip = map { IPV6_V4_PREFIX . unpack_sockaddr_in($_->{addr}) } @res;
         $args->{port} = $port;
     }
     else {
