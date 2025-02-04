@@ -404,8 +404,9 @@ sub call_qbt_peers {
         @fallback_peer = (SEED_PEER) if SEED_PEER && !@fallback_peer;
         foreach my $peer_host (@fallback_peer) {
             push @peers, grep { $_->is_connect_allowed } QBitcoin::Peer->get_or_create(
-                host    => $peer_host,
-                type_id => PROTOCOL_QBITCOIN,
+                host       => $peer_host,
+                type_id    => PROTOCOL_QBITCOIN,
+                reputation => 10,
             )
         }
         return unless @peers;
