@@ -107,7 +107,7 @@ sub fetch {
                 if (ref $v eq 'SCALAR') {
                     $condition .= "`$key` $op $$v ";
                 }
-                elsif (ref $v eq 'ARRAY') { # key => { not => [ 'value1', 'value2 ] }
+                elsif (ref $v eq 'ARRAY') { # key => { not => [ 'value1', 'value2' ] }
                     $condition .= " `$key` $op IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
                     push @values, @$value;
                 }
