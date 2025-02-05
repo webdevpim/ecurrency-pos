@@ -8,6 +8,7 @@ StartLimitBurst=3
 [Service]
 PermissionsStartOnly=true
 ExecStart=/usr/local/bin/qbitcoind
+ExecStartPre=/usr/local/bin/qbitcoin-init
 User=qbitcoin
 Group=qbitcoin
 ProtectSystem=full
