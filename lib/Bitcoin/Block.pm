@@ -4,6 +4,8 @@ use strict;
 
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(new mk_accessors);
+use QBitcoin::Const;
+use QBitcoin::Config;
 use QBitcoin::ORM qw(:types find create update delete);
 use QBitcoin::Crypto qw(hash256);
 use Role::Tiny::With;
@@ -27,6 +29,18 @@ use constant PRIMARY_KEY => 'hash';
 
 mk_accessors(keys %{&FIELDS});
 mk_accessors(qw(transactions));
+
+sub genesis_hash() {
+    my $self = shift;
+    return $config->{regtest} ? undef : $config->{btc_testnet} ?
+        ( $self->can('BTC_GENESIS_TESTNET') ? BTC_GENESIS_TESTNET() : undef ) :
+        ( $self->can('BTC_GENESIS')         ? BTC_GENESIS()         : undef ) ;
+}
+
+sub genesis_hash_hex {
+    my $self = shift;
+    return $self->genesis_hash ? unpack("H*", scalar reverse $self->genesis_hash) : undef;
+}
 
 sub calculate_hash {
     my $self = shift;

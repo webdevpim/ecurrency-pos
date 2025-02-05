@@ -79,6 +79,8 @@ use constant QBITCOIN_CONST => {
     MIN_CONNECTIONS         => 5,
     MIN_OUT_CONNECTIONS     => 2,
     MAX_IN_CONNECTIONS      => 8,
+    BTC_GENESIS             => scalar reverse pack("H*", "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"),
+    BTC_GENESIS_TESTNET     => scalar reverse pack("H*", "000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943"),
 };
 
 use constant STATE_CONST => {

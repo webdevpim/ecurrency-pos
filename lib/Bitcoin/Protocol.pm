@@ -26,8 +26,6 @@ use constant {
     # https://en.bitcoin.it/wiki/Protocol_documentation#Message_structure
     MAGIC               => pack("V", 0xD9B4BEF9),
     MAGIC_TESTNET       => pack("V", 0x0709110B ),
-    BTC_GENESIS         => scalar reverse pack("H*", "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"),
-    BTC_GENESIS_TESTNET => scalar reverse pack("H*", "000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943"),
 };
 
 use constant {
@@ -40,16 +38,6 @@ use constant {
 };
 
 sub type_id() { PROTOCOL_BITCOIN }
-
-sub genesis_hash() {
-    return $config->{regtest} ? undef : $config->{btc_testnet} ?
-        ( __PACKAGE__->can('BTC_GENESIS_TESTNET') ? BTC_GENESIS_TESTNET() : undef ) :
-        ( __PACKAGE__->can('BTC_GENESIS')         ? BTC_GENESIS()         : undef ) ;
-}
-
-sub genesis_hash_hex {
-    return genesis_hash ? unpack("H*", scalar reverse genesis_hash) : undef;
-}
 
 sub startup {
     my $self = shift;
@@ -85,9 +73,9 @@ sub request_btc_blocks {
     my @blocks = Bitcoin::Block->find(height => { "IS NOT" => undef }, -sortby => 'height DESC', -limit => 10);
     my @locators = map { $_->hash } @blocks;
     if (@locators == 0) {
-        if (genesis_hash) {
+        if (Bitcoin::Block->genesis_hash) {
             Debugf("Request genesis block");
-            $self->send_message("getdata", pack("CVa32", 1, MSG_BLOCK, genesis_hash));
+            $self->send_message("getdata", pack("CVa32", 1, MSG_BLOCK, Bitcoin::Block->genesis_hash));
             return;
         }
         @locators = (ZERO_HASH);
@@ -212,7 +200,7 @@ sub cmd_headers {
             # Is it genesis block? Request it
             Debugf("Request genesis block %s", $orphan_block->prev_hash_hex);
             $self->send_message("getdata",
-                pack("CVa32", 1, MSG_BLOCK, genesis_hash // $orphan_block->prev_hash));
+                pack("CVa32", 1, MSG_BLOCK, $orphan_block->genesis_hash // $orphan_block->prev_hash));
         }
     }
     elsif ($new_block) {

@@ -29,8 +29,8 @@ sub process_btc_block {
     # https://bitcoin.stackexchange.com/questions/26869/what-is-chainwork
     my $chainwork = $block->difficulty * 4295032833; # it's 0x0100010001, avoid perl warning about too large hex number
     if ($block->prev_hash eq ZERO_HASH) {
-        if ($self->genesis_hash && $self->genesis_hash ne $block->hash) {
-            Warningf("Genesis block hash mismatch, expected %s, got %s", $self->genesis_hash_hex, $block->hash_hex);
+        if ($block->genesis_hash && $block->genesis_hash ne $block->hash) {
+            Warningf("Genesis block hash mismatch, expected %s, got %s", $block->genesis_hash_hex, $block->hash_hex);
             return undef;
         }
         $block->height = 0;
