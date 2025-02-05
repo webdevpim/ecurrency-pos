@@ -73,7 +73,7 @@ sub cmd_getblockchaininfo {
         $best_block = QBitcoin::Block->best_block($height);
     }
     my $response = {
-        chain                => "main",
+        chain                => $config->{regtest} ? "regtest" : $config->{testnet} ? "testnet" : "main",
         blocks               => $best_block ? $best_block->height+0   : -1,
         bestblockhash        => $best_block ? unpack("H*", $best_block->hash) : undef,
         weight               => $best_block ? $best_block->weight+0   : -1,
@@ -96,6 +96,8 @@ sub cmd_getblockchaininfo {
         $response->{btc_headers} = $btc_block   ? $btc_block->height+0   : 0,
         $response->{btc_scanned} = $btc_scanned ? $btc_scanned->height+0 : 0,
         my ($coinbase) = dbh->selectrow_array("SELECT SUM(value) FROM `" . QBitcoin::Coinbase->TABLE . "` WHERE tx_out IS NOT NULL");
+        $coinbase //= 0;
+        $coinbase += QBitcoin::Block->reward(0) if defined($height);
         $response->{total_coins} = $coinbase ? $coinbase / DENOMINATOR : 0;
     }
     return $self->response_ok($response);
