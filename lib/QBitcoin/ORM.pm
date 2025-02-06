@@ -62,7 +62,7 @@ sub dbh {
 sub for_log {
     my ($data) = @_;
     defined($data) || return "undef";
-    return $data =~ /^[[:print:]]*$/ ? "'$data'" : "X'" . unpack("H*", $data) . "'";
+    return $data =~ /^[[:print:]]*\z/s ? "'$data'" : "X'" . unpack("H*", $data) . "'";
 }
 
 # Returns raw hashes, not objects, without pre_load(), on_load() and new()

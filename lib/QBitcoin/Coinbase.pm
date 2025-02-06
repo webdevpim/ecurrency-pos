@@ -76,7 +76,7 @@ sub store_published {
     my $self = shift;
 
     my $sql = "UPDATE `" . TABLE . "` SET tx_out = ?, upgrade_level = ?, value = ? WHERE btc_tx_hash = ? AND btc_out_num = ? AND tx_out IS NULL";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%s,%u,%u]", $sql, $self->tx_out, $self->upgrade_level, $self->value, for_log($self->btc_tx_hash), $self->btc_out_num);
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%s,%u]", $sql, $self->tx_out, $self->upgrade_level, $self->value, for_log($self->btc_tx_hash), $self->btc_out_num);
     my $res = dbh->do($sql, undef, $self->tx_out, $self->upgrade_level, $self->value, $self->btc_tx_hash, $self->btc_out_num);
     $res == 1
         or die "Can't store coinbase " . for_log($self->btc_tx_hash) . ":" . $self->btc_out_num . " as processed: " . (dbh->errstr // "no error") . "\n";

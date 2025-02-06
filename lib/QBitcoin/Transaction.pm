@@ -566,7 +566,7 @@ sub deserialize {
     my $upgrade_level;
     if ($tx_type == TX_TYPE_COINBASE) {
         if (UPGRADE_POW) {
-            my $upgrade_level = $data->get_varint;
+            $upgrade_level = $data->get_varint;
             $up = deserialize_coinbase($data, $upgrade_level) // return undef;
         }
         else {
