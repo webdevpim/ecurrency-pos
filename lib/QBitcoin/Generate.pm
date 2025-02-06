@@ -160,7 +160,7 @@ sub generate {
     if (my $reward = QBitcoin::Block->reward($height)) {
         $fee->{""} = $reward;
     }
-    my $stake_tx = make_stake_tx({ %$fee, map { $_->hash => 0 } @coinbase }, "");
+    my $stake_tx = make_stake_tx({ "" => 0, %$fee, map { $_->hash => 0 } @coinbase }, "");
     my $size = $stake_tx ? $stake_tx->size : 0;
     # TODO: add transactions from block of the same timeslot, it's not an ancestor
     my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $height, $stake_tx && $stake_tx->in, $upgraded_total);
