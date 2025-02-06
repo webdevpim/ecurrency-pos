@@ -6,6 +6,7 @@ use Role::Tiny;
 use List::Util qw(sum0 sum min max);
 use QBitcoin::Const;
 use QBitcoin::RPC::Const;
+use QBitcoin::Config;
 use QBitcoin::ORM qw(dbh);
 use QBitcoin::Crypto qw(pk_import pk_alg);
 use QBitcoin::Block;
@@ -97,7 +98,7 @@ sub cmd_getblockchaininfo {
         $response->{btc_scanned} = $btc_scanned ? $btc_scanned->height+0 : 0,
         my ($coinbase) = dbh->selectrow_array("SELECT SUM(value) FROM `" . QBitcoin::Coinbase->TABLE . "` WHERE tx_out IS NOT NULL");
         $coinbase //= 0;
-        $coinbase += QBitcoin::Block->reward(0) if defined($height);
+        $coinbase += QBitcoin::Block->reward(0) if defined($best_block);
         $response->{total_coins} = $coinbase ? $coinbase / DENOMINATOR : 0;
     }
     return $self->response_ok($response);
