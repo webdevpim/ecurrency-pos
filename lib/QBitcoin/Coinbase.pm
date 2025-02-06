@@ -35,7 +35,7 @@ use constant FIELDS => {
 };
 
 mk_accessors(keys %{&FIELDS});
-mk_accessors(qw(tx_hash value_btc));
+mk_accessors(qw(value_btc));
 
 my %COINBASE; # just short-live cache for recently produced entries
 
@@ -74,10 +74,11 @@ sub create {
 
 sub store_published {
     my $self = shift;
+    my ($tx) = @_;
 
     my $sql = "UPDATE `" . TABLE . "` SET tx_out = ?, upgrade_level = ?, value = ? WHERE btc_tx_hash = ? AND btc_out_num = ? AND tx_out IS NULL";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%lu,%s,%u]", $sql, $self->tx_out, $self->upgrade_level, $self->value, for_log($self->btc_tx_hash), $self->btc_out_num);
-    my $res = dbh->do($sql, undef, $self->tx_out, $self->upgrade_level, $self->value, $self->btc_tx_hash, $self->btc_out_num);
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%lu,%s,%u]", $sql, $tx->id, $self->upgrade_level, $self->value, for_log($self->btc_tx_hash), $self->btc_out_num);
+    my $res = dbh->do($sql, undef, $tx->id, $self->upgrade_level, $self->value, $self->btc_tx_hash, $self->btc_out_num);
     $res == 1
         or die "Can't store coinbase " . for_log($self->btc_tx_hash) . ":" . $self->btc_out_num . " as processed: " . (dbh->errstr // "no error") . "\n";
 }
@@ -146,7 +147,7 @@ sub load_stored_coinbase {
     my $coinbase;
     if (my $hash = $sth->fetchrow_hashref()) {
         DEBUG_ORM && Debug("orm found coinbase");
-        $hash->{tx_hash} = $tx_hash;
+        $hash->{tx_out} = $tx_hash;
         $coinbase = $class->new($hash);
     }
     return $coinbase;

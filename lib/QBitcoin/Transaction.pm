@@ -358,7 +358,7 @@ sub store {
         $txo->store($self);
     }
     if (my $coinbase = $self->up) {
-        $coinbase->store_published();
+        $coinbase->store_published($self);
     }
 }
 
@@ -1190,7 +1190,6 @@ sub new_coinbase {
     else {
         QBitcoin::TXO->save_all($self->hash, $self->out);
         $self->save(); # Add coinbase tx to mempool
-        $coinbase->tx_hash = $self->hash;
         Infof("Generated new coinbase transaction %s for btc output %s:%u value %lu fee %lu",
             $self->hash_str, $class->hash_str($coinbase->btc_tx_hash), $coinbase->btc_out_num,
             $txo->value, $self->fee);
