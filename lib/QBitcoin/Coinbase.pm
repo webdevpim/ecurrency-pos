@@ -50,7 +50,7 @@ sub store {
     return if $coinbase;
     my $scripthash = QBitcoin::RedeemScript->store($self->scripthash);
     my $sql = "INSERT INTO `" . TABLE . "` (btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, btc_tx_data, merkle_path, value, scripthash, tx_out, upgrade_level) VALUES (?,?,?,?,?,?,?,?,NULL,?)";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%s,%s,%s,%lu,%u]", $sql, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, for_log($self->btc_tx_hash), for_log($self->btc_tx_data), for_log($self->merkle_path), $self->value, $scripthash->id, $self->upgrade_level);
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%s,%s,%s,%lu,%u,%u]", $sql, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, for_log($self->btc_tx_hash), for_log($self->btc_tx_data), for_log($self->merkle_path), $self->value, $scripthash->id, $self->upgrade_level);
     my $res = dbh->do($sql, undef, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, $self->btc_tx_hash, $self->btc_tx_data, $self->merkle_path, $self->value, $scripthash->id, $self->upgrade_level);
     $res == 1
         or die "Can't store coinbase " . $self->btc_tx_num . ":" . $self->btc_out_num . ": " . (dbh->errstr // "no error") . "\n";
@@ -76,7 +76,7 @@ sub store_published {
     my $self = shift;
 
     my $sql = "UPDATE `" . TABLE . "` SET tx_out = ?, upgrade_level = ?, value = ? WHERE btc_tx_hash = ? AND btc_out_num = ? AND tx_out IS NULL";
-    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%s,%u]", $sql, $self->tx_out, $self->upgrade_level, $self->value, for_log($self->btc_tx_hash), $self->btc_out_num);
+    DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%lu,%s,%u]", $sql, $self->tx_out, $self->upgrade_level, $self->value, for_log($self->btc_tx_hash), $self->btc_out_num);
     my $res = dbh->do($sql, undef, $self->tx_out, $self->upgrade_level, $self->value, $self->btc_tx_hash, $self->btc_out_num);
     $res == 1
         or die "Can't store coinbase " . for_log($self->btc_tx_hash) . ":" . $self->btc_out_num . " as processed: " . (dbh->errstr // "no error") . "\n";
