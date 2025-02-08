@@ -8,7 +8,7 @@ use Math::GMPz;
 use Encode::Base58::GMP qw(encode_base58 decode_base58);
 use QBitcoin::Config;
 use QBitcoin::Const;
-use QBitcoin::Crypto qw(hash160 checksum32);
+use QBitcoin::Crypto qw(hash160 hash256 checksum32);
 use QBitcoin::Script qw(op_pushdata);
 use QBitcoin::Script::OpCodes qw(:OPCODES);
 
@@ -20,6 +20,7 @@ our @EXPORT_OK = qw(
     wallet_import_format
     wif_to_pk
     address_by_pubkey
+    addresses_by_pubkey
     address_by_hash
     validate_address
     script_by_pubkey
@@ -73,10 +74,23 @@ sub address_by_hash($) {
     return encode_base58("0x" . unpack("H*", $data . checksum32($data)), "bitcoin");
 }
 
-sub address_by_pubkey($) {
-    my ($public_key) = shift;
+sub address_by_pubkey($$) {
+    my ($public_key, $alg) = @_;
 
-    return address_by_hash(hash160(script_by_pubkey($public_key)));
+    my $script = script_by_pubkey($public_key);
+    my $hash = $alg & CRYPT_ALGO_POSTQUANTUM ? hash256($script) : hash160($script);
+    return address_by_hash($hash);
+}
+
+sub addresses_by_pubkey($$) {
+    my ($public_key, $alg) = @_;
+
+    my $script = script_by_pubkey($public_key);
+    my $scripthash160 = hash160($script);
+    my $scripthash256 = hash256($script);
+    my @hash = $alg & CRYPT_ALGO_POSTQUANTUM ? ($scripthash256, $scripthash160) : ($scripthash160, $scripthash256);
+    push @hash, script_by_pubkeyhash($scripthash160);
+    return map { address_by_hash($_) } @hash;
 }
 
 sub validate_address($) {

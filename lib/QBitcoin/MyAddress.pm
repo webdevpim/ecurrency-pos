@@ -75,11 +75,15 @@ sub create {
 
 sub address {
     my $self = shift;
-    # return $self->{address} ||= address_by_pubkey($self->pubkey // return undef);
     if (!$self->{addr}) {
-        $self->{addr} = address_by_pubkey($self->pubkey // return undef);
+        $self->{addr} = address_by_pubkey($self->pubkey // (return undef), $self->algo // return undef);
         if ($self->{address} && $self->{address} ne $self->{addr}) {
-            Errf("Mismatch my private key and address: %s != %s", $self->{addr}, $self->{address});
+            my @addr = addresses_by_pubkey($self->pubkey, $self->algo);
+            if (grep { $_ eq $self->{address} } @addr ) {
+                $self->{addr} = $self->{address};
+            } else {
+                Errf("Mismatch my private key and address: %s != %s", $self->{addr}, $self->{address});
+            }
         }
     }
     return $self->{addr};
@@ -96,7 +100,8 @@ sub redeem_script {
 
 sub scripthash {
     my $self = shift;
-    return wantarray ? ( map { hash160($_), hash256($_) } $self->redeem_script ) : hash160(scalar $self->redeem_script);
+    return map { hash160($_), hash256($_) } $self->redeem_script if wantarray;
+    return $self->algo & CRYPT_ALGO_POSTQUANTUM ? hash256(scalar $self->redeem_script) : hash160(scalar $self->redeem_script);
 }
 
 sub get_by_hash {
