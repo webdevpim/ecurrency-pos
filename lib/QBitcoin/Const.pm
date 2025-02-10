@@ -6,7 +6,7 @@ use QBitcoin::Script::OpCodes qw(:OPCODES);
 
 use constant GENESIS_BLOCK_HASH => "1234";
 use constant GENESIS_BLOCK_HASH_TESTNET => "1234";
-use constant QBT_SCRIPT_START   => OP_RETURN . "QBTC";
+use constant QBT_SCRIPT_MAGIC   => "QBTC"; # script should be "OP_RETURN PUSHDATA "QBTC"+hash
 use constant QBT_BURN_HASH      => pack("H*", "fe5205472fb87124923f4be64292ef289478b06d"); # 1QBitcoin1QBitcoin1QBitcoin1pSAg3e
 
 use constant QBITCOIN_CONST => {
@@ -70,8 +70,8 @@ use constant QBITCOIN_CONST => {
     COINBASE_CONFIRM_BLOCKS => 6,
     COINBASE_WEIGHT_TIME    => 365*24*3600, # 1 year
     STAKE_MATURITY          => 12*3600, # 12 hours
-    QBT_SCRIPT_START        => QBT_SCRIPT_START,
-    QBT_SCRIPT_START_LEN    => length(QBT_SCRIPT_START),
+    QBT_SCRIPT_MAGIC        => QBT_SCRIPT_MAGIC,
+    QBT_SCRIPT_MAGIC_LEN    => length(QBT_SCRIPT_MAGIC),
     QBT_BURN_SCRIPT         => OP_DUP . OP_HASH160 . pack("C", length(QBT_BURN_HASH)) . QBT_BURN_HASH . OP_EQUALVERIFY . OP_CHECKSIG,
     CONFIG_DIR              => "/etc",
     CONFIG_NAME             => "qbitcoin.conf",

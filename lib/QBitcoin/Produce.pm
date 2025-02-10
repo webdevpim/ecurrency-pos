@@ -65,14 +65,15 @@ sub produce_coinbase {
     # We should not generate coinbase for my address on different nodes for the same btc txo, so xor $rnd with hash of my address
     state $myaddr_hash = unpack("V", checksum32((my_address)[0]->address));
     if ($rnd < 0x10000 * 0x10000 / UPGRADE_PROB) {
-        $out->{open_script} = QBT_SCRIPT_START . hash160(OP_VERIFY);
+        # chr(24) is OP_PUSHDATA24; 20 is hash160 length
+        $out->{open_script} = OP_RETURN . chr(QBT_SCRIPT_MAGIC_LEN + 20) . QBT_SCRIPT_MAGIC . hash160(OP_VERIFY);
         Infof("Produce coinbase with open txo: tx %s value %Lu", $tx->hash_str, $tx->out->[$num]->{value});
         return 1;
     }
     elsif (QBitcoin::TXO->my_utxo() < MAX_MY_UTXO &&
            ($rnd ^ $myaddr_hash) < 0x10000 * 0x10000 / MY_UPGRADE) {
         state $my_scripthash = scripthash_by_address((my_address)[0]->address);
-        $out->{open_script} = QBT_SCRIPT_START . $my_scripthash;
+        $out->{open_script} = OP_RETURN . chr(QBT_SCRIPT_MAGIC_LEN + length($my_scripthash)) . QBT_SCRIPT_MAGIC . $my_scripthash;
         Infof("Produce coinbase for my address: tx %s value %Lu", $tx->hash_str, $tx->out->[$num]->{value});
         return 1;
     }

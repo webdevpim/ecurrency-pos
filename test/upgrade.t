@@ -14,6 +14,7 @@ use QBitcoin::Coinbase;
 use QBitcoin::TXO;
 use QBitcoin::Transaction;
 use QBitcoin::Block;
+use QBitcoin::Script::OpCodes qw(:OPCODES);
 use Bitcoin::Block;
 use Bitcoin::Serialized;
 use Bitcoin::Transaction;
@@ -26,7 +27,8 @@ my $open_script = hash160("\x10\x11"); # random string
 my $btc_tx_data = pack("VC", 1, 1); # version, txin_count
 $btc_tx_data .= "\x00" x 36 . "\x00" . "\x00" x 4; # prev output, script (var_str), sequence
 $btc_tx_data .= pack("C", 1); # txout_count
-$btc_tx_data .= pack("Q<", $value) . pack("C", QBT_SCRIPT_START_LEN + length($open_script)) . QBT_SCRIPT_START . $open_script;
+my $upgrade_script = OP_RETURN . pack("C", 2 + QBT_SCRIPT_MAGIC_LEN + length($open_script)) . QBT_SCRIPT_MAGIC . $open_script;
+$btc_tx_data .= pack("Q<", $value) . pack("C", length($upgrade_script)) . $upgrade_script;
 $btc_tx_data .= pack("V", 0); # lock_time
 
 my $data_obj = Bitcoin::Serialized->new($btc_tx_data);
@@ -64,7 +66,7 @@ my $up = QBitcoin::Coinbase->new({
     value_btc        => $value,
     value            => $value,
     upgrade_level    => 0,
-    scripthash       => substr($btc_tx->out->[$btc_out_num]->{open_script}, QBT_SCRIPT_START_LEN),
+    scripthash       => substr($btc_tx->out->[$btc_out_num]->{open_script}, 2 + QBT_SCRIPT_MAGIC_LEN),
 });
 
 my $out = QBitcoin::TXO->new_txo({

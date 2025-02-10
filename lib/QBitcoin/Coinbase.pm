@@ -225,10 +225,12 @@ sub get_scripthash {
     my $class = shift;
     my ($tx, $out_num) = @_;
     my $out = $tx->out->[$out_num];
-    if (substr($out->{open_script}, 0, QBT_SCRIPT_START_LEN) eq QBT_SCRIPT_START &&
-        length($out->{open_script}) == QBT_SCRIPT_START_LEN + 20) {
-        Infof("Burn from QBT script in tx %s", $tx->hash_str);
-        return substr($out->{open_script}, QBT_SCRIPT_START_LEN);
+    if (substr($out->{open_script}, 0, 1) eq OP_RETURN &&
+        length($out->{open_script}) >= 22 + QBT_SCRIPT_MAGIC_LEN && # Minimum hash size is 20 bytes
+        substr($out->{open_script}, 2, QBT_SCRIPT_MAGIC_LEN) eq QBT_SCRIPT_MAGIC &&
+        ord(substr($out->{open_script}, 1, 1)) == length($out->{open_script}) - 2) { # OP_PUSHDATA opcode
+        Infof("Upgrade by QBT script in tx %s", $tx->hash_str);
+        return substr($out->{open_script}, 2 + QBT_SCRIPT_MAGIC_LEN);
     }
     elsif ($out->{open_script} eq QBT_BURN_SCRIPT) {
         # OK, make scripthash by first input of this transaction
