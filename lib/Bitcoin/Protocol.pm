@@ -226,7 +226,7 @@ sub cmd_headers {
 sub request_transactions {
     my $self = shift;
 
-    my ($block) = Bitcoin::Block->find(scanned => 0, height => { "IS NOT" => undef }, -sortby => 'height ASC', -limit => 1);
+    my ($block) = Bitcoin::Block->find(scanned => 0, height => { "<" => UPGRADE_MAX_BLOCKS }, -sortby => 'height ASC', -limit => 1);
     if ($block) {
         Debugf("Request block data: %s", $block->hash_hex);
         $self->send_message("getdata", pack("CVa32", 1, MSG_BLOCK, $block->hash));
@@ -291,7 +291,7 @@ sub cmd_block {
         $self->have_block0(1);
     }
 
-    if (!$block->scanned) {
+    if (!$block->scanned && $block->height && $block->height < UPGRADE_MAX_BLOCKS) {
         if ($self->process_transactions($block, $block_data)) {
             $self->abort("bad_block_data");
             return -1;

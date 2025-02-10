@@ -156,7 +156,7 @@ sub load_stored_coinbase {
 sub validate {
     my $self = shift;
     my ($btc_block) = Bitcoin::Block->find(hash => $self->btc_block_hash);
-    if (!$btc_block) {
+    if (!$btc_block || !$btc_block->height) {
         # unset btc_synced() if last btc block older than COINBASE_CONFIRM_TIME
         # otherwise assume this is not correct coinbase
         ($btc_block) = Bitcoin::Block->find(-sortby => 'height DESC', -limit => 1);
@@ -168,6 +168,14 @@ sub validate {
             return -1;
         }
         Warningf("Incorrect coinbase transaction based on unexistent btc block %s", unpack("H*", $self->btc_block_hash));
+        return -1;
+    }
+    if ($btc_block->time < GENESIS_TIME) {
+        Warningf("Incorrect coinbase transaction based on early btc block %s time %u", $btc_block->hash_str, $btc_block->time);
+        return -1;
+    }
+    if ($btc_block->height >= UPGRADE_MAX_BLOCKS) {
+        Warningf("Incorrect coinbase transaction based on late btc block %s height %u", $btc_block->hash_str, $btc_block->height);
         return -1;
     }
     # Check merkle path (but ignore mismatch for produced upgrades)
