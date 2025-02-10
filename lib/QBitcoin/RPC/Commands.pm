@@ -767,7 +767,7 @@ sub cmd_getnetworkinfo {
     my $self = shift;
     my $connect_in = 0;
     my $connect_out = 0;
-    foreach my $connection (grep { $_->type_id == PROTOCOL_QBITCOIN } QBitcoin::ConnectionList->list()) {
+    foreach my $connection (QBitcoin::ConnectionList->connected(PROTOCOL_QBITCOIN)) {
         $connection->direction == DIR_IN ? $connect_in++ : $connect_out++;
     }
     return $self->response_ok({
@@ -1066,6 +1066,55 @@ sub cmd_dumpprivkey {
     return $self->response_ok(wallet_import_format($my_address->private_key));
 }
 
+$PARAMS{getpeerinfo} = "";
+$HELP{getpeerinfo} = qq(
+Returns data about each connected network node as a json array of objects.
+
+Result:
+[                                     (json array)
+  {                                   (json object)
+    "addr" : "str",                   (string) (host:port) The IP address and port of the peer
+    "addrlocal" : "str",              (string) (ip:port) Bind address of the connection to the peer
+    "network" : "str",                (string) Network (ipv4, ipv6, onion, i2p, not_publicly_routable)
+    "createtime" : n,                 (numeric) The connection create time in seconds since epoch
+    "bytessent" : n,                  (numeric) The total bytes sent
+    "bytesrecv" : n,                  (numeric) The total bytes received
+    "objsent" : n,                    (numeric) The total objects sent
+    "objrecv" : n,                    (numeric) The total objects received
+    "pingtime" : n,                   (numeric) ping time (if available)
+    "minping" : n,                    (numeric) minimum observed ping time (if any at all)
+    "inbound" : true|false,           (boolean) Inbound (true) or Outbound (false)
+    "protocol" : "str",               (string) Protocol (qbitcoin, bitcoin)
+  },
+]
+
+Examples:
+> qbitcoin-cli getpeerinfo
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getpeerinfo", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_getpeerinfo {
+    my $self = shift;
+    my @peers;
+    foreach my $connection (QBitcoin::ConnectionList->connected(PROTOCOL_QBITCOIN, PROTOCOL_BITCOIN)) {
+        my $peer = $connection->peer;
+        push @peers, {
+            addr        => $connection->ip . ":" . $connection->port,
+            addrlocal   => $connection->my_ip . ":" . $connection->my_port,
+            inbound     => $connection->direction == DIR_IN ? TRUE : FALSE,
+            protocol    => $connection->type,
+            network     => "ipv4",
+            createtime  => $peer->create_time,
+            bytessent   => $peer->bytes_sent,
+            bytesrecv   => $peer->bytes_recv,
+            objsent     => $peer->obj_sent,
+            objrecv     => $peer->obj_recv,
+            minping     => $peer->ping_min_ms / 1000,
+            pingtime    => $peer->ping_avg_ms / 1000,
+            reputation  => $peer->reputation,
+        };
+    }
+}
+
 # getmemoryinfo
 # getrpcinfo
 # stop
@@ -1076,7 +1125,6 @@ sub cmd_dumpprivkey {
 # disconnectnode
 # getaddednodeinfo
 # getconnectioncount
-# getpeerinfo
 # listbanned
 # setban
 

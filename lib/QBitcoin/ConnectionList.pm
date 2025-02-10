@@ -18,8 +18,8 @@ sub get {
 
 sub connected {
     my $class = shift;
-    my ($type) = @_;
-    return grep { $_->state == STATE_CONNECTED } values %{$CONNECTIONS{$type}};
+    my @types = @_;
+    return grep { $_->state == STATE_CONNECTED } map { values %{$CONNECTIONS{$_}} } @types;
 }
 
 sub add {
