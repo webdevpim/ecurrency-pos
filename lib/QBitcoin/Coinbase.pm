@@ -225,94 +225,101 @@ sub get_scripthash {
     my $class = shift;
     my ($tx, $out_num) = @_;
     my $out = $tx->out->[$out_num];
-    if (substr($out->{open_script}, 0, 1) eq OP_RETURN &&
-        length($out->{open_script}) >= 22 + QBT_SCRIPT_MAGIC_LEN && # Minimum hash size is 20 bytes
-        substr($out->{open_script}, 2, QBT_SCRIPT_MAGIC_LEN) eq QBT_SCRIPT_MAGIC &&
-        ord(substr($out->{open_script}, 1, 1)) == length($out->{open_script}) - 2) { # OP_PUSHDATA opcode
+    substr($out->{open_script}, 0, QBT_BURN_SCRIPT_LEN) eq QBT_BURN_SCRIPT
+        or return undef;
+    if (length($out->{open_script}) > QBT_BURN_SCRIPT_LEN) {
+        # Upgrade by QBT script
+        my $hash_len = unpack("C", substr($out->{open_script}, QBT_BURN_SCRIPT_LEN, 1));
+        if ($hash_len < 20 || $hash_len > 75) {
+            Warningf("Incorrect QBT script in tx %s", $tx->hash_str);
+            return undef;
+        }
+        if (length($out->{open_script}) != QBT_BURN_SCRIPT_LEN + 2 + $hash_len || substr($out->{open_script}, -1, 1) ne OP_DROP) {
+            Warningf("Incorrect QBT script in tx %s", $tx->hash_str);
+            return undef;
+        }
         Infof("Upgrade by QBT script in tx %s", $tx->hash_str);
-        return substr($out->{open_script}, 2 + QBT_SCRIPT_MAGIC_LEN);
+        return substr($out->{open_script}, QBT_BURN_SCRIPT_LEN + 1, $hash_len);
     }
-    elsif ($out->{open_script} eq QBT_BURN_SCRIPT) {
-        # OK, make scripthash by first input of this transaction
-        my $in = $tx->in->[0]
-            or return undef;
-        my $input_script = $in->{script};
-        if (my $witness = $tx->in->[0]->{witness}) {
-            if ($input_script eq "" && @$witness == 2 && length($witness->[0]) <= 72 && length($witness->[1]) == 33) {
-                # P2WPKH
-                return hash160(script_by_pubkey($witness->[1]));
-            }
-            elsif (@$witness > 1) {
-                # P2WSH?
-                # return hash160($witness->[-1]);
-                Warningf("Burn from P2WSH script in tx %s", $tx->hash_str);
-                return undef;
-            }
-            else {
-                Warningf("Burn from unknown witness script in tx %s", $tx->hash_str);
-                return undef;
-            }
+    # OK, make scripthash by first input of this transaction
+    my $in = $tx->in->[0]
+        or return undef;
+    my $input_script = $in->{script};
+    if (my $witness = $tx->in->[0]->{witness}) {
+        if ($input_script eq "" && @$witness == 2 && length($witness->[0]) <= 72 && length($witness->[1]) == 33) {
+            # P2WPKH
+            return hash160(script_by_pubkey($witness->[1]));
         }
-        elsif ($input_script eq "") {
-            Warningf("Burn from empty script in tx %s", $tx->hash_str);
+        elsif (@$witness > 1) {
+            # P2WSH?
+            # return hash160($witness->[-1]);
+            Warningf("Burn from P2WSH script in tx %s", $tx->hash_str);
             return undef;
-        }
-        # Can we reliable get pubkey or scripthash by the bitcoin input script?
-        # In particular, how can we distinguish "push <serialized-script>" for P2SH and "push <pubkeyhash>" for P2PKH without unlock-script?
-        # Assume the <serialized-script> is longer than 33 bytes.
-        # It's not fully reliable but if somebody tries to deceive this algorithm by creating unusually short script
-        # then he will simple lost (burn) his money
-        if ($input_script =~ /^([\x41-\x48])(??{ ".{" . ord($1) . "}" })\x21(.{33})\z/s) {
-            # it's P2PKH: push 72-bytes signature, push 33-bytes pubkey (compressed)
-            Infof("Burn from P2PKH script in tx %s", $tx->hash_str);
-            return hash160(script_by_pubkey($2));
-        }
-        elsif ($input_script =~ /^([\x41-\x48])(??{ ".{" . ord($1) . "}" })\x41(.{65})\z/s) {
-            # it's P2PKH: push 72-bytes signature, push 65-bytes pubkey (uncompressed): legacy but still possible
-            # generate output to the address for compressed pubkey
-            Infof("Burn from P2PKH script in tx %s", $tx->hash_str);
-            return hash160(script_by_pubkey(compress_ecc_pubkey($2)));
-        }
-        elsif ($input_script =~ /^([\x41-\x48])(??{ ".{" . ord($1) . "}" })\z/s) {
-            # it's P2PK, push only 72-bytes DER-encoded signature
-            # TODO: fetch pubkey from the locking script?
-            Warningf("Burn from P2PK script in tx %s", $tx->hash_str);
-            return undef;
-        }
-        elsif (0) {
-            # BTC and QBT scripts are not fully compatible
-            # It should work correctly in most cases, but isn't it better deterministic "never" than "almost always"?
-            # P2SH script may contains only pushes, and the last one contains the serialized script
-            Infof("Burn from P2SH in tx %s", $tx->hash_str);
-            my $last_push_data;
-            while ($input_script ne "") {
-                my $first_byte = unpack("C", substr($input_script, 0, 1));
-                if ($first_byte > 0 && $first_byte < 0x4c) {
-                    $last_push_data = substr($input_script, 0, $first_byte+1, "");
-                    substr($last_push_data, 0, 1, "");
-                }
-                elsif ($first_byte == OP_PUSHDATA1) {
-                    my $bytes = unpack("C", substr($input_script, 1, 1));
-                    $last_push_data = substr($input_script, 0, $bytes+2, "");
-                    substr($last_push_data, 0, 2, "");
-                    length($last_push_data) == $bytes or return undef;
-                }
-                elsif ($first_byte == OP_PUSHDATA2) {
-                    my $bytes = unpack("v", substr($input_script, 1, 2));
-                    $last_push_data = substr($input_script, 0, $bytes+3, "");
-                    substr($last_push_data, 0, 3, "");
-                    length($last_push_data) == $bytes or return undef;
-                }
-                else {
-                    return undef;
-                }
-            }
-            return hash160($last_push_data);
         }
         else {
-            Warningf("Burn from unknown script in tx %s", $tx->hash_str);
+            Warningf("Burn from unknown witness script in tx %s", $tx->hash_str);
             return undef;
         }
+    }
+    elsif ($input_script eq "") {
+        Warningf("Burn from empty script in tx %s", $tx->hash_str);
+        return undef;
+    }
+    # Can we reliable get pubkey or scripthash by the bitcoin input script?
+    # In particular, how can we distinguish "push <serialized-script>" for P2SH and "push <pubkeyhash>" for P2PKH without unlock-script?
+    # Assume the <serialized-script> is longer than 33 bytes.
+    # It's not fully reliable but if somebody tries to deceive this algorithm by creating unusually short script
+    # then he will simple lost (burn) his money
+    if ($input_script =~ /^([\x41-\x48])(??{ ".{" . ord($1) . "}" })\x21(.{33})\z/s) {
+        # it's P2PKH: push 72-bytes signature, push 33-bytes pubkey (compressed)
+        Infof("Burn from P2PKH script in tx %s", $tx->hash_str);
+        return hash160(script_by_pubkey($2));
+    }
+    elsif ($input_script =~ /^([\x41-\x48])(??{ ".{" . ord($1) . "}" })\x41(.{65})\z/s) {
+        # it's P2PKH: push 72-bytes signature, push 65-bytes pubkey (uncompressed): legacy but still possible
+        # generate output to the address for compressed pubkey
+        Infof("Burn from P2PKH script in tx %s", $tx->hash_str);
+        return hash160(script_by_pubkey(compress_ecc_pubkey($2)));
+    }
+    elsif ($input_script =~ /^([\x41-\x48])(??{ ".{" . ord($1) . "}" })\z/s) {
+        # it's P2PK, push only 72-bytes DER-encoded signature
+        # TODO: fetch pubkey from the locking script?
+        Warningf("Burn from P2PK script in tx %s", $tx->hash_str);
+        return undef;
+    }
+    elsif (0) {
+        # BTC and QBT scripts are not fully compatible
+        # It should work correctly in most cases, but isn't it better deterministic "never" than "almost always"?
+        # P2SH script may contains only pushes, and the last one contains the serialized script
+        Infof("Burn from P2SH in tx %s", $tx->hash_str);
+        my $last_push_data;
+        while ($input_script ne "") {
+            my $first_byte = unpack("C", substr($input_script, 0, 1));
+            if ($first_byte > 0 && $first_byte < 0x4c) {
+                $last_push_data = substr($input_script, 0, $first_byte+1, "");
+                substr($last_push_data, 0, 1, "");
+            }
+            elsif ($first_byte == OP_PUSHDATA1) {
+                my $bytes = unpack("C", substr($input_script, 1, 1));
+                $last_push_data = substr($input_script, 0, $bytes+2, "");
+                substr($last_push_data, 0, 2, "");
+                length($last_push_data) == $bytes or return undef;
+            }
+            elsif ($first_byte == OP_PUSHDATA2) {
+                my $bytes = unpack("v", substr($input_script, 1, 2));
+                $last_push_data = substr($input_script, 0, $bytes+3, "");
+                substr($last_push_data, 0, 3, "");
+                length($last_push_data) == $bytes or return undef;
+            }
+            else {
+                return undef;
+            }
+        }
+        return hash160($last_push_data);
+    }
+    else {
+        Warningf("Burn from unknown script in tx %s", $tx->hash_str);
+        return undef;
     }
     return undef;
 }
