@@ -1108,11 +1108,12 @@ sub cmd_getpeerinfo {
             bytesrecv   => $peer->bytes_recv,
             objsent     => $peer->obj_sent,
             objrecv     => $peer->obj_recv,
-            minping     => $peer->ping_min_ms / 1000,
-            pingtime    => $peer->ping_avg_ms / 1000,
             reputation  => $peer->reputation,
+            # minping     => $peer->ping_min_ms / 1000,
+            # pingtime    => $peer->ping_avg_ms / 1000,
         };
     }
+    return $self->response_ok(\@peers);
 }
 
 # getmemoryinfo
