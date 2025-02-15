@@ -551,8 +551,8 @@ sub serialize_coinbase {
 }
 
 sub deserialize_coinbase {
-    my $data = shift;
-    return QBitcoin::Coinbase->deserialize($data);
+    my ($data, $upgrade_level) = @_;
+    return QBitcoin::Coinbase->deserialize($data, $upgrade_level);
 }
 
 sub deserialize {
