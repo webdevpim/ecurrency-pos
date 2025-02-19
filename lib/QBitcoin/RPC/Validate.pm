@@ -24,6 +24,7 @@ my %SPEC = (
     hexstring      => qr/^(?:[0-9a-f][0-9a-f])+\z/,
     nblocks        => qr/^[1-9][0-9]{0,9}\z/,
     hash_or_height => qr/^(?:0|[1-9][0-9]{0,9}|[0-9a-f]{64})\z/,
+    minconf        => qr/^(?:0|[1-9][0-9]{0,9})\z/,
     verbose        => \&validate_boolean,
     address        => \&validate_address,
     inputs         => \&validate_inputs,
