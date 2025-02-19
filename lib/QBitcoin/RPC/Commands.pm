@@ -1176,6 +1176,66 @@ sub cmd_getaddressbalance {
     return $self->response_ok($value/DENOMINATOR);
 }
 
+$PARAMS{getreceivedbyaddress} = "address minconf?";
+$HELP{getreceivedbyaddress} = qq{
+getreceivedbyaddress "address" ( minconf )
+
+Returns the total received amount on the given address in transactions with at least minconf confirmations.
+
+Arguments:
+1. address    (string, required) The qbitcoin address for transactions.
+2. minconf    (numeric, optional, default=1, max=${\(INCORE_LEVELS+1)}) Only include transactions confirmed at least this many times.
+
+Result:
+n    (numeric) The total amount in BTC received at this address.
+
+Examples:
+
+The amount from transactions with at least 1 confirmation
+> qbitcoin-cli getaddressbalance "myaddress"
+
+The amount including unconfirmed transactions, zero confirmations
+> qbitcoin-cli getreceivedbyaddress "myaddress" 0
+
+The amount with at least 6 confirmations
+> qbitcoin-cli getreceivedbyaddress "myaddress" 6
+
+As a JSON-RPC call
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getreceivedbyaddress", "params": ["myaddress", 6]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+};
+sub cmd_getreceivedbyaddress {
+    my $self = shift;
+    my $scripthash = scripthash_by_address($self->args->[0])
+        or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "The address is not correct");
+    my $minconf = $self->args->[1] // 1;
+    my $value = 0;
+    my $best_height;
+    if ($minconf > 1) {
+        $best_height = QBitcoin::Block->blockchain_height
+            or return $self->response_ok("0");
+    }
+    foreach my $txo (QBitcoin::TXO->get_scripthash_txo($scripthash)) {
+        if (my $tx = QBitcoin::Transaction->get($txo->tx_in)) {
+            if (!defined $tx->block_height) {
+                next if $minconf;
+            }
+            elsif ($minconf > 1) {
+                next if $tx->block_height > $best_height - $minconf + 1;
+            }
+        }
+        else {
+            next if QBitcoin::Transaction->has_pending($txo->tx_in);
+        }
+        $value += $txo->value;
+    }
+    if (my ($script) = QBitcoin::RedeemScript->find(hash => $scripthash)) {
+        foreach my $utxo (grep { !$_->is_cached } QBitcoin::TXO->find(scripthash => $script->id)) {
+            $value += $utxo->value;
+        }
+    }
+    return $self->response_ok($value/DENOMINATOR);
+}
+
 # getmemoryinfo
 # getrpcinfo
 # stop
@@ -1194,7 +1254,6 @@ sub cmd_getaddressbalance {
 # getaddressinfo
 
 # listreceivedbyaddress
-# getreceivedbyaddress
 # listunspentbyaddress
 # listtransactions
 
