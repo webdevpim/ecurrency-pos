@@ -15,7 +15,7 @@ use QBitcoin::Transaction;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
-use QBitcoin::Address qw(scripthash_by_address addresses_by_pubkey wallet_import_format);
+use QBitcoin::Address qw(scripthash_by_address addresses_by_pubkey wallet_import_format address_by_hash);
 use QBitcoin::MyAddress;
 use QBitcoin::Generate;
 use QBitcoin::Protocol;
@@ -38,7 +38,7 @@ null    (json null)
 
 Examples:
 > qbitcoin-cli ping
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "ping", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "ping", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_ping {
     my $self = shift;
@@ -65,7 +65,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getblockchaininfo
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockchaininfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockchaininfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getblockchaininfo {
     my $self = shift;
@@ -113,7 +113,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getbestblockhash
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getbestblockhash", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getbestblockhash", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getbestblockhash {
     my $self = shift;
@@ -172,7 +172,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getblockheader "00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockheader", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockheader", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getblockheader {
     my $self = shift;
@@ -207,7 +207,7 @@ n    (numeric) The current block count
 
 Examples:
 > qbitcoin-cli getblockcount
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockcount", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockcount", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getblockcount {
     my $self = shift;
@@ -254,7 +254,7 @@ Result (for verbosity = 2):
 
 Examples:
 > qbitcoin-cli getblock "00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblock", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblock", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getblock {
     my $self = shift;
@@ -300,7 +300,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getblockhash 1000
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockhash", "params": [1000]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT()}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockhash", "params": [1000]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getblockhash {
     my $self = shift;
@@ -367,7 +367,7 @@ Result (if verbose is not set or is set to true):
 Examples:
 > qbitcoin-cli getrawtransaction "mytxid"
 > qbitcoin-cli getrawtransaction "mytxid" true
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getrawtransaction", "params": ["mytxid", true]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getrawtransaction", "params": ["mytxid", true]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getrawtransaction {
     my $self = shift;
@@ -432,7 +432,7 @@ Result:
 
 Examples:
 > qbitcoin-cli createrawtransaction '[{"txid":"myid","vout":0}]' '[{"address":0.01}]'
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "createrawtransaction", "params": ['[{"txid":"myid","vout":0}]', '[{"address":0.01}]"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "createrawtransaction", "params": ['[{"txid":"myid","vout":0}]', '[{"address":0.01}]"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_createrawtransaction {
     my $self = shift;
@@ -476,7 +476,7 @@ Send the transaction (signed hex)
 > qbitcoin-cli sendrawtransaction "signedhex"
 
 As a JSON-RPC call
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "sendrawtransaction", "params": ["signedhex"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "sendrawtransaction", "params": ["signedhex"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_sendrawtransaction {
     my $self = shift;
@@ -537,7 +537,7 @@ Result:
 
 Examples:
 > qbitcoin-cli signrawtransactionwithkey "myhex" "[\"key1\",\"key2\"]"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "signrawtransactionwithkey", "params": ["myhex", "[\"key1\",\"key2\"]"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "signrawtransactionwithkey", "params": ["myhex", "[\"key1\",\"key2\"]"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_signrawtransactionwithkey {
     my $self = shift;
@@ -624,7 +624,7 @@ Result:
 
 Examples:
 > qbitcoin-cli decoderawtransaction "hexstring"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "decoderawtransaction", "params": ["hexstring"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "decoderawtransaction", "params": ["hexstring"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_decoderawtransaction {
     my $self = shift;
@@ -652,7 +652,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getmempoolinfo
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getmempoolinfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getmempoolinfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getmempoolinfo {
     my $self = shift;
@@ -692,7 +692,7 @@ Result (for verbose = true):
 
 Examples:
 > qbitcoin-cli getrawmempool true
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getrawmempool", "params": [true]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getrawmempool", "params": [true]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getrawmempool {
     my $self = shift;
@@ -719,7 +719,7 @@ Result:
 
 Examples:
 > qbitcoin-cli validateaddress "myaddress"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "validateaddress", "params": ["myaddress"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "validateaddress", "params": ["myaddress"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_validateaddress {
     my $self = shift;
@@ -761,7 +761,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getnetworkinfo
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getnetworkinfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getnetworkinfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getnetworkinfo {
     my $self = shift;
@@ -802,7 +802,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getindexinfo
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getindexinfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getindexinfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getindexinfo {
     my $self = shift;
@@ -837,7 +837,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getchaintxstats
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getchaintxstats", "params": [2016]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getchaintxstats", "params": [2016]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getchaintxstats {
     my $self = shift;
@@ -918,8 +918,8 @@ Result:
 Examples:
 > qbitcoin-cli getblockstats '"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"'
 > qbitcoin-cli getblockstats 1000
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockstats", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockstats", "params": [1000]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockstats", "params": ["00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getblockstats", "params": [1000]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getblockstats {
     my $self = shift;
@@ -984,7 +984,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getmempoolentry "mytxid"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getmempoolentry", "params": ["mytxid"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getmempoolentry", "params": ["mytxid"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getmempoolentry {
     my $self = shift;
@@ -1016,7 +1016,7 @@ Import the private key
 > qbitcoin-cli importprivkey "mykey"
 
 As a JSON-RPC call
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "importprivkey", "params": ["mykey"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "importprivkey", "params": ["mykey"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_importprivkey {
     my $self = shift;
@@ -1055,7 +1055,7 @@ Result:
 Examples:
 > qbitcoin-cli dumpprivkey "myaddress"
 > qbitcoin-cli importprivkey "mykey"
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "dumpprivkey", "params": ["myaddress"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "dumpprivkey", "params": ["myaddress"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_dumpprivkey {
     my $self = shift;
@@ -1090,7 +1090,7 @@ Result:
 
 Examples:
 > qbitcoin-cli getpeerinfo
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getpeerinfo", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getpeerinfo", "params": []}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_getpeerinfo {
     my $self = shift;
@@ -1141,7 +1141,7 @@ The amount with at least 6 confirmations
 > qbitcoin-cli getaddressbalance "myaddress" 6
 
 As a JSON-RPC call
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getaddressbalance", "params": ["myaddress", 6]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getaddressbalance", "params": ["myaddress", 6]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 };
 sub cmd_getaddressbalance {
     my $self = shift;
@@ -1201,7 +1201,7 @@ The amount with at least 6 confirmations
 > qbitcoin-cli getreceivedbyaddress "myaddress" 6
 
 As a JSON-RPC call
-> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getreceivedbyaddress", "params": ["myaddress", 6]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getreceivedbyaddress", "params": ["myaddress", 6]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 };
 sub cmd_getreceivedbyaddress {
     my $self = shift;
@@ -1234,6 +1234,70 @@ sub cmd_getreceivedbyaddress {
         }
     }
     return $self->response_ok($value/DENOMINATOR);
+}
+
+$PARAMS{listunspent} = "address minconf?";
+$HELP{listunspent} = qq{
+listunspent address ( minconf )
+
+Returns array of unspent transaction outputs on the given address with at least minconf confirmations.
+
+Arguments:
+1. address    (string, required) The qbitcoin address for transactions.
+2. minconf    (numeric, optional, default=1, max=${\(INCORE_LEVELS+1)}) Only include transactions confirmed at least this many times.
+
+Result:
+[                                (json array)
+  {                              (json object)
+    "txid" : "hex",              (string) the transaction id
+    "vout" : n,                  (numeric) the vout value
+    "address" : "str",           (string) the qbitcoin address
+    "amount" : n,                (numeric) the transaction output amount in BTC
+    "confirmations" : n,         (numeric) The number of confirmations
+  },
+  ...
+]
+
+Examples:
+> qbitcoin-cli listunspent "myaddress"
+> qbitcoin-cli listunspent "myaddress" 6
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "listunspent", "params": ["myaddress",6]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+};
+sub cmd_listunspent {
+    my $self = shift;
+    my $scripthash = scripthash_by_address($self->args->[0])
+        or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "The address is not correct");
+    my $minconf = $self->args->[1] // 1;
+    my $best_height;
+    if ($minconf > 1) {
+        $best_height = QBitcoin::Block->blockchain_height
+            or return $self->response_ok("0");
+    }
+    my @utxo;
+    foreach my $utxo (QBitcoin::TXO->get_scripthash_utxo($scripthash)) {
+        if (my $tx = QBitcoin::Transaction->get($utxo->tx_in)) {
+            if (!defined $tx->block_height) {
+                next if $minconf;
+            }
+            elsif ($minconf > 1) {
+                next if $tx->block_height > $best_height - $minconf + 1;
+            }
+        }
+        else {
+            next if QBitcoin::Transaction->has_pending($utxo->tx_in);
+        }
+        push @utxo, $utxo;
+    }
+    if (my ($script) = QBitcoin::RedeemScript->find(hash => $scripthash)) {
+        push @utxo, grep { !$_->is_cached } QBitcoin::TXO->find(scripthash => $script->id, tx_out => undef);
+    }
+    return $self->response_ok([ map +{
+        txid    => unpack("H*", $_->tx_in),
+        vout    => $_->num + 0,
+        address => address_by_hash($_->scripthash),
+        amount  => $_->value / DENOMINATOR,
+        # confirmations => ...
+    }, @utxo ]);
 }
 
 # getmemoryinfo
