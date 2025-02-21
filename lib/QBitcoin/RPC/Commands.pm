@@ -941,7 +941,7 @@ sub cmd_getblockstats {
         outs       => sum0(map { scalar @{$_->out} } @{$block->transactions}),
         subsidy    => 0,
         time       => $block->time,
-        total_out  => sum0(map { $_->value } map { @{$_->out} } @{$block->transactions}),
+        total_out  => sum0(map { $_->value } map { @{$_->out} } @{$block->transactions})/DENOMINATOR,
         total_size => sum0(map { $_->size } @{$block->transactions}),
         txs        => scalar(@{$block->transactions}),
         totalfee   => 0,
