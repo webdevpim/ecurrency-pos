@@ -1300,6 +1300,69 @@ sub cmd_listunspent {
     }, @utxo ]);
 }
 
+$PARAMS{listmyaddresses} = "";
+$HELP{listmyaddresses} = qq(
+Returns the list of addresses in the wallet.
+
+Result:
+{                         (json object) json object with addresses as keys
+  "address" : {           (json object) json object with information about address
+    "algo" : [ "str" ]    (json array) list of crypto algorithms supported by the address
+  },
+  ...
+}
+
+Examples:
+> qbitcoin-cli listmyaddresses
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "listmyaddresses", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_listmyaddresses {
+    my $self = shift;
+    my %list;
+    foreach my $my_address (QBitcoin::MyAddress->my_address) {
+        $list{$my_address->address} = {
+            algo => [ map { CRYPT_ALGO_NAMES->{$_} } $my_address->algo ],
+        };
+    }
+    $self->response_ok(\%list);
+}
+
+$PARAMS{getbalance} = "minconf?";
+$HELP{getbalance} = qq(
+listunspent address ( minconf )
+
+Returns total balance of the addresses in the wallet with at least minconf confirmations.
+
+Result:
+n    (numeric) The total amount in BTC in the wallet.
+
+Examples:
+> qbitcoin-cli getbalance
+> qbitcoin-cli getbalance 6
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getbalance", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_getbalance {
+    my $self = shift;
+    my @my_txo = QBitcoin::TXO->my_utxo();
+    my $minconf = $self->args->[0] // 1;
+    my $value = 0;
+    if ($minconf) {
+        my $best_height = QBitcoin::Block->blockchain_height
+            or return $self->response_ok("0");
+        foreach my $txo (@my_txo) {
+            my $block_height = QBitcoin::Transaction->check_by_hash($txo->tx_in)
+                or next;
+            next if $block_height < 0;
+            next if $block_height > $best_height - $minconf + 1;
+            $value += $txo->value;
+        }
+    }
+    else {
+        $value = sum0(map { $_->value } @my_txo);
+    }
+    return $self->response_ok($value/DENOMINATOR);
+}
+
 # getmemoryinfo
 # getrpcinfo
 # stop
@@ -1318,11 +1381,6 @@ sub cmd_listunspent {
 # getaddressinfo
 
 # listreceivedbyaddress
-# listunspentbyaddress
 # listtransactions
-
-# listmyaddresses
-# getbalance
-# listunspent
 
 1;
