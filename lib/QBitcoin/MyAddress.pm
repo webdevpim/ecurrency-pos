@@ -9,7 +9,7 @@ use QBitcoin::Accessors qw(mk_accessors new);
 use QBitcoin::Const;
 use QBitcoin::ORM qw(find :types);
 use QBitcoin::Crypto qw(hash160 hash256 pk_import pk_alg);
-use QBitcoin::Address qw(wif_to_pk address_by_pubkey script_by_pubkey script_by_pubkeyhash);
+use QBitcoin::Address qw(wif_to_pk address_by_pubkey script_by_pubkey script_by_pubkeyhash addresses_by_pubkey);
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(my_address);
