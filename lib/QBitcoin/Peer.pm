@@ -102,6 +102,7 @@ sub get_or_create {
                 create_time     => time(),
                 update_time     => time(),
                 failed_connects => 0,
+                reputation      => $args->{reputation} // 0,
             );
         }
     }
