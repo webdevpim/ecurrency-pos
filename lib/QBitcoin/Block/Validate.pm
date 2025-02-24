@@ -1,6 +1,7 @@
 package QBitcoin::Block::Validate;
 use warnings;
 use strict;
+use feature 'state';
 
 # Check block chain
 # Check block time
@@ -28,7 +29,8 @@ sub validate {
             return ""; # Not needed to validate genesis block with correct hash
         }
     }
-    if (!@{$block->transactions} && (timeslot($block->time) - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS) {
+    state $genesis_time = $config->{testnet} ? GENESIS_TIME_TESTNET : GENESIS_TIME;
+    if (!@{$block->transactions} && (timeslot($block->time) - $genesis_time) / BLOCK_INTERVAL % FORCE_BLOCKS) {
         return "Empty block";
     }
     my $merkle_root = $block->calculate_merkle_root;

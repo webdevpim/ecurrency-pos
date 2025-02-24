@@ -9,6 +9,7 @@ use feature 'state';
 use List::Util qw(sum shuffle);
 use QBitcoin::Const;
 use QBitcoin::Log;
+use QBitcoin::Config;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
 use QBitcoin::RedeemScript;
@@ -84,7 +85,7 @@ sub _produce_my_utxo {
         or return;
     state $last_time = 0;
     my $time = time();
-    my $age = int($time - GENESIS_TIME);
+    my $age = int($time - ($config->{testnet} ? GENESIS_TIME_TESTNET : GENESIS_TIME));
     $last_time = $last_time < $age ? $age : $last_time+1;
     my $out = QBitcoin::TXO->new_txo(
         value      => $last_time, # vary for get unique hash for each coinbase transaction

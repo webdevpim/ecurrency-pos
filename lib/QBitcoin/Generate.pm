@@ -1,6 +1,7 @@
 package QBitcoin::Generate;
 use warnings;
 use strict;
+use feature 'state';
 
 use List::Util qw(sum0);
 use QBitcoin::Const;
@@ -119,12 +120,17 @@ sub make_stake_tx {
     return $tx;
 }
 
+sub genesis_time() {
+    state $genesis_time = $config->{testnet} ? GENESIS_TIME_TESTNET : GENESIS_TIME;
+    return $genesis_time;
+}
+
 sub generate {
     my $class = shift;
     my ($time) = @_;
     my $timeslot = timeslot($time);
-    if ($timeslot < GENESIS_TIME) {
-        die "Genesis time " . GENESIS_TIME . " is in future\n";
+    if ($timeslot < genesis_time) {
+        die "Genesis time " . genesis_time . " is in future\n";
     }
     my $prev_block;
     my $height = QBitcoin::Block->blockchain_height() // -1;
@@ -164,7 +170,7 @@ sub generate {
     my $size = $stake_tx ? $stake_tx->size : 0;
     # TODO: add transactions from block of the same timeslot, it's not an ancestor
     my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $height, $stake_tx && $stake_tx->in, $upgraded_total);
-    if (!@transactions && ($timeslot - GENESIS_TIME) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
+    if (!@transactions && ($timeslot - genesis_time) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
         return;
     }
     foreach my $tx (grep { $_->fee } @transactions) {

@@ -170,7 +170,7 @@ sub validate {
         Warningf("Incorrect coinbase transaction based on unexistent btc block %s", unpack("H*", $self->btc_block_hash));
         return -1;
     }
-    if ($btc_block->time < GENESIS_TIME) {
+    if ($btc_block->time < ($config->{testnet} ? GENESIS_TIME_TESTNET : GENESIS_TIME)) {
         Warningf("Incorrect coinbase transaction based on early btc block %s time %u", $btc_block->hash_str, $btc_block->time);
         return -1;
     }

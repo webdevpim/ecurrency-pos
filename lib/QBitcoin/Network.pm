@@ -117,7 +117,7 @@ sub main_loop {
     }
 
     if ($config->{genesis} && !QBitcoin::Block->blockchain_time) {
-        QBitcoin::Generate->generate(GENESIS_TIME);
+        QBitcoin::Generate->generate($config->{testnet} ? GENESIS_TIME_TESTNET : GENESIS_TIME);
     }
 
     my $listen_socket = $class->bind_addr;

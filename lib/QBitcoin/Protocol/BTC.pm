@@ -1,6 +1,7 @@
 package QBitcoin::Protocol::BTC;
 use warnings;
 use strict;
+use feature 'state';
 
 # ihave_btc <block_hash>
 # on receive, if we have no such block, send "send_btc_header <block_hash>"
@@ -9,6 +10,7 @@ use strict;
 
 use QBitcoin::Const;
 use QBitcoin::Log;
+use QBitcoin::Config;
 use QBitcoin::ProtocolState qw(blockchain_synced btc_synced);
 use Bitcoin::Block;
 use Bitcoin::Serialized;
@@ -19,6 +21,11 @@ with 'Bitcoin::Protocol::ProcessBlock';
 
 use constant PROTOCOL_VERSION => 1;
 use constant MAX_BTC_HEADERS  => 2000;
+
+sub genesis_time() {
+    state $genesis_time = $config->{testnet} ? GENESIS_TIME_TESTNET : GENESIS_TIME;
+    return $genesis_time;
+}
 
 sub announce_btc_block {
     my $self = shift;
@@ -89,7 +96,7 @@ sub cmd_btcblockhdr {
     return 0 if Bitcoin::Block->find(hash => $block->hash);
     my $db_transaction = QBitcoin::ORM::Transaction->new;
     if ($self->process_btc_block($block)) {
-        $block->scanned = $block->time >= GENESIS_TIME ? 0 : 1;
+        $block->scanned = $block->time >= genesis_time ? 0 : 1;
         $block->create();
         $self->have_block0(1);
         $db_transaction->commit;
@@ -191,7 +198,7 @@ sub cmd_btcheaders {
             my $db_transaction = QBitcoin::ORM::Transaction->new;
             if ($self->process_btc_block($block)) {
                 $new_block = $block;
-                $block->scanned = $block->time >= GENESIS_TIME ? 0 : 1;
+                $block->scanned = $block->time >= genesis_time ? 0 : 1;
                 $block->create();
                 $self->have_block0(1);
                 $db_transaction->commit;

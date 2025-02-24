@@ -22,6 +22,7 @@ use constant QBITCOIN_CONST => {
     ADDRESS_TESTNET_RE      => qr/^(?:btq[1-9A-HJ-NP-Za-km-z]{33}|3ua[234][1-9A-HJ-NP-Za-km-z]{49})$/,
     BLOCK_INTERVAL          => 10, # sec
     GENESIS_TIME            => 1635933000, # must be divided by BLOCK_INTERVAL*FORCE_BLOCKS
+    GENESIS_TIME_TESTNET    => 1635933000,
     FORCE_BLOCKS            => 100, # generate each 100th block even if empty
     INCORE_LEVELS           => 6,
     INCORE_TIME             => 60,
