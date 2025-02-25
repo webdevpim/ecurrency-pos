@@ -225,21 +225,17 @@ sub get_scripthash {
     my $class = shift;
     my ($tx, $out_num) = @_;
     my $out = $tx->out->[$out_num];
-    substr($out->{open_script}, 0, QBT_BURN_SCRIPT_LEN) eq QBT_BURN_SCRIPT
+    $out->{open_script} eq QBT_BURN_SCRIPT
         or return undef;
-    if (length($out->{open_script}) > QBT_BURN_SCRIPT_LEN) {
-        # Upgrade by QBT script
-        my $hash_len = unpack("C", substr($out->{open_script}, QBT_BURN_SCRIPT_LEN, 1));
-        if ($hash_len < 20 || $hash_len > 75) {
-            Warningf("Incorrect QBT script in tx %s", $tx->hash_str);
-            return undef;
+    if (@{$tx->out} > $out_num+1 && substr(my $out_script = $tx->out->[$out_num+1]->{open_script}, 0, 1) eq OP_RETURN) {
+        my $len = unpack("C", substr($out_script, 1, 1));
+        if (!$len || $len < 20 || $len > 75 || length($out_script) != $len + 2) {
+            Warningf("Incorrect QBT upgrade script in tx %s, ignore tx_data", $tx->hash_str);
         }
-        if (length($out->{open_script}) != QBT_BURN_SCRIPT_LEN + 2 + $hash_len || substr($out->{open_script}, -1, 1) ne OP_DROP) {
-            Warningf("Incorrect QBT script in tx %s", $tx->hash_str);
-            return undef;
+        else {
+            Infof("Upgrade by QBT script in tx %s", $tx->hash_str);
+            return substr($out_script, 2);
         }
-        Infof("Upgrade by QBT script in tx %s", $tx->hash_str);
-        return substr($out->{open_script}, QBT_BURN_SCRIPT_LEN + 1, $hash_len);
     }
     # OK, make scripthash by first input of this transaction
     my $in = $tx->in->[0]
