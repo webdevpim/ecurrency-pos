@@ -1059,6 +1059,8 @@ Examples:
 );
 sub cmd_dumpprivkey {
     my $self = shift;
+    $config->{allow_dumpprivkey}
+        or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "This command is disabled");
     my $scripthash = scripthash_by_address($self->args->[0])
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "The address is not correct");
     my $my_address = QBitcoin::MyAddress->get_by_hash($scripthash)
