@@ -14,7 +14,7 @@ install::
 	@echo "Install done"
 
 docker:: Dockerfile
-	docker build --rm -t qbitcoin:latest .
+	docker build --rm -t qbitcoin:latest . && docker image prune --force --filter label=stage=builder
 
 PM_FILES := $(shell find lib -type f -name '*.pm')
 

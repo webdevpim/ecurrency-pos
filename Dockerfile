@@ -4,6 +4,7 @@
 # docker run --volume $(pwd)/database:/database --read-only --rm --detach -p 9555:9555 --name qbitcoin qbitcoin
 # then you can run "docker exec qbitcoin qbitcoin-cli help"
 FROM alpine:latest AS builder
+LABEL stage=builder
 
 WORKDIR /build
 
@@ -22,7 +23,7 @@ FROM alpine:latest
 WORKDIR /database
 
 RUN apk add --no-cache \
-    perl openssl sqlite-libs gmp-dev \
+    perl openssl sqlite-libs gmp \
     perl-json-xs perl-dbd-sqlite perl-dbi \
     perl-http-message perl-hash-multivalue perl-params-validate \
     perl-role-tiny perl-tie-ixhash perl-cryptx
