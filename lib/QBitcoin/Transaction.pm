@@ -972,10 +972,13 @@ sub pre_load {
                 siglist => $txo->siglist,
             };
         }
-        my $upgrade = QBitcoin::Coinbase->load_stored_coinbase($attr->{id}, $attr->{hash});
         $attr->{in}  = \@inputs;
         $attr->{out} = \@outputs;
-        $attr->{up}  = $upgrade if $upgrade;
+        my $upgrade = QBitcoin::Coinbase->load_stored_coinbase($attr->{id}, $attr->{hash});
+        if ($upgrade) {
+            $attr->{up} = $upgrade;
+            $attr->{upgrade_level} = $upgrade->upgrade_level;
+        }
     }
     return $attr;
 }
