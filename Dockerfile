@@ -9,7 +9,7 @@ WORKDIR /build
 
 RUN apk add --no-cache \
     perl perl-dev make clang gmp-dev \
-    libressl-dev curl wget git
+    openssl-dev curl wget git
 
 # pqclean does not muild with alpine gcc due to musl; clang is ok
 RUN ln -s -f /usr/bin/clang /usr/bin/cc
@@ -22,7 +22,7 @@ FROM alpine:latest
 WORKDIR /database
 
 RUN apk add --no-cache \
-    perl libressl sqlite-libs gmp-dev \
+    perl openssl sqlite-libs gmp-dev \
     perl-json-xs perl-dbd-sqlite perl-dbi \
     perl-http-message perl-hash-multivalue perl-params-validate \
     perl-role-tiny perl-tie-ixhash perl-cryptx
