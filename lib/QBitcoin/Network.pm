@@ -264,6 +264,8 @@ sub main_loop {
 
         foreach my $connection (@connections) {
             my $was_traffic;
+            defined $connection->socket_fileno
+                or next;
             if (vec($ein, $connection->socket_fileno, 1) == 1) {
                 Warningf("%s peer %s disconnected", $connection->type, $connection->ip) unless $connection->type_id == PROTOCOL_RPC;
                 $connection->failed();
