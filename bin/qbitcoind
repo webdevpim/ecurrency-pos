@@ -14,6 +14,9 @@ use Bitcoin::Protocol;
 sub main {
     my ( $help, @peer_hosts, @fallback_peers, @btc_hosts, $conffile );
 
+    # Prettify ps title (remove "perl" from the command line)
+    $0 = join(" ", $0 =~ s|.*/||r, @ARGV);
+
     my %opts;
     unless (GetOptions(
         'help|h|?'        => \$help,

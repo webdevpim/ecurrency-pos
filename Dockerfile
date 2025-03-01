@@ -36,10 +36,12 @@ ENV PERL5LIB=/qbitcoin/lib
 ENV PATH=${PATH}:/qbitcoin/bin
 ENV dbi=sqlite
 ENV database=qbitcoin
+ENV debug=
 
 CMD if mount | grep -q " on /database "; then \
       /qbitcoin/bin/qbitcoin-init --dbi=${dbi} --database=${database} /qbitcoin/db && \
-      exec /qbitcoin/bin/qbitcoind --peer=node.qcoin.info --dbi=${dbi} --database=${database} --log=/dev/null --verbose; \
+      exec /qbitcoin/bin/qbitcoind --peer=node.qcoin.info --dbi=${dbi} --database=${database} \
+         --log=/dev/null --verbose ${debug:+$( [ "$debug" = "0" ] || echo --debug )}; \
     else echo "Please mount /database as external volume"; \
     fi
 
