@@ -35,6 +35,7 @@ sub init {
             openlog('qbitcoin', 'nofatal,pid', LOG_LOCAL0);
         }
     }
+    $| = 1 unless $config->{daemonize};
 }
 
 sub Logf {

@@ -7,7 +7,7 @@ StartLimitBurst=3
 
 [Service]
 ExecStartPre=-/bin/sh -c "/usr/bin/docker rm -f qbitcoin 2>/dev/null"
-ExecStart=/usr/bin/docker run --volume /home/qbitcoin/database:/database --read-only --tty --rm -p 9666:9666 --name qbitcoin qbitcoin
+ExecStart=/usr/bin/docker run --volume /home/qbitcoin/database:/database --read-only --rm -p 9666:9666 --name qbitcoin qbitcoin
 ExecStop=/usr/bin/docker stop qbitcoin
 ExecStopPost=/usr/bin/docker rm -f qbitcoin
 StandardOutput=append:/var/log/qbitcoin.log
