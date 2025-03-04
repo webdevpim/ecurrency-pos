@@ -68,8 +68,12 @@ sub apply_file {
         or die "Can't open $sql_file: $!\n";
     local $/ = ";\n";
     while (my $statement = <$fh>) {
-        # $statement =~ s/\blongblob\b/blob/gi if $dbms_name eq "SQLite";
-        $dbh->do($statement);
+        if ($dbms_name eq "SQLite") {
+            $statement =~ s/\bauto_increment\b//gi;
+            $statement =~ s/\blongblob\b/blob/gi;
+        }
+        $dbh->do($statement)
+            or die "Can't execute statement: $statement: " . $dbh->errstr . "\n";
     }
     close($fh);
 }
