@@ -1135,10 +1135,11 @@ sub stake_weight {
                     $self->hash_str, $in->tx_in_str, $in->num);
                 next;
             }
+            # TODO: Use Math::BigInt to prevent int64 overflow
             $weight += $in->value * (timeslot($block->time) - timeslot($in_block_time)) / BLOCK_INTERVAL;
         }
     }
-    return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
+    return int($weight / 0x10000); # prevent int64 overflow for total blockchain weight
 }
 
 sub coinbase_weight {
@@ -1152,7 +1153,7 @@ sub coinbase_weight {
         $weight = $self->up_value * ($base_time - $virtual_time) / BLOCK_INTERVAL;
         $weight *= ($base_time - $virtual_time) / (timeslot($block_time) - $virtual_time);
     }
-    return int($weight / 0x1000); # prevent int64 overflow for total blockchain weight
+    return int($weight / 0x10000); # prevent int64 overflow for total blockchain weight
 }
 
 sub up_value {
