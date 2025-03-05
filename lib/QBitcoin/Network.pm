@@ -140,6 +140,9 @@ sub main_loop {
                 my $time = time();
                 my $generated_time = QBitcoin::Generate->generated_time;
                 if (!$generated_time || timeslot($time) > timeslot($generated_time)) {
+                    if ($config->{genesis} && $time > QBitcoin::Block->blockchain_time + BLOCK_INTERVAL*FORCE_BLOCKS) {
+                        $time = QBitcoin::Block->blockchain_time + BLOCK_INTERVAL*FORCE_BLOCKS;
+                    }
                     QBitcoin::Generate->generate($time);
                 }
 
