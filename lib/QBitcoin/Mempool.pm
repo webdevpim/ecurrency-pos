@@ -24,7 +24,8 @@ sub want_tx {
 sub coinbase_list {
     my $class = shift;
     my ($block_time) = @_;
-    return grep { $_->coins_created && defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
+    # coinbase transactions are not limited by block height
+    return grep { $_->is_coinbase && defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
         QBitcoin::Transaction->mempool_list();
 }
 

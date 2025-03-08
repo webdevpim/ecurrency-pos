@@ -5,11 +5,11 @@ CREATE TABLE IF NOT EXISTS `block` (
   hash binary(32) NOT NULL,
   weight bigint unsigned NOT NULL,
   upgraded bigint unsigned NOT NULL DEFAULT 0,
+  reward_fund bigint unsigned NOT NULL DEFAULT 0,
   prev_hash binary(32) DEFAULT NULL,
   merkle_root binary(32) NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS `block_hash` ON `block` (hash);
-CREATE INDEX IF NOT EXISTS `block_time` ON `block` (time);
 
 CREATE TABLE IF NOT EXISTS `transaction` (
   id integer NOT NULL AUTO_INCREMENT PRIMARY KEY, -- "integer" (signed) required for sqlite autoincrement

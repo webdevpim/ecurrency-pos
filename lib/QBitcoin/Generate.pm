@@ -72,45 +72,30 @@ sub txo_confirmed {
 sub make_stake_tx {
     my ($reward, $block_sign_data) = @_;
 
-    my $total_reward = 0;
-    my @out;
-    my @my_txo;
-    if (exists $reward->{""}) {
-        @my_txo = grep { txo_confirmed($_) } QBitcoin::TXO->my_utxo();
-        # It's possible to create stake tx without inputs if the block contains only coinbase and zero-fee tx
-        return undef if !@my_txo && keys(%$reward) == 1 && !$reward->{""}; # No coinbase and no my txo -> no stake tx needed
-        my $my_amount = sum0 map { $_->value } @my_txo;
-        my $my_address;
-        if ($config->{sign_alg}) {
-            foreach my $sign_alg (split(/\s+/, $config->{sign_alg})) {
-                foreach my $addr (my_address()) {
-                    if (grep { $_ eq $sign_alg } $addr->algo) {
-                        $my_address = $addr;
-                        last;
-                    }
+    my $my_address;
+    if ($config->{sign_alg}) {
+        foreach my $sign_alg (split(/\s+/, $config->{sign_alg})) {
+            foreach my $addr (my_address()) {
+                if (grep { $_ eq $sign_alg } $addr->algo) {
+                    $my_address = $addr;
+                    last;
                 }
-                last if $my_address;
             }
+            last if $my_address;
         }
-        $my_address //= (my_address())[0]
-            or return undef;
-        push @out, QBitcoin::TXO->new_txo(
-            value      => $my_amount + $reward->{""},
-            scripthash => scalar(scripthash_by_address($my_address->address)),
-        );
-        $total_reward += $reward->{""};
     }
-    foreach my $reward_dst (sort grep { $_ ne "" } keys %$reward) {
-        push @out, QBitcoin::TXO->new_txo(
-            value      => $reward->{$reward_dst},
-            scripthash => $reward_dst,
-        );
-        $total_reward += $reward->{$reward_dst};
-    }
+    $my_address //= (my_address())[0]
+        or return undef;
+    my @my_txo = grep { txo_confirmed($_) } QBitcoin::TXO->my_utxo();
+    my $my_amount = sum0 map { $_->value } @my_txo;
+    my $out = QBitcoin::TXO->new_txo(
+        value      => $my_amount + $reward,
+        scripthash => scalar(scripthash_by_address($my_address->address)),
+    );
     my $tx = QBitcoin::Transaction->new(
         in              => [ map +{ txo => $_ }, @my_txo ],
-        out             => \@out,
-        fee             => -$total_reward,
+        out             => [ $out ],
+        fee             => -$reward,
         tx_type         => TX_TYPE_STAKE,
         block_sign_data => $block_sign_data,
         received_time   => time(),
@@ -158,27 +143,27 @@ sub generate {
         # Create new coinbase transaction and add it to mempool (if it's not there)
         QBitcoin::Transaction->new_coinbase($coinbase, $upgrade_level);
     }
-    # Just get upper limit for stake tx size
-    my @coinbase = UPGRADE_POW && UPGRADE_FEE ? QBitcoin::Mempool->coinbase_list($timeslot) : ();
-    # $fee is a hash with fee destination as a key and fee amount as a value
-    # "" is a key for my reward
-    my $fee = {};
-    if (my $reward = QBitcoin::Block->reward($height)) {
-        $fee->{""} = $reward;
-    }
-    my $stake_tx = make_stake_tx({ "" => 0, %$fee, map { $_->hash => 0 } @coinbase }, "");
+    # Just get upper limit for the stake tx size
+    my $stake_tx = make_stake_tx("0e0", "");
     my $size = $stake_tx ? $stake_tx->size : 0;
+
     # TODO: add transactions from block of the same timeslot, it's not an ancestor
     my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $height, $stake_tx && $stake_tx->in, $upgraded_total);
     if (!@transactions && ($timeslot - genesis_time) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
         return;
     }
-    foreach my $tx (grep { $_->fee } @transactions) {
-        $fee->{UPGRADE_POW && UPGRADE_FEE && $tx->up ? $tx->up->fee_dst($prev_block) // "" : ""} += $tx->fee;
-    }
-    if (%$fee) {
-        return unless $stake_tx;
-        if ($fee->{""} && !@{$stake_tx->in}) {
+
+    my @coinbase = grep { $_->is_coinbase } @transactions;
+    my $fee = sum0 map { $_->fee } grep { !$_->is_coinbase } @transactions;
+    my $coinbase_fee = sum0 map { $_->fee } @coinbase;
+    my $reward_block = QBitcoin::Block->reward($prev_block, $coinbase_fee);
+    # Block reward if the block will be empty
+    my $reward_empty = ($timeslot - genesis_time) % (BLOCK_INTERVAL * FORCE_BLOCKS) ? 0 : $reward_block;
+    my $reward = $fee || @coinbase ? $reward_block + $fee : $reward_empty;
+
+    if ($reward) {
+        $stake_tx or return;
+        if (!@{$stake_tx->in}) {
             # Genesis node can validate block with the very first coinbase transaction
             # or create genesis block without validation amount
             if (!$config->{genesis} || QBitcoin::Block->best_weight > 0) {
@@ -192,7 +177,7 @@ sub generate {
         # Generate new stake_tx with correct output value
         my $block_sign_data = $prev_block ? $prev_block->hash : ZERO_HASH;
         $block_sign_data .= $_->hash foreach @transactions;
-        $stake_tx = make_stake_tx($fee, $block_sign_data);
+        $stake_tx = make_stake_tx($reward, $block_sign_data);
         Infof("Generated stake tx %s with input amount %lu, consume %lu fee", $stake_tx->hash_str,
             sum0(map { $_->{txo}->value } @{$stake_tx->in}), -$stake_tx->fee);
         # It's possible that the $stake_tx has no my_txo, so it may be not unique, already received or pending
@@ -235,7 +220,7 @@ sub generate {
     QBitcoin::Generate::Control->generated_time($time);
     Debugf("Generated block %s height %u weight %Lu, %u transactions",
         $generated->hash_str, $height, $generated->weight, scalar(@transactions));
-    $generated->receive();
+    $generated->receive() ? undef : $generated;
 }
 
 1;

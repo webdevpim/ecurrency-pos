@@ -98,7 +98,7 @@ sub cmd_getblockchaininfo {
         $response->{btc_scanned} = $btc_scanned ? $btc_scanned->height+0 : 0,
         my ($coinbase) = dbh->selectrow_array("SELECT SUM(value) FROM `" . QBitcoin::Coinbase->TABLE . "` WHERE tx_out IS NOT NULL");
         $coinbase //= 0;
-        $coinbase += QBitcoin::Block->reward(0) if defined($best_block);
+        $coinbase += GENESIS_REWARD if defined($best_block);
         $response->{total_coins} = $coinbase ? $coinbase / DENOMINATOR : 0;
     }
     return $self->response_ok($response);

@@ -6,7 +6,7 @@ use feature 'state';
 # Check block chain
 # Check block time
 # Validate all transactions
-# Amount of all commissions should be 0
+# Total amount of all fees (except coinbase) should be equal to the (minus) reward for the block validation
 
 use Time::HiRes;
 use QBitcoin::Const;
@@ -37,6 +37,7 @@ sub validate {
     $block->merkle_root eq $merkle_root
         or return "Incorrect merkle root " . unpack("H*", $block->merkle_root) . " expected " . unpack("H*", $merkle_root);
     my $fee = 0;
+    my $fee_coinbase = 0;
     my %tx_in_block;
     my $empty_tx = 0;
     my $upgraded = $block->prev_block ? $block->prev_block->upgraded // 0 : 0;
@@ -61,13 +62,22 @@ sub validate {
                 }
             }
         }
+        elsif ($transaction->is_coinbase) {
+            $fee_coinbase += $transaction->fee;
+        }
         else {
             $fee += $transaction->fee;
         }
     }
-    $fee == -(ref $block)->reward($block->height)
-        or return "Total block fee is $fee (not " . -(ref $block)->reward($block->height) . ")";
+    my $block_reward = (ref $block)->reward($block->prev_block, $fee_coinbase);
+    # There are no block rewards for empty blocks
+    if ($empty_tx >= @{$block->transactions} - 1 && (timeslot($block->time) - $genesis_time) / BLOCK_INTERVAL % FORCE_BLOCKS) {
+        $block_reward = 0;
+    }
+    $fee == -$block_reward
+        or return "Total block fee is $fee (not " . -$block_reward . ")";
     $block->upgraded = $upgraded;
+    $block->reward_fund = $block->prev_block ? $block->prev_block->reward_fund + $fee + $fee_coinbase : 0;
     return "";
 }
 

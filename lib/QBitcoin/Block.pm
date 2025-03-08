@@ -26,6 +26,7 @@ use constant FIELDS => {
     merkle_root => BINARY,
     weight      => NUMERIC,
     upgraded    => NUMERIC,
+    reward_fund => NUMERIC,
 };
 
 use constant ATTR => qw(
@@ -133,8 +134,15 @@ sub hash_str {
 
 sub reward {
     my $class = shift;
-    my ($height) = @_;
-    return $height ? 0 : $config->{regtest} ? $config->{genesis_reward} // 0 : GENESIS_REWARD;
+    my ($prev_block, $coinbase_fee) = @_;
+    if ($prev_block) {
+        my $reward_fund = $prev_block->reward_fund + $coinbase_fee
+            or return 0;
+        return int($reward_fund / REWARD_DIVIDER) || 1;
+    }
+    else {
+        return $config->{regtest} ? $config->{genesis_reward} // 0 : GENESIS_REWARD;
+    }
 }
 
 1;

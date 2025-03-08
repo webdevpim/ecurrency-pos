@@ -28,7 +28,9 @@ sub mock_block_serialize {
 sub mock_block_deserialize {
     my $class = shift;
     my ($data) = @_;
-    $class->new(decode_json($data->get_string));
+    my $block = $class->new(decode_json($data->get_string));
+    $block->reward_fund = 0;
+    return $block;
 }
 
 sub mock_self_weight {

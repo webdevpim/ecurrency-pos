@@ -55,6 +55,7 @@ use constant QBITCOIN_CONST => {
     GENESIS_HASH            => pack('H*', GENESIS_BLOCK_HASH),
     GENESIS_HASH_TESTNET    => pack('H*', GENESIS_BLOCK_HASH_TESTNET),
     GENESIS_REWARD          => 50 * 100000000, # 50 QBTC
+    REWARD_DIVIDER          => 500, # reward for block is 1/500 of the reward fund
     MAX_BLOCK_SIZE          => 8*1024*1024,
     MAX_TX_IN_BLOCK         => 65535,
     BLOCK_HEADER_SIZE       => 200, # TODO: calculate precise value

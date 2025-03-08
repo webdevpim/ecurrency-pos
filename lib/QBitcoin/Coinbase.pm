@@ -387,69 +387,6 @@ sub btc_confirm_time {
     return $self->{btc_confirm_time};
 }
 
-sub fee_dst {
-    my $self = shift;
-    my ($block_start) = @_;
-
-    my $stake_tx;
-    if ($block_start->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME) {
-        # If $block_start is old enough then find stake tx in the branch started from this block
-        if (@{$block_start->transactions} && $block_start->transactions->[0]->is_stake && @{$block_start->transactions->[0]->in}) {
-            $stake_tx = $block_start->transactions->[0];
-        }
-        my $block = $block_start;
-        while ($block->next_block && $block->next_block->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME) {
-            $block = $block->next_block;
-            if (@{$block->transactions} && $block->transactions->[0]->is_stake && @{$block->transactions->[0]->in}) {
-                $stake_tx = $block->transactions->[0];
-            }
-        }
-        if ($stake_tx) {
-            return $stake_tx->out->[0]->scripthash;
-        }
-    }
-    # Try to search dst stake tx within incore blocks
-    my $block_class = ref $block_start;
-    my $best_block = $block_class->best_block($block_class->max_db_height + 1);
-    if ($best_block && $best_block->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME && $best_block->height < $block_start->height) {
-        if (@{$best_block->transactions} && $best_block->transactions->[0]->is_stake && @{$best_block->transactions->[0]->in}) {
-            $stake_tx = $best_block->transactions->[0];
-        }
-        while ($best_block->next_block && $best_block->height < $block_start->height &&
-               $best_block->next_block->time <= $self->btc_confirm_time - COINBASE_CONFIRM_TIME) {
-            $best_block = $best_block->next_block;
-            if (@{$best_block->transactions} && $best_block->transactions->[0]->is_stake && @{$best_block->transactions->[0]->in}) {
-                $stake_tx = $best_block->transactions->[0];
-            }
-        }
-        if ($stake_tx) {
-            return $stake_tx->out->[0]->scripthash;
-        }
-    }
-
-    # Not in the $block_start branch nor in core blocks, find in the database
-    my $block_before = $block_class->find(
-        time    => { '<=' => $self->btc_confirm_time - COINBASE_CONFIRM_TIME },
-        height  => { '<=' => $block_start->height - 1 },
-        -sortby => 'time DESC',
-        -limit  => 1,
-    )
-        or return undef;
-    for (my $max_height = $block_before->height + 1;; $max_height = $stake_tx->block_height) {
-        $stake_tx = QBitcoin::Transaction->find(
-            block_height => { '<' => $max_height },
-            fee          => { '<' => 0 },
-            -sortby      => 'block_height DESC, block_pos ASC',
-            -limit       => 1,
-        )
-            or return undef; # If there are no suitable recipient for the fee then block validator will take the fee to itself
-        # It's possible stake tx without input if the block contains only coinbase and zero-fee tx, ignore them
-        if (@{$stake_tx->in}) {
-            return $stake_tx->out->[0]->scripthash;
-        }
-    }
-}
-
 sub min_tx_time {
     my $self = shift;
     return COINBASE_CONFIRM_TIME + ($self->btc_confirm_time // return undef);
