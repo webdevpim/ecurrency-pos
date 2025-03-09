@@ -131,10 +131,10 @@ sub main_loop {
     $SIG{TERM} = $SIG{INT} = sub { $sig_killed = 1 };
 
     while () {
+        QBitcoin::Block->store_blocks();
         my $timeout = SELECT_TIMEOUT;
         if (mempool_synced() && blockchain_synced()) {
             QBitcoin::Transaction->cleanup_mempool();
-            QBitcoin::Block->store_blocks();
             QBitcoin::Produce->produce() if $config->{produce};
             if ($config->{generate}) {
                 my $time = time();
