@@ -227,7 +227,7 @@ sub cmd_btcheaders {
     elsif ($known_block && $num == MAX_BTC_HEADERS) {
         # All received block are known for us. Was it deep rollback?
         my $start_height = $known_block->height;
-        my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*1900 } 1 .. 250 ], -sortby => "height DESC");
+        my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*int(MAX_BTC_HEADERS*0.95) } 1 .. 250 ], -sortby => "height DESC");
         $self->send_message("btcgethdrs", pack("V", PROTOCOL_VERSION) .
             varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . ZERO_HASH);
     }
