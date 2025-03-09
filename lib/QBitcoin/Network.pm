@@ -163,17 +163,6 @@ sub main_loop {
 
         my @connections = QBitcoin::ConnectionList->list;
         foreach my $connection (@connections) {
-            if ($connection->protocol->can('timeout')) {
-                my $peer_timeout = $connection->protocol->timeout;
-                if ($peer_timeout) {
-                    $timeout = $peer_timeout if $timeout > $peer_timeout;
-                }
-                else {
-                    Noticef("%s peer %s timeout", $connection->type, $connection->ip);
-                    $connection->failed();
-                    next;
-                }
-            }
             vec($rin, $connection->socket_fileno, 1) = 1 if length($connection->recvbuf) < READ_BUFFER_SIZE && $connection->state != STATE_CONNECTING;
             vec($win, $connection->socket_fileno, 1) = 1 if $connection->sendbuf || $connection->state == STATE_CONNECTING;
         }
@@ -181,7 +170,6 @@ sub main_loop {
         $ein = $rin | $win;
         my $nfound = select($rin, $win, $ein, $timeout);
         last if $sig_killed;
-        next unless $nfound;
         if ($nfound == -1) {
             Errf("select error: %s", $!);
             last;
@@ -359,6 +347,17 @@ sub main_loop {
                 if (!$connection->protocol->keepalive()) {
                     Noticef("%s peer %s timeout, closing connection", $connection->type, $connection->ip);
                     $connection->disconnect();
+                    next;
+                }
+            }
+            if ($connection->protocol->can('timeout')) {
+                my $peer_timeout = $connection->protocol->timeout;
+                if ($peer_timeout) {
+                    $timeout = $peer_timeout if $timeout > $peer_timeout;
+                }
+                else {
+                    Noticef("%s peer %s timeout", $connection->type, $connection->ip);
+                    $connection->failed();
                     next;
                 }
             }
