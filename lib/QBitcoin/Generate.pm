@@ -211,6 +211,7 @@ sub generate {
         time         => $time,
         prev_hash    => $prev_block ? $prev_block->hash : undef,
         transactions => \@transactions,
+        $prev_block ? ( prev_block => $prev_block ) : (),
     });
     $generated->weight = $generated->self_weight + ( $prev_block ? $prev_block->weight : 0 );
     $generated->merkle_root = $generated->calculate_merkle_root();
