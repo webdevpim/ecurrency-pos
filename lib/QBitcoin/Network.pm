@@ -102,6 +102,7 @@ sub main_loop {
             $tx->add_to_block($block);
         }
         QBitcoin::Block->max_db_height($block->height);
+        $block->prev_block_load;
         if ($block->receive(1) != 0) {
             Errf("Incorrect stored block %s height %u, delete", $block->hash_str, $block->height);
             $block->delete();
