@@ -26,6 +26,7 @@ use constant {
     # https://en.bitcoin.it/wiki/Protocol_documentation#Message_structure
     MAGIC               => pack("V", 0xD9B4BEF9),
     MAGIC_TESTNET       => pack("V", 0x0709110B ),
+    MAX_BTC_HEADERS     => 2000,
 };
 
 use constant {
@@ -211,14 +212,14 @@ sub cmd_headers {
     elsif ($new_block) {
         $self->request_btc_blocks();
     }
-    elsif ($known_block && $num == 2000) {
+    elsif ($known_block && $num == MAX_BTC_HEADERS) {
         # All received block are known for us. Was it deep rollback?
         my $start_height = $known_block->height;
         if (!$start_height) {
             my ($block) = Bitcoin::Block->find(height => { "IS NOT" => undef }, -sortby => 'height DESC', -limit => 1);
             $start_height = $block ? $block->height+1 : 0;
         }
-        my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*1900 } 1 .. 250 ], -sortby => "height DESC");
+        my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*int(MAX_BTC_HEADERS*0.95) } 1 .. 250 ], -sortby => "height DESC");
         $self->send_message("getheaders", pack("V", PROTOCOL_VERSION) .
             varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . ZERO_HASH);
     }
