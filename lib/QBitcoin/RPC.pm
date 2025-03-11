@@ -24,7 +24,8 @@ sub type_id() { PROTOCOL_RPC }
 
 sub timeout {
     my $self = shift;
-    my $timeout = RPC_TIMEOUT + $self->update_time - time();
+    my $time = shift // time();
+    my $timeout = RPC_TIMEOUT + $self->update_time - $time;
     if ($timeout < 0) {
         Infof("RPC client timeout");
         $self->connection->disconnect;

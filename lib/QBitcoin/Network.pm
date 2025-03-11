@@ -352,7 +352,7 @@ sub main_loop {
                 }
             }
             if ($connection->protocol->can('timeout')) {
-                my $peer_timeout = $connection->protocol->timeout;
+                my $peer_timeout = $connection->protocol->timeout($time);
                 if ($peer_timeout) {
                     $timeout = $peer_timeout if $timeout > $peer_timeout;
                 }

@@ -36,7 +36,8 @@ sub type_id() { PROTOCOL_REST }
 
 sub timeout {
     my $self = shift;
-    my $timeout = REST_TIMEOUT + $self->update_time - time();
+    my $time = shift // time();
+    my $timeout = REST_TIMEOUT + $self->update_time - $time;
     if ($timeout < 0) {
         Infof("REST client timeout");
         $self->connection->disconnect;
