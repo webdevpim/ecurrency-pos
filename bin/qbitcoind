@@ -168,20 +168,19 @@ sub revalidate {
             $block->transactions(\@txs);
             if ( defined($bad_height) ||
                  $block->hash ne $block->calculate_hash ||
-                 $block->receive(1) ||
+                 $block->validate() ||
+                 $block->validate_chain() ||
                  $block->upgraded != $upgraded ||
                  $block->reward_fund != $reward_fund) {
                 $bad_height = $block->height;
             }
-            $prev_block->free_block() if $prev_block;
             $prev_block = $block;
             last if defined($bad_height);
         }
-        QBitcoin::Block->cleanup_old_blocks();
         last if defined($bad_height);
         last if @blocks < $portion;
     }
-    $prev_block->free_block() if $prev_block;
+    undef $prev_block;
     if (!defined($bad_height)) {
         Infof("All stored blocks are valid");
         return;

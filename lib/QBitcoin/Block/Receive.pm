@@ -139,7 +139,7 @@ sub receive {
         $self->prev_block->next_block //= $self;
     }
 
-    # zero weight for new block is ok, accept it
+    # zero weight for the new block is ok, accept it
     if ($HEIGHT && ($self->weight < $best_block[$HEIGHT]->weight ||
         ($self->weight == $best_block[$HEIGHT]->weight && $self->branch_height <= $HEIGHT))) {
         my $has_weight = $self->received_from ? ($self->received_from->has_weight // -1) : -1;
@@ -179,84 +179,10 @@ sub receive {
     }
     for (my $b = $new_best; $b; $b = $b->next_block) {
         Debugf("Add block %s height %u to the best branch", $b->hash_str, $b->height);
-        my $fail_tx;
-        my $can_consume = 1; # Can validator consume transaction fee? No if stake transaction has no inputs
-
-        for (my $num = 0; $num < @{$b->transactions}; $num++) {
-            my $tx = $b->transactions->[$num];
-            if (defined($tx->block_height) && $tx->block_height != $b->height) {
-                Warningf("Transaction %s included in blocks %u and %u", $tx->hash_str, $tx->block_height, $b->height);
-                $fail_tx = $tx->hash;
-                last;
-            }
-            if (my $coinbase = $tx->up) {
-                if ($coinbase->tx_out && $coinbase->tx_out ne $tx->hash) {
-                    Warningf("Coinbase transaction %s has already been spent in %s", $coinbase->hash_str, $coinbase->tx_out_str);
-                    $fail_tx = $tx->hash;
-                    last;
-                }
-            }
-            if (!@{$tx->in} && !$tx->coins_created) {
-                if ($num > 0) {
-                    Warningf("Transaction %s has no inputs", $tx->hash_str);
-                    $fail_tx = $tx->hash;
-                    last;
-                }
-                # Stake transaction without inputs allowed only if the block has no (non-coinbase) transactions with positive fee
-                $can_consume = 0;
-            }
-            elsif (!$can_consume && $tx->fee > 0 && !$tx->coins_created) {
-                Warningf("Transaction %s has fee but block validator can't consume it", $tx->hash_str);
-                $fail_tx = $tx->hash;
-                last;
-            }
-            foreach my $in (@{$tx->in}) {
-                my $txo = $in->{txo};
-                # It's possible that $txo->tx_out already set for rebuild blockchain loaded from local database
-                if ($txo->tx_out && $txo->tx_out ne $tx->hash) {
-                    # double-spend; drop this branch, return to old best branch and decrease reputation for peer $b->received_from
-                    Warningf("Double spend for transaction output %s:%u: first in transaction %s, second in %s, block from %s",
-                        $txo->tx_in_str, $txo->num, $txo->tx_out_str, $tx->hash_str,
-                        $b->received_from ? $b->received_from->peer->id : "me");
-                    $fail_tx = $tx->hash;
-                    last;
-                }
-                elsif (my $tx_in = QBitcoin::Transaction->get($txo->tx_in)) {
-                    # Transaction with this output must be already confirmed (in the same best branch)
-                    # Stored (not cached) transactions are always confirmed, not needed to load them
-                    if (!defined($tx_in->block_height)) {
-                        Warningf("Unconfirmed input %s:%u for transaction %s, block from %s",
-                            $txo->tx_in_str, $txo->num, $tx->hash_str,
-                            $b->received_from ? $b->received_from->peer->id : "me");
-                        $fail_tx = $tx->hash;
-                        last;
-                    }
-                }
-            }
-            last if $fail_tx;
-            $tx->confirm($b, $num);
-        }
-
-        if (!$fail_tx) {
-            my $self_weight = $b->self_weight;
-            if (!defined($self_weight)) {
-                $fail_tx = "block"; # does not match any transaction hash
-            }
-            elsif ($self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ) != $b->weight) {
-                Warningf("Incorrect weight for block %s: %Lu != %Lu", $b->hash_str,
-                    $b->weight, $self_weight + ( $b->prev_block ? $b->prev_block->weight : 0 ));
-                $fail_tx = "block";
-            }
-        }
+        my $fail_tx = $b->validate_chain();
 
         if ($fail_tx) {
-            # If we have tx included in two different blocks then process rollback until second tx occurence
-            # It's not possible to include a tx twice in the same block, it's checked on block validation
             Debugf("Revert block %s height %u from best branch", $b->hash_str, $b->height);
-            foreach my $tx (@{$b->transactions}) { # TODO: Do we need reverse order for unconfirm here?
-                last if $fail_tx eq $tx->hash;
-                $tx->unconfirm();
-            }
             for (my $b1 = $b->prev_block; $b1 && $b1->height >= $new_best->height; $b1 = $b1->prev_block) {
                 Debugf("Revert block %s height %u from the best branch", $b1->hash_str, $b1->height);
                 foreach my $tx (reverse @{$b1->transactions}) {

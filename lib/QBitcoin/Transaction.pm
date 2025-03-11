@@ -1250,7 +1250,8 @@ sub min_tx_time {
         my $min_rel_time = $in->{min_rel_time}
             or next;
         my $txo = $in->{txo};
-        $TX_SEQ_DEPENDS{$txo->tx_in}->{$self->hash} = $self; # reset $self->{min_tx_rel_time} if previous tx confirmed or unconfirmed
+        # reset $self->{min_tx_rel_time} if previous tx confirmed or unconfirmed
+        $TX_SEQ_DEPENDS{$txo->tx_in}->{$self->hash} = $self if $self->is_cached;
         my $txo_time = QBitcoin::Transaction->txo_time($txo, $class_block);
         if (defined($txo_time)) {
             $min_tx_time = $min_rel_time + $txo_time if defined($min_tx_time) && $min_tx_time < $min_rel_time + $txo_time;
