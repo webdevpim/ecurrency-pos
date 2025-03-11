@@ -542,31 +542,35 @@ sub cmd_getblks {
     }
     my %locators = map { substr($data, 6+$_*32, 32) => 1 } 0 .. $locators-1;
     # Loop by incore levels is not good but better than loop by locators
-    my $height;
+    my $height = -1;
     my $min_incore_height = QBitcoin::Block->min_incore_height;
-    for ($height = QBitcoin::Block->blockchain_height; $height >= $min_incore_height; $height--) {
-        my $block = QBitcoin::Block->best_block($height);
-        if (!$block) {
-            $height = -1;
-            last;
+    my $blockchain_height = QBitcoin::Block->blockchain_height;
+    if (%locators) {
+        for ($height = $blockchain_height; $height >= $min_incore_height; $height--) {
+            my $block = QBitcoin::Block->best_block($height);
+            if (!$block) {
+                $height = -1;
+                last;
+            }
+            last if $locators{$block->hash};
         }
-        last if $locators{$block->hash};
     }
     my $sent = 0;
     my $response = "";
     if ($height < $min_incore_height) {
         # No matched blocks in memory pool, search by database
-        my ($block) = QBitcoin::Block->find(hash => [ keys %locators ], -sortby => 'height DESC', -limit => 1);
-        if ($block) {
+        my $block;
+        if (%locators) {
+            ($block) = QBitcoin::Block->find(hash => [ keys %locators ], -sortby => 'height DESC', -limit => 1);
             $height = $block->height;
         }
-        else {
+        if (!$block) {
             my @blocks;
             if ($low_time) {
                 # No block for any locator found, send two blocks: one just before $low_time and one just after
                 # for cover cases if prev block already exists on remote and if next our block is too far in future
                 my $new_block;
-                for ($height = QBitcoin::Block->blockchain_height; $height >= $min_incore_height; $height--) {
+                for ($height = $blockchain_height; $height >= $min_incore_height; $height--) {
                     my $prev_block = QBitcoin::Block->best_block($height)
                         or last;
                     if ($prev_block->time <= $low_time) {
@@ -585,8 +589,8 @@ sub cmd_getblks {
                 push @blocks, $new_block if $new_block;
             }
             else {
-                # special case
-                $block = QBitcoin::Block->best_block;
+                # special case: send genesis block
+                $block = QBitcoin::Block->best_block(0) // QBitcoin::Block->find(height => 0);
                 push @blocks, $block if $block;
             }
             if (@blocks == 1) {
@@ -610,8 +614,7 @@ sub cmd_getblks {
             $sent++;
         }
     }
-    my $max_height = QBitcoin::Block->blockchain_height;
-    while ($height++ < $max_height && $sent < BLOCKS_IN_BATCH) {
+    while ($height++ < $blockchain_height && $sent < BLOCKS_IN_BATCH) {
         my $block = QBitcoin::Block->best_block($height);
         if ($block) {
             $response .= $block->serialize;
