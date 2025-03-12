@@ -562,7 +562,7 @@ sub cmd_getblks {
         my $block;
         if (%locators) {
             ($block) = QBitcoin::Block->find(hash => [ keys %locators ], -sortby => 'height DESC', -limit => 1);
-            $height = $block->height;
+            $height = $block->height if $block;
         }
         if (!$block) {
             my @blocks;
