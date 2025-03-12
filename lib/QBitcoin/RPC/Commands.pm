@@ -55,7 +55,7 @@ Result:
   "blocks" : n,                           (numeric) the height of the most-work fully-validated chain. The genesis block has height 0
   "bestblockhash" : "str",                (string) the hash of the currently best block
   "weight" : n,                           (numeric) the current weight
-  "mediantime" : n,                       (numeric) median time for the current best block
+  "bestblocktime" : n,                    (numeric) time for the current best block
   "initialblockdownload" : true|false,    (boolean) (debug information) estimate of whether this node is in Initial Block Download mode
   "total_coins" : n,                      (numeric) total number of generated (upgraded) coins
   "btc_headers" : n,                      (numeric) number of processed btc block headers
@@ -78,6 +78,7 @@ sub cmd_getblockchaininfo {
         blocks               => $best_block ? $best_block->height+0   : -1,
         bestblockhash        => $best_block ? unpack("H*", $best_block->hash) : undef,
         weight               => $best_block ? $best_block->weight+0   : -1,
+        bestblocktime        => $best_block ? $best_block->time       : -1,
         initialblockdownload => blockchain_synced() ? FALSE : TRUE,
         # size_on_disk         => # TODO
     };
