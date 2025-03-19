@@ -1208,6 +1208,7 @@ sub new_coinbase {
         Infof("Generated new coinbase transaction %s for btc output %s:%u value %lu fee %lu",
             $self->hash_str, $class->hash_str($coinbase->btc_tx_hash), $coinbase->btc_out_num,
             $txo->value, $self->fee);
+        $self->announce();
     }
     return $self;
 }
