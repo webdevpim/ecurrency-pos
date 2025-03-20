@@ -1066,8 +1066,7 @@ sub unconfirm {
         my $txo = $in->{txo};
         $txo->tx_out = undef;
         $txo->siglist = undef;
-        # Return to list of my utxo inputs from stake transaction, but do not use returned to mempool
-        $txo->add_my_utxo() if $self->is_stake && $txo->is_my && $txo->unspent;
+        # TXO will be returned to list of my utxo later, on drop the branch and free the block
     }
     foreach my $txo (@{$self->out}) {
         $txo->del_my_utxo() if $txo->is_my;

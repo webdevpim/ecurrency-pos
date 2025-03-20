@@ -177,6 +177,7 @@ sub receive {
             $tx->unconfirm();
         }
     }
+    my $old_best = $class->best_block($new_best->height);
     for (my $b = $new_best; $b; $b = $b->next_block) {
         Debugf("Add block %s height %u to the best branch", $b->hash_str, $b->height);
         my $fail_tx = $b->validate_chain();
@@ -190,7 +191,6 @@ sub receive {
                 }
             }
 
-            my $old_best = $class->best_block($new_best->height);
             $old_best->prev_block->next_block = $old_best if $old_best && $old_best->prev_block;
             for (my $b1 = $old_best; $b1; $b1 = $b1->next_block) {
                 Debugf("Return block %s height %u to the best branch", $b1->hash_str, $b1->height);
@@ -260,6 +260,9 @@ sub receive {
         }
         $HEIGHT = $self->height;
     }
+
+    # Drop old branch to free my txo (for possibility to make new stake transactions)
+    $old_best->drop_branch() if $old_best;
 
     if ($self->height > ($HEIGHT // -1)) {
         # It's the first block in this level
