@@ -140,7 +140,7 @@ sub cmd_sendtx {
         $self->send_message("tx", $tx->serialize . ($tx->received_from ? $tx->received_from->peer->ip : "\x00"x16));
     }
     else {
-        Warningf("I have no transaction with hash %u requested by peer %s", $hash, $self->peer->id);
+        Warningf("I have no transaction with hash %s requested by peer %s", lc(unpack("H*", $hash)), $self->peer->id);
     }
     return 0;
 }
