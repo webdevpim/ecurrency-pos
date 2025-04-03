@@ -15,7 +15,7 @@ use QBitcoin::Transaction;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
-use QBitcoin::Address qw(scripthash_by_address addresses_by_pubkey wallet_import_format address_by_hash);
+use QBitcoin::Address qw(scripthash_by_address address_by_pubkey wallet_import_format address_by_hash);
 use QBitcoin::MyAddress;
 use QBitcoin::Generate;
 use QBitcoin::Protocol;
@@ -1028,16 +1028,14 @@ sub cmd_importprivkey {
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Incorrect private key");
     my $pubkey = $privkey->pubkey_by_privkey
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "This type of private key is not supported for my_address");
-    my @addresses = addresses_by_pubkey($pubkey, $pk_alg);
-    foreach my $address (@addresses) {
-        my $my_address = QBitcoin::MyAddress->create({
-            private_key => wallet_import_format($private_key),
-            address     => $address,
-        });
-        QBitcoin::Generate->load_address_utxo($my_address);
-    }
+    my $address = address_by_pubkey($pubkey, $pk_alg);
+    my $my_address = QBitcoin::MyAddress->create({
+        private_key => wallet_import_format($private_key),
+        address     => $address,
+    });
+    QBitcoin::Generate->load_address_utxo($my_address);
 
-    return $self->response_ok("Private key for address $addresses[0] imported");
+    return $self->response_ok("Private key for address $address imported");
 }
 
 $PARAMS{dumpprivkey} = "address";
