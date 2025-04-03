@@ -1034,7 +1034,7 @@ sub cmd_importprivkey {
             private_key => wallet_import_format($private_key),
             address     => $address,
         });
-        QBitcoin::Generate->load_address_txo($my_address);
+        QBitcoin::Generate->load_address_utxo($my_address);
     }
 
     return $self->response_ok("Private key for address $addresses[0] imported");
