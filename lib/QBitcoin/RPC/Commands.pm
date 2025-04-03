@@ -1031,7 +1031,7 @@ sub cmd_importprivkey {
     my @addresses = addresses_by_pubkey($pubkey, $pk_alg);
     foreach my $address (@addresses) {
         my $my_address = QBitcoin::MyAddress->create({
-            private_key => $private_key,
+            private_key => wallet_import_format($private_key),
             address     => $address,
         });
         QBitcoin::Generate->load_address_txo($my_address);
@@ -1066,7 +1066,7 @@ sub cmd_dumpprivkey {
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "The address is not correct");
     my $my_address = QBitcoin::MyAddress->get_by_hash($scripthash)
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Private key is unknown for this address");
-    return $self->response_ok(wallet_import_format($my_address->private_key));
+    return $self->response_ok($my_address->private_key);
 }
 
 $PARAMS{getpeerinfo} = "";
