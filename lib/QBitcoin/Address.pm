@@ -89,7 +89,8 @@ sub addresses_by_pubkey($$) {
     my $scripthash160 = hash160($script);
     my $scripthash256 = hash256($script);
     my @hash = $alg & CRYPT_ALGO_POSTQUANTUM ? ($scripthash256, $scripthash160) : ($scripthash160, $scripthash256);
-    push @hash, script_by_pubkeyhash($scripthash160);
+    # This address can be generated from the legacy bitcoin address 1xxx which contains hash160($public_key)
+    push @hash, hash160(script_by_pubkeyhash(hash160($public_key)));
     return map { address_by_hash($_) } @hash;
 }
 

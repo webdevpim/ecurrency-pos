@@ -286,6 +286,7 @@ sub get_scripthash {
     elsif ($input_script =~ /^([\x41-\x48])(??{ ".{" . ord($1) . "}" })\z/s) {
         # it's P2PK, push only 72-bytes DER-encoded signature
         # TODO: fetch pubkey from the locking script?
+        # P2PK is deprecated and not allowed by bitcoind anymore
         Warningf("Burn from P2PK script in tx %s", $tx->hash_str);
         return undef;
     }
