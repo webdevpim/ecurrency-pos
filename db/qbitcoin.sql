@@ -50,7 +50,6 @@ CREATE INDEX IF NOT EXISTS `tx_out` ON `txo` (tx_out);
 
 CREATE TABLE IF NOT EXISTS `my_address` (
   address     varchar(255) NOT NULL PRIMARY KEY,
-  public_key  blob(4096)   NOT NULL DEFAULT '',
   private_key blob(4096)   NOT NULL -- TODO: encrypted
 );
 

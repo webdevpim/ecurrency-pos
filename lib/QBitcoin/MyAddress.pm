@@ -18,7 +18,6 @@ use constant TABLE => 'my_address';
 
 use constant FIELDS => {
     address     => STRING,
-    public_key  => STRING,
     private_key => STRING,
 };
 
