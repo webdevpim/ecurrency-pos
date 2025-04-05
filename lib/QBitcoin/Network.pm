@@ -112,10 +112,8 @@ sub main_loop {
         Debugf("Loaded block height %u", $block->height);
         last;
     }
-    # Load my UTXO
-    if ($config->{generate}) {
-        QBitcoin::Generate->load_utxo();
-    }
+    # Load my UTXO for generate or rpc getbalance
+    QBitcoin::Generate->load_utxo();
 
     if ($config->{genesis} && !QBitcoin::Block->blockchain_time) {
         QBitcoin::Generate->generate($config->{testnet} ? GENESIS_TIME_TESTNET : GENESIS_TIME);
