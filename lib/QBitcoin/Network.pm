@@ -115,6 +115,11 @@ sub main_loop {
     # Load my UTXO for generate or rpc getbalance
     QBitcoin::Generate->load_utxo();
 
+    my $generate = $config->{generate};
+    $generate //= 1 if $config->{genesis};
+    # By default validate blocks if there are any my coins
+    $generate //= !!QBitcoin::TXO->my_utxo;
+
     if ($config->{genesis} && !QBitcoin::Block->blockchain_time) {
         QBitcoin::Generate->generate($config->{testnet} ? GENESIS_TIME_TESTNET : GENESIS_TIME);
     }
@@ -135,7 +140,7 @@ sub main_loop {
         if (mempool_synced() && blockchain_synced()) {
             QBitcoin::Transaction->cleanup_mempool();
             QBitcoin::Produce->produce() if $config->{produce};
-            if ($config->{generate}) {
+            if ($generate) {
                 my $time = time();
                 my $generated_time = QBitcoin::Generate->generated_time;
                 if (!$generated_time || timeslot($time) > timeslot($generated_time)) {

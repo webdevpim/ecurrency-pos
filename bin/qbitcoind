@@ -118,7 +118,7 @@ sub usage {
     print "   -J, --rpc <addr[:port]>     - respond to JSON RPC API on <address> and <port> (default " . RPC_ADDR . ":" . RPC_PORT . "),\n";
     print "   -R, --rest <addr[:port]>    - respond to Esplora RESTful API on <address> and <port> (disabled by default, default port " . REST_PORT . "),\n";
     print "   -D, --daemonize             - daemonize,\n";
-    print "   -g, --generate              - generate blocks (private key must be stored in the database),\n";
+    print "   -g, --generate              - generate blocks (enabled by default if there are any coins on balance),\n";
     print "   -G, --genesis               - run as genesis node, do not need to synchronize with other nodes for authoritative answers,\n";
     print "   -t, --testnet               - run for testnet, by default mainnet,\n";
     print "   --log <file>                - write log to <file>, 'syslog' for syslog (default),\n";
