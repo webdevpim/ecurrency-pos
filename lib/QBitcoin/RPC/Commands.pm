@@ -189,7 +189,7 @@ sub cmd_getblockheader {
         height            => $block->height,
         time              => $block->time,
         confirmations     => $best_height - $block->height,
-        nTx               => scalar(@{$block->transactions}),
+        nTx               => @{$block->transactions}+0,
         previousblockhash => unpack("H*", $block->prev_hash),
         nextblockhash     => $next_block ? unpack("H*", $next_block->hash) : undef,
         merkleroot        => unpack("H*", $block->merkle_root),
@@ -661,7 +661,7 @@ sub cmd_getmempoolinfo {
     my @mempool = QBitcoin::Transaction->mempool_list();
     return $self->response_ok({
         loaded => mempool_synced() ? TRUE : FALSE,
-        size   => scalar(@mempool),
+        size   => @mempool+0,
         bytes  => sum0(map { $_->size } @mempool),
     });
 }
@@ -944,7 +944,7 @@ sub cmd_getblockstats {
         time       => $block->time,
         total_out  => sum0(map { $_->value } map { @{$_->out} } @{$block->transactions})/DENOMINATOR,
         total_size => sum0(map { $_->size } @{$block->transactions}),
-        txs        => scalar(@{$block->transactions}),
+        txs        => @{$block->transactions}+0,
         totalfee   => 0,
     };
     $res->{utxo_increase} = $res->{outs} - $res->{ins};
