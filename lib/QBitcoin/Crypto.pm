@@ -81,7 +81,7 @@ sub pk_import {
     my ($private_key, $algo) = @_;
     my $module = _crypto_module($algo);
     if (!$module) {
-        Warningf("Unsupported crypto module %s for private key", $algo);
+        Warningf("Unsupported crypto module %s for private key", CRYPT_ALGO_NAMES->{$algo} // "unknown");
         return undef;
     }
     return $module->import_private_key($private_key);
@@ -111,7 +111,7 @@ sub generate_keypair {
     my ($algo) = @_;
     my $module = _crypto_module($algo);
     if (!$module) {
-        Warningf("Unsupported crypto module %s for keypair generation", $algo);
+        Warningf("Unsupported crypto module %s for keypair generation", CRYPT_ALGO_NAMES->{$algo} // "unknown");
         return undef;
     }
     return $module->generate_keypair;

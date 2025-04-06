@@ -8,7 +8,7 @@ use QBitcoin::Const;
 use QBitcoin::RPC::Const;
 use QBitcoin::Config;
 use QBitcoin::ORM qw(dbh);
-use QBitcoin::Crypto qw(pk_import pk_alg);
+use QBitcoin::Crypto qw(pk_import pk_alg generate_keypair);
 use QBitcoin::Block;
 use QBitcoin::Coinbase;
 use QBitcoin::Transaction;
@@ -1330,7 +1330,7 @@ sub cmd_listmyaddresses {
 
 $PARAMS{getbalance} = "minconf?";
 $HELP{getbalance} = qq(
-listunspent address ( minconf )
+getbalance address ( minconf )
 
 Returns total balance of the addresses in the wallet with at least minconf confirmations.
 
@@ -1362,6 +1362,34 @@ sub cmd_getbalance {
         $value = sum0(map { $_->value } @my_txo);
     }
     return $self->response_ok($value/DENOMINATOR);
+}
+
+$PARAMS{getnewaddress} = "address_type?";
+$HELP{getnewaddress} = qq(
+getnewaddress ( address_type )
+
+Returns a new qbitcoin address and private key.
+Private key is not stored in the wallet and can be imported using importprivkey.
+
+Arguments:
+1. address_type    (string, optional, default="ecdsa") The address type to use. Options are "ecdsa", "falcon".
+
+Result:
+{
+    "address",     (string) The new qbitcoin address
+    "private_key", (string) The private key for the new address
+}
+
+Examples:
+> qbitcoin-cli getnewaddress
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "getnewaddress", "params": []}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_getnewaddress {
+    my $self = shift;
+    my $algo = $self->args->[0] // CRYPT_ALGO_ECDSA;
+    my $keypair = generate_keypair($algo);
+    my $address = address_by_pubkey($keypair->pubkey_by_privkey, $algo);
+    return $self->response_ok({ address => $address, private_key => wallet_import_format($keypair->pk_serialize) });
 }
 
 # getmemoryinfo

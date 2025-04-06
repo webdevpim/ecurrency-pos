@@ -31,6 +31,7 @@ my %SPEC = (
     outputs        => \&validate_outputs,
     privatekeys    => \&validate_privkeys,
     privkey        => \&validate_privkey,
+    address_type   => \&validate_address_type,
 );
 
 sub validate {
@@ -169,7 +170,7 @@ sub validate_privkey {
 }
 
 sub validate_privkeys {
-    my $value = shift;
+    my $value = $_[0];
     my $privkeys = eval { $JSON->decode($value) };
     if (!$privkeys || ref($privkeys) ne "ARRAY") {
         return 0;
@@ -182,6 +183,14 @@ sub validate_privkeys {
         push @pk, $pk;
     }
     $_[0] = \@pk;
+}
+
+sub validate_address_type {
+    my $value = $_[0]
+        or return 0;
+    my $algo = CRYPT_ALGO_BY_NAME->{$value}
+        or return 0;
+    $_[0] = $algo;
 }
 
 sub incorrect_params {

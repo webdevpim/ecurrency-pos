@@ -120,12 +120,15 @@ use constant CRYPT_ALGO => {
     CRYPT_ALGO_ECDSA   => 1,
     CRYPT_ALGO_SCHNORR => 2,
     CRYPT_ALGO_FALCON  => 129,
-
-    CRYPT_ALGO_POSTQUANTUM => 0x80, # bit-flag
 };
+use constant CRYPT_ALGO_POSTQUANTUM => 0x80; # bit-flag
 
 use constant CRYPT_ALGO_NAMES => {
     map { lc(s/^CRYPT_ALGO_//r) } reverse %{&CRYPT_ALGO}
+};
+
+use constant CRYPT_ALGO_BY_NAME => {
+    map { lc(s/^CRYPT_ALGO_//r) } %{&CRYPT_ALGO}
 };
 
 use constant SIGHASH_TYPES => {
@@ -171,6 +174,8 @@ our @EXPORT = (
     'TX_TYPES_NAMES',
     'PROTOCOL2NAME',
     'CRYPT_ALGO_NAMES',
+    'CRYPT_ALGO_BY_NAME',
+    'CRYPT_ALGO_POSTQUANTUM',
 );
 push @EXPORT, qw(timeslot);
 
