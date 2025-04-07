@@ -13,6 +13,12 @@ install::
 	#mkdir -p ${DST_ETC} && cp -r -n etc/* ${DST_ETC} || true
 	@echo "Install done"
 
+installdeps::
+	@for module in Encode::Base58::GMP Math::GMPz Crypt::PK::ECC::Schnorr Crypt::PQClean::Sign JSON::XS DBI DBD::SQLite DBD::mysql HTTP::Message Hash::MultiValue Params::Validate Role::Tiny Tie::IxHash CryptX Test::MockModule; do \
+		perl -M$${module} -e '' 2>/dev/null && continue || cpan -i $${module}; \
+		perl -M$${module} -e '' 2>/dev/null || exit 1; \
+	done
+
 docker:: Dockerfile
 	docker build --rm -t qbitcoin:latest . && docker image prune --force --filter label=stage=builder
 
