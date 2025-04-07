@@ -34,7 +34,7 @@ sub price_by_level {
     my ($level) = @_;
 
     # return 0.999**$level;
-    # Avoic floating point arithmetic
+    # Avoid floating point arithmetic
     return $price_by_level[$level];
 }
 
