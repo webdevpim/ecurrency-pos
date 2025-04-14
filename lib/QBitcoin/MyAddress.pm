@@ -24,6 +24,7 @@ use constant FIELDS => {
 mk_accessors(qw(private_key));
 
 state $my_address;
+state $my_hashes;
 
 sub my_address {
     my $class = shift // __PACKAGE__;
@@ -67,6 +68,7 @@ sub create {
     if ($self) {
         Infof("Created my address %s", $self->address);
         push @$my_address, $self if $my_address;
+        undef $my_hashes; # Clear cache
         # Do not forget to load utxo for this address by QBitcoin::Generate->load_address_utxo()
     }
     return $self;
@@ -106,7 +108,6 @@ sub scripthash {
 sub get_by_hash {
     my $class = shift;
     my ($hash) = @_;
-    state $my_hashes;
     if (!$my_hashes) {
         $my_hashes = {};
         foreach my $address (my_address()) {
