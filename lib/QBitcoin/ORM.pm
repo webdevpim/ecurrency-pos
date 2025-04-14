@@ -17,7 +17,8 @@ use constant DB_TYPES => {
 };
 use constant DB_TYPES;
 
-use constant DEBUG_ORM => 1;
+# Define this as constant but not configurable option b/c in this case "DEBUG_ORM && Debugf(...)" will be skipped at compile time
+use constant DEBUG_ORM => 0;
 
 use parent 'Exporter';
 our @EXPORT_OK = qw(dbh find fetch create replace update delete IGNORE DEBUG_ORM for_log);
