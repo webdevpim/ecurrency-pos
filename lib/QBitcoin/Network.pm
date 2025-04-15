@@ -439,7 +439,8 @@ sub call_qbt_peers {
         # If we have disconnected peer with reputation more than worse of our connected -> connect to it
         while (@peers && ($connect_in + $connect_out <= MIN_CONNECTIONS || $connect_out <= MIN_OUT_CONNECTIONS)) {
             my $peer = shift @peers;
-            if ($connect_out >= MIN_OUT_CONNECTIONS &&
+            if (@connected &&
+                $connect_out >= MIN_OUT_CONNECTIONS &&
                 $connect_in + $connect_out >= MIN_CONNECTIONS &&
                 $peer->reputation <= $worst_reputation) {
                 last;
