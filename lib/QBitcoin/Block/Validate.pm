@@ -98,7 +98,7 @@ sub validate_chain {
         }
         if (my $coinbase = $tx->up) {
             if ($coinbase->tx_out && $coinbase->tx_out ne $tx->hash) {
-                Warningf("Coinbase transaction %s has already been spent in %s", $coinbase->hash_str, $coinbase->tx_out_str);
+                Warningf("Coinbase transaction %s has already been spent in %s", $tx->hash_str, $coinbase->tx_out_str);
                 $fail_tx = $tx->hash;
                 last;
             }

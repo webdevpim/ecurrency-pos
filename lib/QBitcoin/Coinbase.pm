@@ -399,4 +399,10 @@ sub min_tx_time {
     return COINBASE_CONFIRM_TIME + ($self->btc_confirm_time // return undef);
 }
 
+sub tx_out_str {
+    my $self = shift;
+    my $tx_out = $self->tx_out // return undef;
+    return unpack("H*", substr($tx_out, 0, 4));
+}
+
 1;
