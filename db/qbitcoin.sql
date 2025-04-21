@@ -1,5 +1,5 @@
 
-CREATE TABLE IF NOT EXISTS `block` (
+CREATE TABLE `block` (
   height int unsigned NOT NULL PRIMARY KEY,
   time int unsigned NOT NULL,
   hash binary(32) NOT NULL,
@@ -9,10 +9,10 @@ CREATE TABLE IF NOT EXISTS `block` (
   prev_hash binary(32) DEFAULT NULL,
   merkle_root binary(32) NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS `block_hash` ON `block` (hash);
-CREATE INDEX IF NOT EXISTS `block_time` ON `block` (time);
+CREATE UNIQUE INDEX `block_hash` ON `block` (hash);
+CREATE INDEX `block_time` ON `block` (time);
 
-CREATE TABLE IF NOT EXISTS `transaction` (
+CREATE TABLE `transaction` (
   id integer NOT NULL AUTO_INCREMENT PRIMARY KEY, -- "integer" (signed) required for sqlite autoincrement
   hash binary(32) NOT NULL,
   block_height int unsigned NOT NULL,
@@ -22,18 +22,18 @@ CREATE TABLE IF NOT EXISTS `transaction` (
   fee bigint signed NOT NULL,
   FOREIGN KEY (block_height) REFERENCES `block` (height) ON DELETE CASCADE
 );
-CREATE UNIQUE INDEX IF NOT EXISTS `tx_hash` ON `transaction` (hash);
-CREATE UNIQUE INDEX IF NOT EXISTS `tx_block_height_pos` ON `transaction` (block_height, block_pos);
+CREATE UNIQUE INDEX `tx_hash` ON `transaction` (hash);
+CREATE UNIQUE INDEX `tx_block_height_pos` ON `transaction` (block_height, block_pos);
 
 -- Actually these are qbt addresses
-CREATE TABLE IF NOT EXISTS `redeem_script` (
+CREATE TABLE `redeem_script` (
   id integer NOT NULL AUTO_INCREMENT PRIMARY KEY,
   hash varbinary(32) NOT NULL,
   script blob NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS `redeem_script_hash` ON `redeem_script` (hash);
+CREATE UNIQUE INDEX `redeem_script_hash` ON `redeem_script` (hash);
 
-CREATE TABLE IF NOT EXISTS `txo` (
+CREATE TABLE `txo` (
   value      bigint unsigned NOT NULL,
   num        int unsigned NOT NULL,
   tx_in      integer NOT NULL,
@@ -46,14 +46,14 @@ CREATE TABLE IF NOT EXISTS `txo` (
   FOREIGN KEY (tx_out)     REFERENCES `transaction`   (id) ON DELETE SET NULL,
   FOREIGN KEY (scripthash) REFERENCES `redeem_script` (id) ON DELETE RESTRICT
 );
-CREATE INDEX IF NOT EXISTS `tx_out` ON `txo` (tx_out);
+CREATE INDEX `tx_out` ON `txo` (tx_out);
 
-CREATE TABLE IF NOT EXISTS `my_address` (
+CREATE TABLE `my_address` (
   address     varchar(255) NOT NULL PRIMARY KEY,
   private_key blob(4096)   NOT NULL -- TODO: encrypted
 );
 
-CREATE TABLE IF NOT EXISTS `btc_block` (
+CREATE TABLE `btc_block` (
   height int unsigned DEFAULT NULL,
   time int unsigned NOT NULL,
   bits int unsigned NOT NULL,
@@ -65,11 +65,11 @@ CREATE TABLE IF NOT EXISTS `btc_block` (
   prev_hash binary(32) DEFAULT NULL,
   merkle_root binary(32) NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS `btc_height` ON `btc_block` (height);
-CREATE UNIQUE INDEX IF NOT EXISTS `btc_hash`   ON `btc_block` (hash);
-CREATE        INDEX IF NOT EXISTS `scanned`    ON `btc_block` (scanned, height);
+CREATE UNIQUE INDEX `btc_height` ON `btc_block` (height);
+CREATE UNIQUE INDEX `btc_hash`   ON `btc_block` (hash);
+CREATE        INDEX `scanned`    ON `btc_block` (scanned, height);
 
-CREATE TABLE IF NOT EXISTS `coinbase` (
+CREATE TABLE `coinbase` (
   btc_block_height int unsigned DEFAULT NULL,
   btc_tx_num smallint unsigned DEFAULT NULL,
   btc_out_num smallint unsigned NOT NULL,
@@ -85,9 +85,9 @@ CREATE TABLE IF NOT EXISTS `coinbase` (
   FOREIGN KEY (tx_out)           REFERENCES `transaction`   (id)     ON DELETE SET NULL,
   FOREIGN KEY (scripthash)       REFERENCES `redeem_script` (id)     ON DELETE RESTRICT
 );
-CREATE INDEX IF NOT EXISTS `coinbase_tx_out` ON `coinbase` (tx_out);
+CREATE INDEX `coinbase_tx_out` ON `coinbase` (tx_out);
 
-CREATE TABLE IF NOT EXISTS `peer` (
+CREATE TABLE `peer` (
   type_id smallint unsigned NOT NULL,
   status smallint unsigned NOT NULL DEFAULT 0,
   ip binary(16) NOT NULL,
@@ -107,9 +107,9 @@ CREATE TABLE IF NOT EXISTS `peer` (
   pinned smallint unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY (type_id, ip)
 );
-CREATE INDEX IF NOT EXISTS `peer_reputation` ON `peer` (reputation);
+CREATE INDEX `peer_reputation` ON `peer` (reputation);
 
-CREATE TABLE IF NOT EXISTS `version` (
+CREATE TABLE `version` (
   time timestamp not null DEFAULT CURRENT_TIMESTAMP,
   version int unsigned NOT NULL,
   PRIMARY KEY (version)
