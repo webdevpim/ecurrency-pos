@@ -214,14 +214,23 @@ sub cmd_headers {
     }
     elsif ($known_block && $num == MAX_BTC_HEADERS) {
         # All received block are known for us. Was it deep rollback?
-        my $start_height = $known_block->height;
-        if (!$start_height) {
-            my ($block) = Bitcoin::Block->find(height => { "IS NOT" => undef }, -sortby => 'height DESC', -limit => 1);
-            $start_height = $block ? $block->height+1 : 0;
+        if (defined(my $start_height = $known_block->height)) {
+            if (!$start_height) {
+                my ($block) = Bitcoin::Block->find(height => { "IS NOT" => undef }, -sortby => 'height DESC', -limit => 1);
+                $start_height = $block ? $block->height+1 : 0;
+            }
+            my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*int(MAX_BTC_HEADERS*0.95) } 1 .. 250 ], -sortby => "height DESC");
+            $self->send_message("getheaders", pack("V", PROTOCOL_VERSION) .
+                varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . ZERO_HASH);
         }
-        my @blocks = Bitcoin::Block->find(height => [ map { $start_height + $_*int(MAX_BTC_HEADERS*0.95) } 1 .. 250 ], -sortby => "height DESC");
-        $self->send_message("getheaders", pack("V", PROTOCOL_VERSION) .
-            varint(scalar(@blocks + 1)) . join("", map { $_->hash } @blocks) . $known_block->hash . ZERO_HASH);
+        else {
+            # This block is not in our best brunch, request blocks started on it
+            # We have no orphan btc blocks in our database
+            my @hashes = ($known_block->hash);
+            push @hashes, $known_block->prev_hash if $known_block->prev_hash ne ZERO_HASH;
+            $self->send_message("getheaders", pack("V", PROTOCOL_VERSION) .
+                varint(scalar(@hashes + 1)) . join("", @hashes) . ZERO_HASH);
+        }
     }
     else {
         $self->request_transactions();
