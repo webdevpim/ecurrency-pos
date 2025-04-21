@@ -27,6 +27,7 @@ use constant {
     MAGIC               => pack("V", 0xD9B4BEF9),
     MAGIC_TESTNET       => pack("V", 0x0709110B ),
     MAX_BTC_HEADERS     => 2000,
+    MAX_BTC_LOCATORS    => 101,
 };
 
 use constant {
@@ -92,6 +93,7 @@ sub request_btc_blocks {
         my @height;
         while ($height > 0) {
             push @height, $height;
+            last if @height + @locators >= MAX_BTC_LOCATORS-1;
             $step *= 2;
             $step = 100000 if $step > 100000;
             $height -= $step;

@@ -21,6 +21,7 @@ with 'Bitcoin::Protocol::ProcessBlock';
 
 use constant PROTOCOL_VERSION => 1;
 use constant MAX_BTC_HEADERS  => 2000;
+use constant MAX_BTC_LOCATORS => 101;
 
 sub genesis_time() {
     state $genesis_time = $config->{testnet} ? GENESIS_TIME_TESTNET : GENESIS_TIME;
@@ -123,6 +124,7 @@ sub request_btc_blocks {
         my @height;
         while ($height > 0) {
             push @height, $height;
+            last if @height + @locators >= MAX_BTC_LOCATORS-1;
             $step *= 2;
             $step = 100000 if $step > 100000;
             $height -= $step;
