@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS `coinbase` (
   tx_out integer DEFAULT NULL,
   upgrade_level integer DEFAULT NULL,
   PRIMARY KEY (btc_tx_hash, btc_out_num),
-  FOREIGN KEY (btc_block_height) REFERENCES `btc_block`     (height) ON DELETE RESTRICT, -- should never happens
+  FOREIGN KEY (btc_block_height) REFERENCES `btc_block`     (height) ON DELETE CASCADE,
   FOREIGN KEY (tx_out)           REFERENCES `transaction`   (id)     ON DELETE SET NULL,
   FOREIGN KEY (scripthash)       REFERENCES `redeem_script` (id)     ON DELETE RESTRICT
 );
