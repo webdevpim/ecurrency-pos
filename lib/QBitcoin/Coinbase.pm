@@ -3,12 +3,12 @@ use warnings;
 use strict;
 use feature 'state';
 
-use Scalar::Util qw(weaken);
+use Scalar::Util qw(weaken refaddr);
 use QBitcoin::Accessors qw(new mk_accessors);
 use QBitcoin::Log;
 use QBitcoin::Const;
 use QBitcoin::Config;
-use QBitcoin::ORM qw(:types dbh find for_log DEBUG_ORM);
+use QBitcoin::ORM qw(:types dbh find fetch for_log DEBUG_ORM);
 use QBitcoin::Crypto qw(hash160 hash256);
 use QBitcoin::Address qw(script_by_pubkey);
 use QBitcoin::ProtocolState qw(btc_synced);
@@ -41,7 +41,8 @@ my %COINBASE; # just short-live cache for recently produced entries
 sub store {
     my $self = shift;
     my $class = ref $self;
-    my ($coinbase) = $class->find(
+    # fetch is more low-level than find and does not create object
+    my ($coinbase) = $class->fetch(
         btc_block_height => $self->btc_block_height,
         btc_tx_num       => $self->btc_tx_num,
         btc_out_num      => $self->btc_out_num,
@@ -118,7 +119,7 @@ sub get_new {
     my @coinbase;
     while (my $hash = $sth->fetchrow_hashref()) {
         my $key = $hash->{btc_tx_hash} . $hash->{btc_out_num};
-        next if $COINBASE{$key}; # transaction for this coinbase already generated (but not stored yet)
+        next if defined($COINBASE{$key}); # transaction for this coinbase already generated (but not stored yet)
         $hash->{value_btc} = value_btc($hash);
         my $coinbase = $class->new($hash);
         $COINBASE{$key} = $coinbase;
@@ -133,7 +134,9 @@ sub DESTROY {
     my $self = shift;
     # weaken() only undefine value but do not delete it, so do it from the object destructor
     my $key = $self->{btc_tx_hash} . $self->{btc_out_num};
-    delete $COINBASE{$key};
+    if (!defined($COINBASE{$key}) || refaddr($self) == refaddr($COINBASE{$key})) {
+        delete $COINBASE{$key};
+    }
 }
 
 # We do not need to build separate singleton cache for coinbase as we do for txo

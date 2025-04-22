@@ -44,7 +44,7 @@ sub save {
     my $self = shift;
     if ($self->tx_in) {
         my $key = $self->key;
-        if ($TXO{$key}) {
+        if (defined $TXO{$key}) {
             Errf("Attempt to override already loaded txo %s:%u", $self->tx_in_str, $self->num);
             die "Attempt to override already loaded txo " . $self->tx_in_str . ":" . $self->num . "\n";
         }
@@ -137,7 +137,7 @@ sub is_cached {
     my $self = shift;
     if ($self->tx_in) {
         my $key = $self->key;
-        if ($TXO{$key} && refaddr($self) == refaddr($TXO{$key})) {
+        if (defined($TXO{$key}) && refaddr($self) == refaddr($TXO{$key})) {
             return 1;
         }
     }
@@ -149,8 +149,7 @@ sub DESTROY {
     # Compare pointers to avoid removing from the cache by destroy unlinked object
     if ($self->tx_in) {
         my $key = $self->key;
-        my $cached = $TXO{$key};
-        if ($TXO{$key} && refaddr($self) == refaddr($TXO{$key})) {
+        if (!defined($TXO{$key}) || refaddr($self) == refaddr($TXO{$key})) {
             delete $TXO{$key};
         }
     }
