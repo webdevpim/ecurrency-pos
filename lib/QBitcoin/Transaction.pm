@@ -128,10 +128,6 @@ sub save {
         $in->{txo}->del_my_utxo() if $self->fee >= 0 && $in->{txo}->is_my;
     }
 
-    if ($self->up) {
-        # This transaction is already validated
-        $self->up->store;
-    }
     return 0;
 }
 
@@ -144,6 +140,11 @@ sub receive {
         }
         return -1;
     }
+
+    if ($self->up) {
+        $self->up->store;
+    }
+
     Debugf("Process tx %s fee %li size %u", $self->hash_str, $self->fee, $self->size);
     $self->process_pending();
     return 0;
