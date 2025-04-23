@@ -13,6 +13,7 @@ use QBitcoin::ORM qw(find fetch create delete :types);
 use QBitcoin::Crypto qw(hash256);
 use QBitcoin::TXO;
 use QBitcoin::Coinbase;
+use QBitcoin::ValueUpgraded qw(level_by_total);
 use QBitcoin::ConnectionList;
 use Bitcoin::Serialized;
 
@@ -568,6 +569,8 @@ sub deserialize {
     if ($tx_type == TX_TYPE_COINBASE) {
         if (UPGRADE_POW) {
             $upgrade_level = $data->get_varint;
+            $upgrade_level < level_by_total(MAX_VALUE)
+                or return undef;
             $up = deserialize_coinbase($data, $upgrade_level) // return undef;
         }
         else {
