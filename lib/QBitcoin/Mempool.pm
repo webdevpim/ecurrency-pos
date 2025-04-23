@@ -64,6 +64,13 @@ sub choose_for_block {
                 $mempool[$i]->drop();
                 $mempool[$i] = $new_tx;
             }
+            my $key = $coinbase->btc_tx_hash . $coinbase->btc_out_num;
+            if (exists $spent{$key}) {
+                # Spent in previous mempool transaction
+                $mempool[$i] = undef;
+                next;
+            }
+            $spent{$key} = 1;
         }
         my $skip = 0;
         foreach my $in (@{$mempool[$i]->in}) {
