@@ -57,11 +57,10 @@ sub choose_for_block {
             }
             my $upgrade_level = level_by_total($upgraded_total += $coinbase->value_btc);
             if ($mempool[$i]->upgrade_level != $upgrade_level) {
-                # Re-create coinbase transaction with new upgrade level and drop old one
+                # Re-create coinbase transaction with new upgrade level
                 my $new_tx = QBitcoin::Transaction->new_coinbase($coinbase, $upgrade_level);
                 Debugf("Upgrade level changed %u -> %u, coinbase tx %s replaced with %s in mempool",
                     $mempool[$i]->upgrade_level, $upgrade_level, $mempool[$i]->hash_str, $new_tx->hash_str);
-                $mempool[$i]->drop();
                 $mempool[$i] = $new_tx;
             }
             my $key = $coinbase->btc_tx_hash . $coinbase->btc_out_num;
