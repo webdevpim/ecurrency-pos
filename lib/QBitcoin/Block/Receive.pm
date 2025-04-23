@@ -274,6 +274,14 @@ sub receive {
         }
     }
 
+    # Remove transactions with spent inputs from the mempool
+    # Do it only when we got new best block
+    # b/c the best chain may has several transactions with inputs spent in our chain,
+    # and we should not cleanup mempool after receive each of these transactions
+    if (mempool_synced() && blockchain_synced()) {
+        QBitcoin::Transaction->cleanup_mempool();
+    }
+
     return 0;
 }
 

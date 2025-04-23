@@ -138,7 +138,6 @@ sub main_loop {
         QBitcoin::Block->store_blocks();
         my $timeout = SELECT_TIMEOUT;
         if (mempool_synced() && blockchain_synced()) {
-            QBitcoin::Transaction->cleanup_mempool();
             QBitcoin::Produce->produce() if $config->{produce};
             if ($generate) {
                 my $time = time();
