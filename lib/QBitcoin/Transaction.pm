@@ -329,6 +329,15 @@ sub cleanup_mempool {
             }
             next;
         }
+        if (UPGRADE_POW && $tx->is_coinbase) {
+            if ($tx->up->tx_out) {
+                if ($tx->drop()) {
+                    Infof("Drop coinbase tx %s from mempool b/c it was already spent in %s",
+                        $tx->hash_str, $tx->hash_str($tx->up->tx_out));
+                }
+            }
+            next;
+        }
         my $spent_txo;
         foreach my $in (@{$tx->in}) {
             my $txo = $in->{txo};
