@@ -19,8 +19,11 @@ installdeps::
 		perl -M$${module} -e '' 2>/dev/null || exit 1; \
 	done
 
+DOCKER = $(shell (docker -h >/dev/null 2>&1 && echo docker) || (podman -h >/dev/null 2>&1 && echo podman))
+
 docker:: Dockerfile
-	docker build --rm -t qbitcoin:latest . && docker image prune --force --filter label=stage=builder
+	@[ -n "$(DOCKER)" ] || { echo "Neither docker nor podman found" >&2; exit 1; }
+	$(DOCKER) build --rm -t qbitcoin:latest . && $(DOCKER) image prune --force --filter label=stage=builder
 
 PM_FILES := $(shell find lib -type f -name '*.pm')
 
