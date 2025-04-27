@@ -2,6 +2,8 @@
 # for save blockchain and wallet data on restart container
 # Example for run container from this image:
 # docker run --volume $(pwd)/database:/database --read-only --rm --detach -p 9555:9555 --name qbitcoin qbitcoin
+# or:
+# docker run -e dbi=mysql --mount type=bind,source=/etc/qbitcoin.conf,target=/etc/qbitcoin.conf,readonly -mount type=bind,source=/var/run/mysqld/mysqld.sock,target=/var/lib/mysql.sock --rm --detach -p 9555:9555 --name qbitcoin qbitcoin
 # then you can run "docker exec qbitcoin qbitcoin-cli help"
 FROM alpine:latest AS builder
 LABEL stage=builder
@@ -24,7 +26,7 @@ WORKDIR /database
 
 RUN apk add --no-cache \
     perl openssl sqlite-libs gmp \
-    perl-json-xs perl-dbd-sqlite perl-dbi \
+    perl-json-xs perl-dbd-sqlite perl-dbd-mysql perl-dbi \
     perl-http-message perl-hash-multivalue perl-params-validate \
     perl-role-tiny perl-tie-ixhash perl-cryptx
 
@@ -38,11 +40,18 @@ ENV dbi=sqlite
 ENV database=qbitcoin
 ENV debug=
 
-CMD if mount | grep -q " on /database "; then \
-      /qbitcoin/bin/qbitcoin-init --dbi=${dbi} --database=${database} /qbitcoin/db && \
-      exec /qbitcoin/bin/qbitcoind --peer=node.qbitcoin.net --dbi=${dbi} --database=${database} \
-         --log=/dev/null --verbose ${debug:+$( [ "$debug" = "0" ] || echo --debug )}; \
-    else echo "Please mount /database as external volume"; \
-    fi
+CMD if [ "${dbi}" = "sqlite" ]; then \
+      if mount | grep -q " on /database "; then :; \
+      else echo "Please mount /database as an external volume" >&2; exit 1; \
+      fi; \
+    elif [ "${dbi}" = "mysql" ]; then \
+      if mount | grep -q " on /var/lib/mysql.sock " && mount | grep -q " on /etc/qbitcoin.conf "; then :; \
+      else echo "Please mount /var/lib/mysql.sock and /etc/qbitcoin.conf as external files" >&2; exit 1; \
+      fi; \
+    else echo "Unsupported dbi ${dbi}, choose sqlite or mysql" >&2; exit 1; \
+    fi; \
+    /qbitcoin/bin/qbitcoin-init --dbi=${dbi} --database=${database} /qbitcoin/db && \
+    exec /qbitcoin/bin/qbitcoind --peer=node.qbitcoin.net --dbi=${dbi} --database=${database} \
+         --log=/dev/null --verbose ${debug:+$( [ "$debug" = "0" ] || echo --debug )}
 
 EXPOSE 9555
