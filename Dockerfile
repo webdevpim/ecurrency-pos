@@ -51,7 +51,7 @@ CMD if [ "${dbi}" = "sqlite" ]; then \
     else echo "Unsupported dbi ${dbi}, choose sqlite or mysql" >&2; exit 1; \
     fi; \
     /qbitcoin/bin/qbitcoin-init --dbi=${dbi} --database=${database} /qbitcoin/db && \
-    exec /qbitcoin/bin/qbitcoind --peer=node.qbitcoin.net --dbi=${dbi} --database=${database} \
+    exec /qbitcoin/bin/qbitcoind --peer=node.qbitcoin.net --dbi=${dbi} --database=${database} --rpc="*:9556" \
          --log=/dev/null --verbose ${debug:+$( [ "$debug" = "0" ] || echo --debug )}
 
 EXPOSE 9555 9556
