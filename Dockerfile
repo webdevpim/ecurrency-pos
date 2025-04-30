@@ -54,4 +54,4 @@ CMD if [ "${dbi}" = "sqlite" ]; then \
     exec /qbitcoin/bin/qbitcoind --peer=node.qbitcoin.net --dbi=${dbi} --database=${database} \
          --log=/dev/null --verbose ${debug:+$( [ "$debug" = "0" ] || echo --debug )}
 
-EXPOSE 9555
+EXPOSE 9555 9556
