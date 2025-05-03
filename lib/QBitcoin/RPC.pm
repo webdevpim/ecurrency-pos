@@ -88,7 +88,7 @@ sub validate_args {
 sub response_error {
     my $self = shift;
     my ($message, $code, $result) = @_;
-    my $http_code = $code == ERR_INTERNAL_ERROR ? 500 : ERR_UNKNOWN_METHOD ? 404 : 400;
+    my $http_code = $code == ERR_INTERNAL_ERROR ? 500 : $code == ERR_UNKNOWN_METHOD ? 404 : 400;
     return $self->http_response($http_code, $message, { error => { code => $code, message => $message }, result => $result });
 }
 
