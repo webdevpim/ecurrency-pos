@@ -131,7 +131,7 @@ sub validate_vout {
 
 sub validate_inputs {
     my $value = $_[0];
-    my $inputs = eval { $JSON->decode($value) };
+    my $inputs = ref($value) ? $value : eval { $JSON->decode($value) };
     if (!$inputs || ref($inputs) ne "ARRAY") {
         return 0;
     }
@@ -146,7 +146,7 @@ sub validate_inputs {
 
 sub validate_outputs {
     my $value = $_[0];
-    my $outputs = eval { $JSON->decode($value) };
+    my $outputs = ref($value) ? $value : eval { $JSON->decode($value) };
     if (!$outputs || (ref($outputs) ne "ARRAY" && ref($outputs) ne "HASH")) {
         return 0;
     }
@@ -171,7 +171,7 @@ sub validate_privkey {
 
 sub validate_privkeys {
     my $value = $_[0];
-    my $privkeys = eval { $JSON->decode($value) };
+    my $privkeys = ref($value) ? $value : eval { $JSON->decode($value) };
     if (!$privkeys || ref($privkeys) ne "ARRAY") {
         return 0;
     }
