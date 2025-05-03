@@ -136,8 +136,8 @@ sub validate_inputs {
         return 0;
     }
     foreach my $in (@$inputs) {
-        ($in->{txid} && !ref($in->{txid}) && validate_txid($in->{txid})) or return 0;
-        ($in->{vout} && !ref($in->{vout}) && validate_vout($in->{vout})) or return 0;
+        (defined($in->{txid}) && !ref($in->{txid}) && validate_txid($in->{txid})) or return 0;
+        (defined($in->{vout}) && !ref($in->{vout}) && validate_vout($in->{vout})) or return 0;
         keys(%$in) == 2 or return 0;
     }
     $_[0] = $inputs;
