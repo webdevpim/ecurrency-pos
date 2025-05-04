@@ -137,7 +137,7 @@ sub cmd_sendtx {
     my $hash = unpack("a32", $data); # yes, it's copy of $data
     my $tx = QBitcoin::Transaction->get_by_hash($hash);
     if ($tx) {
-        $self->send_message("tx", $tx->serialize . ($tx->received_from ? $tx->received_from->peer->ip : "\x00"x16));
+        $self->send_message("tx", $tx->serialize . ($tx->received_from_peer ? $tx->received_from->peer->ip : "\x00"x16));
     }
     else {
         # Own stake tx which was already dropped?
@@ -416,7 +416,7 @@ sub process_tx {
             # announce to other peers
             $tx->announce();
             if ($tx->fee > 0 || $tx->up) {
-                my $recv_peer = $tx->received_from && $tx->received_from->can('peer') ? $tx->received_from->peer : undef;
+                my $recv_peer = $tx->received_from_peer ? $tx->received_from->peer : undef;
                 if ($recv_peer) {
                     $recv_peer->add_reputation($tx->up ? 200 : 2);
                 }

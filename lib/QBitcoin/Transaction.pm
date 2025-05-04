@@ -151,6 +151,11 @@ sub receive {
     return 0;
 }
 
+sub received_from_peer {
+    my $self = shift;
+    return $self->received_from && $self->received_from->can('peer');
+}
+
 sub process_pending {
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my $self = shift;
@@ -965,7 +970,7 @@ sub type_by_hash {
 
 sub announce {
     my $self = shift;
-    my $recv_peer = $self->received_from && $self->received_from->can('peer') ? $self->received_from->peer : undef;
+    my $recv_peer = $self->received_from_peer ? $self->received_from->peer : undef;
     foreach my $connection (QBitcoin::ConnectionList->connected(PROTOCOL_QBITCOIN)) {
         next if $recv_peer && $connection->peer->id eq $recv_peer->id;
         next unless $connection->protocol->can("announce_tx");
@@ -1323,7 +1328,7 @@ sub drop_all_pending {
     my ($connection) = @_;
 
     foreach my $tx (values %PENDING_TX_INPUT) {
-        if ($tx->received_from->peer->id eq $connection->peer->id) {
+        if ($tx->received_from_peer && $tx->received_from->peer->id eq $connection->peer->id) {
             $tx->drop();
         }
     }
