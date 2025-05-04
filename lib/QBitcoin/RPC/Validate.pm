@@ -164,9 +164,9 @@ sub validate_outputs {
 }
 
 sub validate_privkey {
-    my $pk = eval { wif_to_pk($_[0]) }
+    eval { wif_to_pk($_[0]) }
         or return 0;
-    $_[0] = $pk;
+    return 1;
 }
 
 sub validate_privkeys {
@@ -175,14 +175,12 @@ sub validate_privkeys {
     if (!$privkeys || ref($privkeys) ne "ARRAY") {
         return 0;
     }
-    my @pk;
     foreach my $privkey (@$privkeys) {
         ref($privkey) eq "" or return 0;
-        my $pk = eval { wif_to_pk($privkey) }
+        eval { wif_to_pk($privkey) }
             or return 0;
-        push @pk, $pk;
     }
-    $_[0] = \@pk;
+    return 1;
 }
 
 sub validate_address_type {

@@ -455,7 +455,7 @@ sub type_as_text {
 sub as_hashref {
     my $self = shift;
     return {
-        $self->hash ? ( hash => unpack("H*", $self->hash) ) : (),
+        $self->hash ? ( hash => unpack("H*", $self->hash), txid => unpack("H*", $self->hash) ) : (),
         defined ($self->fee) ? ( fee  => $self->fee / DENOMINATOR ) : (),
         size => $self->size //= length($self->serialize),
         in   => $self->in_raw ? [ map { inputraw_as_hashref($_) } @{$self->in_raw} ] : [ map { input_as_hashref($_) } @{$self->in} ],
@@ -701,6 +701,7 @@ sub create_outputs {
 # request input_pending from remote ($self->received_from)
 sub load_inputs {
     my $self = shift;
+    my ($unsigned) = @_;
 
     my @loaded_inputs;
     my @need_load_txo;
@@ -709,7 +710,7 @@ sub load_inputs {
     my $inputs = delete $self->{in_raw};
     foreach my $in (@$inputs) {
         if (my $txo = QBitcoin::TXO->get($in)) {
-            if ($txo->set_redeem_script($in->{redeem_script}) != 0) {
+            unless (($unsigned && $in->{redeem_script} eq "") || $txo->set_redeem_script($in->{redeem_script}) == 0) {
                 Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
                 return undef;
             }
@@ -740,7 +741,7 @@ sub load_inputs {
         my $class = ref $self;
         foreach my $in (@need_load_txo) {
             if (my $txo = QBitcoin::TXO->get($in)) {
-                if ($txo->set_redeem_script($in->{redeem_script}) != 0) {
+                unless (($unsigned && $in->{redeem_script} eq "") || $txo->set_redeem_script($in->{redeem_script}) == 0) {
                     Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
                     return undef;
                 }

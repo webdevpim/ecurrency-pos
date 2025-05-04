@@ -15,7 +15,7 @@ use QBitcoin::Transaction;
 use QBitcoin::ProtocolState qw(mempool_synced blockchain_synced btc_synced);
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
-use QBitcoin::Address qw(scripthash_by_address address_by_pubkey wallet_import_format address_by_hash);
+use QBitcoin::Address qw(wif_to_pk scripthash_by_address address_by_pubkey wallet_import_format address_by_hash);
 use QBitcoin::MyAddress;
 use QBitcoin::Generate;
 use QBitcoin::Protocol;
@@ -549,16 +549,13 @@ sub cmd_signrawtransactionwithkey {
         return $self->response_error("", ERR_DESERIALIZATION_ERROR, "TX decode failed.");
     }
     $tx->received_from = $self;
-    if (!$tx->load_inputs()) {
+    if (!$tx->load_inputs(1)) {
         return $self->response_error("", ERR_DESERIALIZATION_ERROR, "Incorrect transaction data.");
     }
     if ($tx->is_pending) {
         return $self->response_error("", ERR_DESERIALIZATION_ERROR, "Some inputs unknown.");
     }
-    if ($tx->is_known) {
-        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction already published.");
-    }
-    my @address = map { QBitoin::MyAddress->new(private_key => $_) } @$privkeys;
+    my @address = map { QBitcoin::MyAddress->new(private_key => $_) } @$privkeys;
     my @errors;
     foreach my $num (0 .. $#{$tx->in}) {
         my $in = $tx->in->[$num];
@@ -582,6 +579,9 @@ sub cmd_signrawtransactionwithkey {
         }
     }
     $tx->calculate_hash;
+    if (!@errors && QBitcoin::Transaction->check_by_hash($tx->hash)) {
+        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction already published.");
+    }
     return $self->response_ok({
         hex      => unpack("H*", $tx->serialize_unsigned),
         complete => @errors ? FALSE : TRUE,
@@ -1021,7 +1021,7 @@ As a JSON-RPC call
 );
 sub cmd_importprivkey {
     my $self = shift;
-    my $private_key = $self->args->[0];
+    my $private_key = wif_to_pk($self->args->[0]);
     my ($pk_alg) = pk_alg($private_key)
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Incorrect private key");
     my $privkey = pk_import($self->args->[0], $pk_alg)
