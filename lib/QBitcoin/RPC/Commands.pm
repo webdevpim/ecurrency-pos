@@ -469,7 +469,7 @@ Result:
 Examples:
 
 Create a transaction
-> qbitcoin-cli createrawtransaction "[{\"txid\" : \"mytxid\",\"vout\":0}]" "{\"myaddress\":0.01}"
+> qbitcoin-cli createrawtransaction '[{"txid" : "mytxid","vout":0}]" "{"myaddress":0.01}'
 Sign the transaction, and get back the hex
 > qbitcoin-cli signrawtransactionwithwallet "myhex"
 
@@ -537,8 +537,8 @@ Result:
 }
 
 Examples:
-> qbitcoin-cli signrawtransactionwithkey "myhex" "[\"key1\",\"key2\"]"
-> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "signrawtransactionwithkey", "params": ["myhex", "[\"key1\",\"key2\"]"]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
+> qbitcoin-cli signrawtransactionwithkey "myhex" '["key1","key2"]'
+> curl --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "signrawtransactionwithkey", "params": ["myhex", ["key1","key2"]]}' -H 'content-type: application/json;' http://127.0.0.1:${\RPC_PORT}/
 );
 sub cmd_signrawtransactionwithkey {
     my $self = shift;
