@@ -571,16 +571,18 @@ sub cmd_signrawtransactionwithkey {
         }
         else {
             push @errors, {
-                txid       => $in->{txo}->tx_in,
+                txid       => unpack("H*", $in->{txo}->tx_in),
                 vout       => $in->{txo}->num,
-                scripthash => $in->{txo}->scripthash,
+                scripthash => unpack("H*", $in->{txo}->scripthash),
                 error      => "Unknown scripthash",
             };
         }
     }
-    $tx->calculate_hash;
-    if (!@errors && QBitcoin::Transaction->check_by_hash($tx->hash)) {
-        return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction already published.");
+    if (!@errors) {
+        $tx->calculate_hash;
+        if (QBitcoin::Transaction->check_by_hash($tx->hash)) {
+            return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction already published.");
+        }
     }
     return $self->response_ok({
         hex      => unpack("H*", $tx->serialize_unsigned),
