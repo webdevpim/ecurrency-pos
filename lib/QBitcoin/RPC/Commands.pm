@@ -1274,7 +1274,7 @@ sub cmd_listunspent {
     my $best_height;
     if ($minconf > 1) {
         $best_height = QBitcoin::Block->blockchain_height
-            or return $self->response_ok("0");
+            or return $self->response_ok([]);
     }
     my @utxo;
     foreach my $utxo (QBitcoin::TXO->get_scripthash_utxo($scripthash)) {
