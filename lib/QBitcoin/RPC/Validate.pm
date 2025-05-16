@@ -180,6 +180,7 @@ sub validate_privkeys {
         eval { wif_to_pk($privkey) }
             or return 0;
     }
+    $_[0] = $privkeys;
     return 1;
 }
 
