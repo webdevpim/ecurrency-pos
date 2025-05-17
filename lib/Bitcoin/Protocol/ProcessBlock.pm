@@ -10,6 +10,7 @@ use QBitcoin::Log;
 use QBitcoin::Config;
 use QBitcoin::ProtocolState qw(btc_synced);
 use QBitcoin::ConnectionList;
+use QBitcoin::Coinbase;
 use Bitcoin::Block;
 
 # these values shared between QBitcoin::Protocol and Bitcoin::Protocol, they are related to btc blockchain, not to protocol
@@ -65,8 +66,10 @@ sub process_btc_block {
                     if (!$revert_height) {
                         $revert_height = $revert_block->height;
                         Noticef("Revert blockchain height %u-%u", $start_block->height+1, $revert_height);
+                        # Explicitly delete coinbase b/c "on delete cascade" doesn't work for update reference key
+                        # TODO: rollback QBT blocks if reverted blocks contain generated QBT coinbase
+                        QBitcoin::Coinbase->delete_by(btc_block_height => { '>' => $start_block->height });
                     }
-                    # TODO: rollback QBT blocks if $revert_block contains QBT coinbase
                     $revert_block->update(height => undef);
                 }
                 $block->height = $start_block->height + $new_height--;

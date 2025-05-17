@@ -8,7 +8,7 @@ use QBitcoin::Accessors qw(new mk_accessors);
 use QBitcoin::Log;
 use QBitcoin::Const;
 use QBitcoin::Config;
-use QBitcoin::ORM qw(:types dbh find fetch for_log DEBUG_ORM);
+use QBitcoin::ORM qw(:types dbh find fetch delete_by for_log DEBUG_ORM);
 use QBitcoin::Crypto qw(hash160 hash256);
 use QBitcoin::Address qw(script_by_pubkey);
 use QBitcoin::ProtocolState qw(btc_synced);

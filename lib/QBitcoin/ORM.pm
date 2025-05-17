@@ -21,7 +21,7 @@ use constant DB_TYPES;
 use constant DEBUG_ORM => 0;
 
 use parent 'Exporter';
-our @EXPORT_OK = qw(dbh find fetch create replace update delete IGNORE DEBUG_ORM for_log);
+our @EXPORT_OK = qw(dbh find fetch create replace update delete delete_by IGNORE DEBUG_ORM for_log);
 push @EXPORT_OK, keys %{&DB_TYPES};
 our %EXPORT_TAGS = ( types => [ keys %{&DB_TYPES} ] );
 
@@ -66,6 +66,60 @@ sub for_log {
     return $data =~ /^[[:print:]]*\z/s ? "'$data'" : "X'" . unpack("H*", $data) . "'";
 }
 
+sub parse_condition {
+    my ($class, $key, $value, $values) = @_;
+    my $condition = "";
+    $key =~ KEY_RE
+        or die "Incorrect search key [$key]";
+    my $type = $class->FIELDS->{$key}
+        or die "Unknown search key [$key] for " . $class->TABLE . "\n";
+    if (ref $value eq 'ARRAY') {
+        # "IN()" is sql syntax error, "IN(NULL)" matches nothing
+        $condition .= " `$key` IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
+        push @$values, @$value;
+    }
+    elsif (ref $value eq 'HASH') {
+        my $first = 1;
+        foreach my $op (keys %$value) {
+            $condition .= " AND" unless $first;
+            my $v = $value->{$op};
+            if (ref $v eq 'SCALAR') {
+                $condition .= "`$key` $op $$v ";
+            }
+            elsif (ref $v eq 'ARRAY') { # key => { not => [ 'value1', 'value2' ] }
+                $condition .= " `$key` $op IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
+                push @$values, @$value;
+            }
+            elsif (ref $v) {
+                die "Incorrect search value type " . ref($v) . " key $key\n";
+            }
+            else {
+                $condition .= " `$key` $op ?";
+                push @$values, $v;
+            }
+            $first = 0;
+        }
+    }
+    elsif (ref $value eq 'SCALAR') {
+        $condition .= " `$key` = $$value" if defined $$value; # \undef is IGNORE
+    }
+    elsif (ref $value) {
+        die "Incorrect search value type " . ref($value) . " key $key\n";
+    }
+    elsif (defined $value) {
+        if ($type == TIMESTAMP) {
+            $condition .= " `$key` = FROM_UNIXTIME(?)";
+            push @$values, $value;
+        }
+        $condition .= " `$key` = ?";
+        push @$values, $value;
+    }
+    else {
+        $condition .= " `$key` IS NULL";
+    }
+    return $condition;
+}
+
 # Returns raw hashes, not objects, without pre_load(), on_load() and new()
 sub fetch {
     my $class = shift;
@@ -89,56 +143,9 @@ sub fetch {
             $limit = $args->{$key};
             next;
         }
-        $key =~ KEY_RE
-            or die "Incorrect search key [$key]";
-        my $value = $args->{$key};
-        my $type = $class->FIELDS->{$key}
-            or die "Unknown search key [$key] for " . $class->TABLE . "\n";
+        my $cond = parse_condition($class, $key, $args->{$key}, \@values);
         $condition .= " AND" if $condition;
-        if (ref $value eq 'ARRAY') {
-            # "IN()" is sql syntax error, "IN(NULL)" matches nothing
-            $condition .= " `$key` IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
-            push @values, @$value;
-        }
-        elsif (ref $value eq 'HASH') {
-            my $first = 1;
-            foreach my $op (keys %$value) {
-                $condition .= " AND" unless $first;
-                my $v = $value->{$op};
-                if (ref $v eq 'SCALAR') {
-                    $condition .= "`$key` $op $$v ";
-                }
-                elsif (ref $v eq 'ARRAY') { # key => { not => [ 'value1', 'value2' ] }
-                    $condition .= " `$key` $op IN (" . (@$value ? join(',', ('?')x@$value) : "NULL") . ")";
-                    push @values, @$value;
-                }
-                elsif (ref $v) {
-                    die "Incorrect search value type " . ref($v) . " key $key\n";
-                }
-                else {
-                    $condition .= " `$key` $op ?";
-                    push @values, $v;
-                }
-                $first = 0;
-            }
-        }
-        elsif (ref $value eq 'SCALAR') {
-            $condition .= " `$key` = $$value" if defined $$value; # \undef is IGNORE
-        }
-        elsif (ref $value) {
-            die "Incorrect search value type " . ref($value) . " key $key\n";
-        }
-        elsif (defined $value) {
-            if ($type == TIMESTAMP) {
-                $condition .= " `$key` = FROM_UNIXTIME(?)";
-                push @values, $value;
-            }
-            $condition .= " `$key` = ?";
-            push @values, $value;
-        }
-        else {
-            $condition .= " `$key` IS NULL";
-        }
+        $condition .= $cond;
     }
     $sql .= " WHERE$condition"  if $condition;
     $sql .= " ORDER BY $sortby" if $sortby;
@@ -326,6 +333,25 @@ sub delete {
     if ($res != 1) {
         die "Can't delete $table\n";
     }
+}
+
+sub delete_by {
+    my $class = shift;
+    my $args = ref $_[0] ? $_[0] : { @_ };
+
+    my $table = $class->TABLE
+        or die "No TABLE defined in $class\n";
+    my $sql = "DELETE FROM `$table`";
+    my @values;
+    my $condition = '';
+    foreach my $key (keys %$args) {
+        my $cond = parse_condition($class, $key, $args->{$key}, \@values);
+        $condition .= " AND" if $condition;
+        $condition .= $cond;
+    }
+    $sql .= " WHERE$condition"  if $condition;
+    DEBUG_ORM && Debugf("sql: [%s], values: [%s]", $sql, join(',', map { for_log($_) } @values));
+    dbh->do($sql, undef, @values);
 }
 
 1;
