@@ -1037,7 +1037,7 @@ sub cmd_importprivkey {
     my $private_key = wif_to_pk($self->args->[0]);
     my ($pk_alg) = pk_alg($private_key)
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Incorrect private key");
-    my $privkey = pk_import($self->args->[0], $pk_alg)
+    my $privkey = pk_import($private_key, $pk_alg)
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "Incorrect private key");
     my $pubkey = $privkey->pubkey_by_privkey
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "This type of private key is not supported for my_address");
