@@ -442,7 +442,7 @@ sub cmd_createrawtransaction {
     my @in  = map {{ txo => QBitcoin::TXO->new_txo(tx_in => pack("H*", $_->{txid}), num => $_->{vout}+0) }} @$inputs;
     my @out;
     foreach my $out (@$outputs) {
-        push @out, map { QBitcoin::TXO->new_txo(value => $out->{$_} * DENOMINATOR, scripthash => scripthash_by_address($_)) } keys %$out;
+        push @out, map { QBitcoin::TXO->new_txo(value => int($out->{$_} * DENOMINATOR + 0.5), scripthash => scripthash_by_address($_)) } keys %$out;
     }
     my $tx = QBitcoin::Transaction->new(
         in      => \@in,
