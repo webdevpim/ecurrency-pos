@@ -557,8 +557,10 @@ sub cmd_signrawtransactionwithkey {
     }
     my @address = map { QBitcoin::MyAddress->new(private_key => $_) } @$privkeys;
     my @errors;
+    my $input_amount = 0;
     foreach my $num (0 .. $#{$tx->in}) {
         my $in = $tx->in->[$num];
+        $input_amount += $in->{txo}->value;
         my ($address, $script);
         foreach my $addr (@address) {
             if ($script = $addr->script_by_hash($in->{txo}->scripthash)) {
@@ -584,6 +586,15 @@ sub cmd_signrawtransactionwithkey {
             return $self->response_error("", ERR_VERIFY_ALREADY_IN_CHAIN, "Transaction already published.");
         }
     }
+
+    my $output_amount;
+    foreach my $out (@{$tx->out}) {
+        $output_amount += $out->{value};
+    }
+    if ($input_amount < $output_amount) {
+        return $self->response_error("", ERR_INVALID_REQUEST, "Insufficient funds: $input_amount < $output_amount");
+    }
+
     return $self->response_ok({
         hex      => unpack("H*", $tx->serialize_unsigned),
         complete => @errors ? FALSE : TRUE,
