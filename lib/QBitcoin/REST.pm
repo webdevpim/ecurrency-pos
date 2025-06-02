@@ -58,7 +58,7 @@ sub process_request {
     DEBUG_REST && Debugf("REST request: /%s", join("/", @path));
     if ($path[0] eq "tx") {
         if ($http_request->method eq "POST") {
-            @path == 1 or $self->http_response(404, "Unknown request");
+            @path == 1 or return $self->http_response(404, "Unknown request");
             return $self->tx_send($http_request->decoded_content);
         }
         ($path[1] && $path[1] =~ qr/^[0-9a-f]{64}\z/)
@@ -142,7 +142,7 @@ sub process_request {
         ($path[1] && $path[1] =~ qr/^[0-9a-f]{64}\z/)
             or return $self->http_response(404, "Unknown request");
         my $block = $self->get_block_by_hash(pack("H*", $path[1]))
-            or $self->http_response(404, "Block not found");
+            or return $self->http_response(404, "Block not found");
         if (@path == 2) {
             return $self->http_ok(block_obj($block));
         }
