@@ -920,7 +920,7 @@ sub valid_for_block {
         $self->check_input_script == 0
             or return -1;
     }
-    ( $self->min_tx_time(ref $block) // "Inf" ) <= timeslot($block->time)
+    ( $self->min_tx_time // "Inf" ) <= timeslot($block->time)
         or return -1;
     ( $self->min_tx_block_height // "Inf" ) <= $block->height
         or return -1;
@@ -1138,12 +1138,13 @@ sub txo_height {
 
 sub txo_time {
     my $class = shift;
-    my ($txo, $class_block) = @_;
+    my ($txo) = @_;
 
     my ($block_height, $block_time) = $class->txo_height($txo);
     if (!$block_time) {
         defined($block_height) or return undef;
-        my $block = $class_block->best_block($block_height) // $class_block->find(height => $block_height)
+        # The transaction was loaded from the database, so we can get block time from the blockchain
+        my $block = QBitcoin::Block->best_block($block_height) // QBitcoin::Block->find(height => $block_height)
             or die "Can't find block height $block_height\n";
         $block_time = $block->time;
     }
@@ -1156,9 +1157,8 @@ sub stake_weight {
     my $weight = 0;
     if ($self->is_stake) {
         my $class = ref $self;
-        my $class_block = ref $block;
         foreach my $in (map { $_->{txo} } @{$self->in}) {
-            my $in_block_time = $class->txo_time($in, $class_block);
+            my $in_block_time = $class->txo_time($in);
             if (!defined($in_block_time)) {
                 Warningf("Can't get stake_weight for %s with unconfirmed input %s:%u",
                     $self->hash_str, $in->tx_in_str, $in->num);
@@ -1252,7 +1252,6 @@ sub set_min_tx_time {
 
 sub min_tx_time {
     my $self = shift;
-    my ($class_block) = @_;
 
     if ($self->up) {
         return $self->up->min_tx_time;
@@ -1272,7 +1271,7 @@ sub min_tx_time {
         my $txo = $in->{txo};
         # reset $self->{min_tx_rel_time} if previous tx confirmed or unconfirmed
         $TX_SEQ_DEPENDS{$txo->tx_in}->{$self->hash} = $self if $self->is_cached;
-        my $txo_time = QBitcoin::Transaction->txo_time($txo, $class_block);
+        my $txo_time = QBitcoin::Transaction->txo_time($txo);
         if (defined($txo_time)) {
             $min_tx_time = $min_rel_time + $txo_time if defined($min_tx_time) && $min_tx_time < $min_rel_time + $txo_time;
         }
