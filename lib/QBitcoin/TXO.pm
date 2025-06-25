@@ -3,6 +3,7 @@ use warnings;
 use strict;
 
 use Scalar::Util qw(weaken refaddr);
+use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
 use QBitcoin::ORM qw(:types dbh find DEBUG_ORM for_log);
 use QBitcoin::Crypto qw(hash160 hash256);
