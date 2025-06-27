@@ -154,7 +154,7 @@ sub main_loop {
                 my $time_next_block = timeslot($blockchain_time > $now ? $blockchain_time : $now) + BLOCK_INTERVAL;
                 $timeout = $time_next_block - $now;
             }
-            Debugf("Have blockchain height %d, last block time %s, weight %d", QBitcoin::Block->blockchain_height // -1, defined(QBitcoin::Block->blockchain_height) ? scalar(localtime QBitcoin::Block->blockchain_time) : "undef", QBitcoin::Block->best_weight);
+            # Debugf("Have blockchain height %d, last block time %s, weight %d", QBitcoin::Block->blockchain_height // -1, defined(QBitcoin::Block->blockchain_height) ? scalar(localtime QBitcoin::Block->blockchain_time) : "undef", QBitcoin::Block->best_weight);
         }
         $rin = $win = $ein = '';
         vec($rin, fileno($listen_socket), 1) = 1 if $listen_socket;
@@ -217,7 +217,7 @@ sub main_loop {
             my $peerinfo = accept(my $new_socket, $listen_rpc);
             my ($remote_port, $peer_addr) = unpack_sockaddr_in($peerinfo);
             my $peer_ip = inet_ntoa($peer_addr);
-            Debugf("Incoming RPC connection from %s:%u", $peer_ip, $remote_port);
+            # Debugf("Incoming RPC connection from %s:%u", $peer_ip, $remote_port);
             my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($new_socket));
             my $my_ip = inet_ntoa($my_addr);
             my $connection = QBitcoin::Connection->new(
@@ -238,7 +238,7 @@ sub main_loop {
             my $peerinfo = accept(my $new_socket, $listen_rest);
             my ($remote_port, $peer_addr) = unpack_sockaddr_in($peerinfo);
             my $peer_ip = inet_ntoa($peer_addr);
-            Debugf("Incoming REST connection from %s:%u", $peer_ip, $remote_port);
+            # Debugf("Incoming REST connection from %s:%u", $peer_ip, $remote_port);
             my ($my_port, $my_addr) = unpack_sockaddr_in(getsockname($new_socket));
             my $my_ip = inet_ntoa($my_addr);
             my $connection = QBitcoin::Connection->new(

@@ -60,7 +60,7 @@ sub disconnect {
             # TODO: update peer data
         }
         else {
-            Debugf("Disconnected from %s API client %s:%u", $self->type, $self->ip, $self->port);
+            # Debugf("Disconnected from %s API client %s:%u", $self->type, $self->ip, $self->port);
         }
     }
     $self->state = STATE_DISCONNECTED;
