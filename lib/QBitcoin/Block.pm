@@ -22,11 +22,13 @@ use constant FIELDS => {
     height      => NUMERIC,
     time        => NUMERIC,
     hash        => BINARY,
-    prev_hash   => BINARY,
-    merkle_root => BINARY,
+    size        => NUMERIC,
     weight      => NUMERIC,
     upgraded    => NUMERIC,
     reward_fund => NUMERIC,
+    min_fee     => NUMERIC,
+    prev_hash   => BINARY,
+    merkle_root => BINARY,
 };
 
 use constant ATTR => qw(

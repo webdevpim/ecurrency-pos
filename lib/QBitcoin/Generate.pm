@@ -148,7 +148,7 @@ sub generate {
     my $size = $stake_tx ? $stake_tx->size : 0;
 
     # TODO: add transactions from block of the same timeslot, it's not an ancestor
-    my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $height, $stake_tx && $stake_tx->in, $upgraded_total);
+    my @transactions = QBitcoin::Mempool->choose_for_block($size, $timeslot, $prev_block, $stake_tx && $stake_tx->in);
     if (!@transactions && ($timeslot - genesis_time) / BLOCK_INTERVAL % FORCE_BLOCKS != 0) {
         return;
     }

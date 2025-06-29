@@ -12,6 +12,7 @@ use strict;
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::ValueUpgraded qw(level_by_total);
+use QBitcoin::MinFee qw(min_fee);
 
 sub want_tx {
     my $class = shift;
@@ -31,7 +32,9 @@ sub coinbase_list {
 
 sub choose_for_block {
     my $class = shift;
-    my ($size, $block_time, $block_height, $can_consume, $upgraded_total) = @_;
+    my ($size, $block_time, $prev_block, $can_consume) = @_;
+    my $block_height = $prev_block ? $prev_block->height+1 : 0;
+    my $upgraded_total = $prev_block ? $prev_block->upgraded : 0;
     my @mempool = sort { compare_tx($a, $b) }
         grep { defined($_->min_tx_block_height) && $_->min_tx_block_height <= $block_height &&
                defined($_->min_tx_time) && $_->min_tx_time <= $block_time }
@@ -41,7 +44,7 @@ sub choose_for_block {
     if (!$can_consume) {
         @mempool = grep { $_->fee == 0 || $_->coins_created } @mempool;
     }
-    my $empty_tx = 0;
+    my $low_fee_tx = 0;
     my $tx_in_block = $size ? 1 : 0;
     # It's not possible that input was spent in stake transaction
     # b/c we do not use inputs existing in any mempool transaction for stake tx
@@ -111,10 +114,25 @@ sub choose_for_block {
             $spent{$in->{txo}->tx_in . $in->{txo}->num} = 1;
         }
         $mempool_out{$mempool[$i]->hash} = scalar @{$mempool[$i]->out};
-        $empty_tx++ if $mempool[$i]->fee == 0 && @{$mempool[$i]->in};
         $size += $mempool[$i]->size;
+        my $low_fee_tx = 0;
+        if (!$mempool[$i]->is_coinbase) {
+            my $min_fee = min_fee($prev_block, $size);
+            # Calculate low-fee transactions in the block with this size and min_fee
+            for (my $j = $i; $j >= 0; $j--) {
+                defined($mempool[$j]) or next;
+                $mempool[$j]->is_standard or last;
+                # Avoid compare floating numbers
+                if ($mempool[$j]->fee * 1024 < $min_fee * $mempool[$j]->size) {
+                    last if ++$low_fee_tx > MAX_EMPTY_TX_IN_BLOCK;
+                }
+                else {
+                    last;
+                }
+            }
+        }
         $tx_in_block++;
-        if ($empty_tx > MAX_EMPTY_TX_IN_BLOCK || $size > MAX_BLOCK_SIZE || $tx_in_block > MAX_TX_IN_BLOCK) {
+        if ($low_fee_tx > MAX_EMPTY_TX_IN_BLOCK || $size > MAX_BLOCK_SIZE || $tx_in_block > MAX_TX_IN_BLOCK) {
             @mempool = splice(@mempool, 0, $i);
             last;
         }

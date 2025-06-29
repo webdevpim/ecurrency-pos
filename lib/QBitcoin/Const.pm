@@ -26,7 +26,6 @@ use constant QBITCOIN_CONST => {
     FORCE_BLOCKS            => 100, # generate each 100th block even if empty
     INCORE_LEVELS           => 6,
     INCORE_TIME             => 60,
-    MIN_FEE                 => 0.00000001, # 1 satoshi
     MAX_VALUE               => 21000000 * 100000000, # 21M
     DENOMINATOR             => 100000000,
     COMPACT_MEMORY          => 1,

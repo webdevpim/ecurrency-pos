@@ -15,6 +15,7 @@ use QBitcoin::Config;
 use QBitcoin::ValueUpgraded qw(level_by_total);
 use QBitcoin::Log;
 use QBitcoin::Transaction;
+use QBitcoin::MinFee qw(min_fee);
 use Role::Tiny;
 
 sub validate {
@@ -43,14 +44,18 @@ sub validate {
     if (@{$block->transactions} > MAX_TX_IN_BLOCK) {
         return "Too many transactions in block: " . @{$block->transactions} . " (max " . MAX_TX_IN_BLOCK . ")";
     }
-    if (sum0(map { $_->size } @{$block->transactions}) > MAX_BLOCK_SIZE) {
-        return "Block size is too big: " . sum(map { $_->size } @{$block->transactions}) . " (max " . MAX_BLOCK_SIZE . ")";
+    my $block_size = sum0(map { $_->size } @{$block->transactions});
+    if ($block_size > MAX_BLOCK_SIZE) {
+        return "Block size is too big: $block_size (max " . MAX_BLOCK_SIZE . ")";
     }
     my $fee = 0;
     my $fee_coinbase = 0;
     my %tx_in_block;
     my $empty_tx = 0;
+    my $low_fee_tx = 0;
+    my $min_fee = min_fee($block->prev_block, $block_size);
     my $upgraded = $block->prev_block ? $block->prev_block->upgraded // 0 : 0;
+    my $min_block_fee;
     foreach my $transaction (@{$block->transactions}) {
         if ($tx_in_block{$transaction->hash}++) {
             return "Transaction " . $transaction->hash_str . " included in the block twice";
@@ -65,18 +70,23 @@ sub validate {
         }
         # NB: we do not check that the $txin is unspent in this branch;
         # we will check this on include this block into the best branch
-        if ($transaction->fee == 0) {
-            if (!$transaction->coins_created) {
-                if (++$empty_tx > MAX_EMPTY_TX_IN_BLOCK) {
-                    return "Too many empty transactions";
-                }
-            }
-        }
-        elsif ($transaction->is_coinbase) {
+        if ($transaction->is_coinbase) {
             $fee_coinbase += $transaction->fee;
         }
         else {
             $fee += $transaction->fee;
+            if ($transaction->is_standard) {
+                my $tx_fee_per_kb = int($transaction->fee * 1024 / $transaction->size);
+                if ($tx_fee_per_kb < $min_fee || $transaction->fee == 0) {
+                    if (++$low_fee_tx > MAX_EMPTY_TX_IN_BLOCK) {
+                        return "Too many low-fee transactions";
+                    }
+                    ++$empty_tx if $transaction->fee == 0;
+                }
+                else {
+                    $min_block_fee = $tx_fee_per_kb if !defined($min_block_fee) || $tx_fee_per_kb < $min_block_fee;
+                }
+            }
         }
     }
     my $block_reward = (ref $block)->reward($block->prev_block, $fee_coinbase);
@@ -88,6 +98,8 @@ sub validate {
         or return "Total block fee is $fee (not " . -$block_reward . ")";
     $block->upgraded = $upgraded;
     $block->reward_fund = $block->prev_block ? $block->prev_block->reward_fund + $fee + $fee_coinbase : 0;
+    $block->size = $block_size;
+    $block->min_fee = $block_size > MAX_BLOCK_SIZE / 2 ? $min_block_fee : $min_fee;
     return "";
 }
 
