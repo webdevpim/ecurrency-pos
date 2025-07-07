@@ -170,36 +170,36 @@ sub receive {
 
     # reset all txo in the current best branch (started from the fork block) as unspent;
     # then set output in all txo in the new branch and check it against possible double-spend
-    for (my $b = $class->best_block($HEIGHT // $new_best->height); $b && $b->height >= $new_best->height; $b = $b->prev_block_load) {
-        $b->prev_block_load->next_block = $b;
-        Debugf("Remove block %s height %u from the best branch", $b->hash_str, $b->height);
-        foreach my $tx (reverse @{$b->transactions}) {
+    for (my $bl = $class->best_block($HEIGHT // $new_best->height); $bl && $bl->height >= $new_best->height; $bl = $bl->prev_block_load) {
+        $bl->prev_block_load->next_block = $bl;
+        Debugf("Remove block %s height %u from the best branch", $bl->hash_str, $bl->height);
+        foreach my $tx (reverse @{$bl->transactions}) {
             $tx->unconfirm();
         }
     }
     my $old_best = $class->best_block($new_best->height);
-    for (my $b = $new_best; $b; $b = $b->next_block) {
-        Debugf("Add block %s height %u to the best branch", $b->hash_str, $b->height);
-        my $fail_tx = $b->validate_chain();
+    for (my $bl = $new_best; $bl; $bl = $bl->next_block) {
+        Debugf("Add block %s height %u to the best branch", $bl->hash_str, $bl->height);
+        my $fail_tx = $bl->validate_chain();
 
         if ($fail_tx) {
-            Debugf("Revert block %s height %u from best branch", $b->hash_str, $b->height);
-            for (my $b1 = $b->prev_block; $b1 && $b1->height >= $new_best->height; $b1 = $b1->prev_block) {
-                Debugf("Revert block %s height %u from the best branch", $b1->hash_str, $b1->height);
-                foreach my $tx (reverse @{$b1->transactions}) {
+            Debugf("Revert block %s height %u from best branch", $bl->hash_str, $bl->height);
+            for (my $bl1 = $bl->prev_block; $bl1 && $bl1->height >= $new_best->height; $bl1 = $bl1->prev_block) {
+                Debugf("Revert block %s height %u from the best branch", $bl1->hash_str, $bl1->height);
+                foreach my $tx (reverse @{$bl1->transactions}) {
                     $tx->unconfirm();
                 }
             }
 
             $old_best->prev_block->next_block = $old_best if $old_best && $old_best->prev_block;
-            for (my $b1 = $old_best; $b1; $b1 = $b1->next_block) {
-                Debugf("Return block %s height %u to the best branch", $b1->hash_str, $b1->height);
+            for (my $bl1 = $old_best; $bl1; $bl1 = $bl1->next_block) {
+                Debugf("Return block %s height %u to the best branch", $bl1->hash_str, $bl1->height);
                 my $num = 0;
-                foreach my $tx (@{$b1->transactions}) {
-                    $tx->confirm($b1, $num++);
+                foreach my $tx (@{$bl1->transactions}) {
+                    $tx->confirm($bl1, $num++);
                 }
             }
-            $b->drop_branch();
+            $bl->drop_branch();
             if ($self->received_from) {
                 if ($self->received_from->connection) {
                     $self->received_from->abort("incorrect_block");
@@ -220,8 +220,8 @@ sub receive {
         }
         QBitcoin::Block->max_db_height($new_best->height-1);
     }
-    for (my $b = $new_best; $b; $b = $b->next_block) {
-        $best_block[$b->height] = $b;
+    for (my $bl = $new_best; $bl; $bl = $bl->next_block) {
+        $best_block[$bl->height] = $bl;
     }
 
     if ($self->received_from && $self->self_weight) {
@@ -326,11 +326,11 @@ sub cleanup_old_blocks {
     $first_free_height = $max_db_height if $first_free_height > $max_db_height;
     for (my $free_height = $MIN_INCORE_HEIGHT // -1; $free_height <= $first_free_height; $free_height++) {
         if ($free_height < $first_free_height) {
-            foreach my $b (values %{$block_pool[$free_height+1]}) {
-                next if $best_block[$free_height+1] && $b->hash eq $best_block[$free_height+1]->hash; # cleanup best branch after all other
+            foreach my $bl (values %{$block_pool[$free_height+1]}) {
+                next if $best_block[$free_height+1] && $bl->hash eq $best_block[$free_height+1]->hash; # cleanup best branch after all other
                 # cleanup only full branches; if prev_block has single descendant then this branch was already checked
-                next if $b->prev_block && scalar($b->prev_block->descendants) == 1;
-                drop_branch($b) if want_cleanup_branch($b);
+                next if $bl->prev_block && scalar($bl->prev_block->descendants) == 1;
+                drop_branch($bl) if want_cleanup_branch($bl);
             }
         }
         last if keys(%{$block_pool[$free_height]}) > 1;
