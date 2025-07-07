@@ -13,10 +13,8 @@ use QBitcoin::Const;
 BEGIN { no warnings 'redefine'; *QBitcoin::Const::MAX_EMPTY_TX_IN_BLOCK = sub () { 100 } };
 use QBitcoin::Test::ORM;
 use QBitcoin::Test::BlockSerialize;
-use QBitcoin::Test::MakeTx;
+use QBitcoin::Test::Send qw(send_block send_tx $last_tx);
 use QBitcoin::Config;
-use QBitcoin::Peer;
-use QBitcoin::Connection;
 use QBitcoin::Protocol;
 use QBitcoin::Block;
 use QBitcoin::Transaction;
@@ -37,38 +35,7 @@ $transaction_module->mock('coins_created', sub { $_[0]->{coins_created} //= @{$_
 $transaction_module->mock('serialize_coinbase', sub { "\x00" });
 $transaction_module->mock('deserialize_coinbase', sub { unpack("C", shift->get(1)) });
 
-my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
-my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
 blockchain_synced(1);
-
-my $prev_tx;
-
-sub send_tx {
-    my ($script) = @_;
-    my $tx = make_tx($prev_tx, 0, $script);
-    $connection->protocol->command("tx");
-    $connection->protocol->cmd_tx($tx->serialize . "\x00"x16);
-    $prev_tx = $tx;
-    return $tx;
-}
-
-sub send_block {
-    my ($height, $hash, $prev_hash, $weight, $tx) = @_;
-    my @tx = ref($tx) eq "ARRAY" ? @$tx : ($tx);
-    my $block = QBitcoin::Block->new(
-        time         => GENESIS_TIME + $height * BLOCK_INTERVAL * FORCE_BLOCKS,
-        hash         => $hash,
-        prev_hash    => $prev_hash,
-        transactions => \@tx,
-        weight       => $weight,
-    );
-    $block->add_tx($_) foreach @tx;
-    $block->merkle_root = $block->calculate_merkle_root();
-    my $block_data = $block->serialize;
-    block_hash($block->hash);
-    $connection->protocol->command("block");
-    $connection->protocol->cmd_block($block_data);
-}
 
 # 1. Send tx1 with limited output (min block 6) and tx2 with limit seq output (min seq blocks 4) in block 2
 # 2. Send spend-tx1 in block 5; check that the block rejected
@@ -87,15 +54,13 @@ sub send_block {
 send_block(0, "a0", undef, 50, send_tx());
 send_block(1, "a1", "a0", 100, send_tx());
 # 1
-my $tx1 = send_tx(OP_6 . OP_CHECKLOCKTIMEVERIFY . OP_DROP . OP_TRUE);
+my $tx1 = send_tx(0, $last_tx, OP_6 . OP_CHECKLOCKTIMEVERIFY . OP_DROP . OP_TRUE);
 my $spend_tx1 = send_tx();
-$prev_tx = undef;
-my $tx2 = send_tx(OP_4 . OP_CHECKSEQUENCEVERIFY . OP_DROP . OP_TRUE);
+my $tx2 = send_tx(0, undef, OP_4 . OP_CHECKSEQUENCEVERIFY . OP_DROP . OP_TRUE);
 my $spend_tx2 = send_tx();
-$prev_tx = undef;
-send_block(2, "a2", "a1", 200, [ $tx1, $tx2 ]);
+send_block(2, "a2", "a1", 200, $tx1, $tx2);
 is(QBitcoin::Block->blockchain_height, 2, "limit transactions confirmed");
-send_block(3, "a3", "a2", 300, send_tx());
+send_block(3, "a3", "a2", 300, send_tx(0, undef));
 my $test_tx = send_tx();
 send_block(4, "a4", "a3", 400, $test_tx);
 # 2
@@ -106,7 +71,7 @@ send_block(5, "a5", "a4", 500, $spend_tx2);
 is(QBitcoin::Block->blockchain_height, 4, "spend transaction 2 rejected");
 # 4
 send_block(5, "a5", "a4", 500, send_tx());
-send_block(6, "a6", "a5", 600, [ $spend_tx1, $spend_tx2 ]);
+send_block(6, "a6", "a5", 600, $spend_tx1, $spend_tx2);
 is(QBitcoin::Block->blockchain_height, 6, "spend transactions confirmed");
 # 5
 send_block(4, "b4", "a3", 700, $test_tx);
@@ -123,8 +88,7 @@ is($stx1 && $stx1->block_height, 6, "transaction 1 confirmed");
 is($stx2 && $stx2->block_height, 6, "transaction 2 confirmed");
 
 # 7
-$prev_tx = undef;
-send_block(2, "c2", "a1", 1000, send_tx());
+send_block(2, "c2", "a1", 1000, send_tx(0, undef));
 # 8
 block_hash("c3");
 QBitcoin::Generate->generate(GENESIS_TIME + 3 * BLOCK_INTERVAL * FORCE_BLOCKS);
@@ -160,8 +124,7 @@ my $incore = QBitcoin::Block->min_incore_height;
 ok($incore > 7, "Transactions stored in database");
 
 # 11
-$prev_tx = undef;
-send_block(4, "d4", "c3", 2000, send_tx());
+send_block(4, "d4", "c3", 2000, send_tx(0, undef));
 is(QBitcoin::Block->blockchain_height, 4, "branch switched");
 # 12
 block_hash("d5");

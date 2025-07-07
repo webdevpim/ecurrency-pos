@@ -9,13 +9,11 @@ use List::Util qw(sum0);
 use Test::More;
 use Test::MockModule;
 use QBitcoin::Test::ORM;
-use QBitcoin::Test::MakeTx;
+use QBitcoin::Test::Send qw(send_tx);
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::Transaction;
 use QBitcoin::TXO;
-use QBitcoin::Peer;
-use QBitcoin::Connection;
 use QBitcoin::Mempool;
 
 #$config->{debug} = 1;
@@ -28,21 +26,17 @@ $transaction_module->mock('coins_created', sub { $_[0]->{coins_created} //= @{$_
 $transaction_module->mock('serialize_coinbase', sub { "\x00" });
 $transaction_module->mock('deserialize_coinbase', sub { unpack("C", shift->get(1)) });
 
-my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => '127.0.0.1');
-my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
-
-sub send_tx {
+sub send_tx_get {
     my @prev_tx = @_;
-    my $tx = make_tx(\@prev_tx);
-    $connection->protocol->command = "tx";
-    $connection->protocol->cmd_tx($tx->serialize . "\x00"x16);
+    my $tx = send_tx(0, \@prev_tx);
     return QBitcoin::Transaction->get($tx->hash);
 }
 
-my $tx1 = send_tx();
-my $tx2 = send_tx();
-my $tx3 = send_tx($tx1);
-my $tx4 = send_tx($tx2, $tx3);
+my $tx1 = send_tx_get();
+my $tx2 = send_tx_get();
+my $tx3 = send_tx_get($tx1);
+my $tx4 = send_tx_get($tx2, $tx3);
+
 
 # Set $tx1 as spent confirmed
 $tx1->block_height = 12;

@@ -11,10 +11,8 @@ use Test::MockModule;
 use QBitcoin::Test::ORM;
 use QBitcoin::Test::BlockSerialize;
 use QBitcoin::Test::MakeTx;
-use QBitcoin::Const;
+use QBitcoin::Test::Send qw(send_block $connection);
 use QBitcoin::Config;
-use QBitcoin::Peer;
-use QBitcoin::Connection;
 use QBitcoin::Protocol;
 use QBitcoin::Block;
 use QBitcoin::Transaction;
@@ -25,25 +23,6 @@ use QBitcoin::TXO;
 my $protocol_module = Test::MockModule->new('QBitcoin::Protocol');
 $protocol_module->mock('send_message', sub { 1 });
 $config->{regtest} = 1;
-
-my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => IPV6_V4_PREFIX . pack("C4", split(/\./, "127.0.0.1")));
-my $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
-
-sub send_block {
-    my ($height, $hash, $prev_hash, $weight, @tx) = @_;
-    my $block = QBitcoin::Block->new(
-        time         => GENESIS_TIME + $height * BLOCK_INTERVAL * FORCE_BLOCKS,
-        hash         => $hash,
-        prev_hash    => $prev_hash,
-        transactions => \@tx,
-        weight       => $weight,
-    );
-    $block->add_tx($_) foreach @tx;
-    $block->merkle_root = $block->calculate_merkle_root();
-    my $block_data = $block->serialize;
-    block_hash($block->hash);
-    $connection->protocol->cmd_block($block_data);
-}
 
 sub pending_one {
     my $coinbase_tx = make_tx(undef, 0);
