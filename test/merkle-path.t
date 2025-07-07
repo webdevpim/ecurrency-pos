@@ -26,7 +26,7 @@ merkle_path([qw(a b c d e f g h i j k)]);
 sub merkle_path {
     my ($hashes) = @_;
 
-    map { $_ = substr($_ . "\x00" x 32, 0, 32) } @$hashes;
+    map { $_ = substr($_ . "\x00" x 32, 0, 32) } @$hashes; ## no critic (ControlStructures::ProhibitMutatingListFunctions)
     my @tr = map { QBitcoin::Transaction->new(hash => $_) } @$hashes;
     my $block = QBitcoin::Block->new(transactions => \@tr);
     my $block2 = QBitcoin::Block->new(merkle_root => $block->calculate_merkle_root);

@@ -1,0 +1,34 @@
+severity = 4
+
+[Subroutines::ProhibitExplicitReturnUndef]
+# decrease severity (almost disable)
+severity = 1
+
+[Subroutines::RequireArgUnpacking]
+#allow_subscripts = 1
+short_subroutine_statements = 5
+severity = 1
+
+[-Subroutines::RequireFinalReturn]
+# void subroutines allowed
+
+[Variables::ProhibitUnusedVariables]
+# increase severity to load it on default
+severity = 4
+
+[-ValuesAndExpressions::ProhibitConstantPragma]
+# allow constants
+
+[-ValuesAndExpressions::ProhibitMixedBooleanOperators]
+# allow "a && b or die"
+
+#[BuiltinFunctions::ProhibitStringyEval]
+## decrease severity, because of agreements (eval from config)
+#severity = 2
+
+[TestingAndDebugging::ProhibitNoStrict]
+allow = refs
+
+# Allow prototypes
+[-Subroutines::ProhibitSubroutinePrototypes]
+

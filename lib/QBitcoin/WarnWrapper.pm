@@ -4,7 +4,7 @@ use strict;
 
 use QBitcoin::Log;
 
-$SIG{__WARN__} = \&sigwarn;
+$SIG{__WARN__} = \&sigwarn; ## no critic
 
 sub sigwarn {
     local $SIG{__WARN__} = 'DEFAULT';

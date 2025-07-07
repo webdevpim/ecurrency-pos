@@ -41,7 +41,7 @@ sub _crypto_module {
 BEGIN {
     foreach my $algo (keys %{&CRYPTO_MODULE}) {
         my $module = _crypto_module($algo);
-        eval "require $module";
+        eval "require $module"; ## no critic
         die $@ if $@;
     }
 };
