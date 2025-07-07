@@ -876,7 +876,6 @@ sub validate {
         }
     }
     my $class = ref $self;
-    my @stored_in;
     my $input_value = 0;
     my %inputs;
     foreach my $in (map { $_->{txo} } @{$self->in}) {
