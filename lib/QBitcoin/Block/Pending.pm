@@ -118,6 +118,12 @@ sub recv_pending_tx {
     if (my $blocks = delete $PENDING_TX_BLOCK{$tx->hash}) {
         foreach my $block_hash (keys %$blocks) {
             my $block = $PENDING_BLOCK{$block_hash};
+            if (!$block) {
+                # In rare cases the block may be dropped by previous iteration of this loop
+                Debugf("Block %s pending for received tx %s not found (was already dropped?)",
+                    QBitcoin::Block->hash_str($block_hash), $tx->hash_str);
+                next;
+            }
             Debugf("Block %s is pending received tx %s", $block->hash_str, $tx->hash_str);
             $block->add_tx($tx);
             if (!$block->pending_tx && (!$block->prev_hash || !$PENDING_BLOCK_BLOCK{$block->prev_hash})) {
