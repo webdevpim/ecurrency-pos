@@ -261,9 +261,10 @@ sub receive {
         $HEIGHT = $self->height;
     }
 
-    # Drop old branch to free my txo (for possibility to make new stake transactions)
-    # TODO: Drop only if not pending and pending weight is not greater than current best
-    $old_best->drop_branch() if $old_best;
+    # Drop old branch to free my txo, if it's self generated block, for possibility to make new stake transactions
+    if ($old_best && !$old_best->next_block && !$old_best->received_from) {
+        $old_best->drop_branch();
+    }
 
     if ($self->height > ($HEIGHT // -1)) {
         # It's the first block in this level
