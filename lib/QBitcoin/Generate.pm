@@ -208,7 +208,7 @@ sub generate {
     }
     my $generated = QBitcoin::Block->new({
         height       => $height,
-        time         => $time,
+        time         => $timeslot,
         prev_hash    => $prev_block ? $prev_block->hash : undef,
         transactions => \@transactions,
         $prev_block ? ( prev_block => $prev_block ) : (),
