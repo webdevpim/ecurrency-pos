@@ -295,7 +295,8 @@ sub cmd_blocks {
 
         if ($num > 1) {
             if ($block->prev_hash ne $prev_block->hash) {
-                Warningf("Received blocks are not in chain from peer %s", $self->peer->id);
+                Warningf("Received blocks are not in chain from peer %s: block %s prev_hash %s prev block %s",
+                    $self->peer->id, $block->hash_str, $block->hash_str($block->prev_hash), $prev_block->hash_str);
                 $self->abort("bad_block_data");
                 return -1;
             }
@@ -334,7 +335,8 @@ sub cmd_blocks {
         else {
             $block->compact_tx();
             if ($block->receive() == 0) {
-                $block = $block->process_pending();
+                my $last_block = $block->process_pending();
+                $block = $last_block if $num == $num_blocks;
             }
             else {
                 $block->drop_pending();
