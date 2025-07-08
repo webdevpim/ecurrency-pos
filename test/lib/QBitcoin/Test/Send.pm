@@ -4,6 +4,7 @@ use strict;
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(
+    make_block
     send_block
     send_tx
     $connection
@@ -21,7 +22,7 @@ my $peer = QBitcoin::Peer->new(type_id => PROTOCOL_QBITCOIN, ip => IPV6_V4_PREFI
 our $connection = QBitcoin::Connection->new(state => STATE_CONNECTED, peer => $peer);
 our $last_tx;
 
-sub send_block {
+sub make_block {
     my ($height, $hash, $prev_hash, $weight, @tx) = @_;
     my $block = QBitcoin::Block->new(
         time         => GENESIS_TIME + $height * BLOCK_INTERVAL * FORCE_BLOCKS,
@@ -32,10 +33,15 @@ sub send_block {
     );
     $block->add_tx($_) foreach @tx;
     $block->merkle_root = $block->calculate_merkle_root();
+    return $block;
+}
+
+sub send_block {
+    my $block = make_block(@_);
     my $block_data = $block->serialize;
     block_hash($block->hash);
     $connection->protocol->command("block");
-    $connection->protocol->cmd_block($block_data);
+    return $connection->protocol->cmd_block($block_data);
 }
 
 sub send_tx {
