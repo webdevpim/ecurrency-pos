@@ -57,6 +57,7 @@ sub disconnect {
             if ($self->protocol->can('drop_pending')) {
                 $self->protocol->drop_pending();
             }
+            $self->protocol->syncing(0); # allow to free non-best blocks and branches received in this connection
             # TODO: update peer data
         }
         else {
