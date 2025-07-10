@@ -142,7 +142,7 @@ use constant SIGHASH_TYPES => {
 # use constant TX_TYPES_NAMES  => [ "unknown", "standard", "stake", "coinbase" ];
 use constant TX_NAME_BY_TYPE => { reverse %{&TX_TYPES_CONST} };
 use constant TX_TYPES_NAMES  =>
-    [ map { lc(TX_NAME_BY_TYPE->{$_} // "unknown") and s/^tx_type_//r } 0 .. (sort values %{&TX_TYPES_CONST})[-1] ];
+    [ map { s/^tx_type_//r } map { lc(TX_NAME_BY_TYPE->{$_} // "unknown") } 0 .. (sort values %{&TX_TYPES_CONST})[-1] ];
 
 use constant QBITCOIN_CONST;
 use constant STATE_CONST;
