@@ -28,6 +28,7 @@ RUN apk add --no-cache \
 RUN apk add --no-cache perl-test-mockmodule
 COPY . /qbitcoin
 RUN cd /qbitcoin; make test || exit 1
+RUN apk del --no-cache perl-test-mockmodule
 
 # Final minimized image
 FROM alpine:latest
