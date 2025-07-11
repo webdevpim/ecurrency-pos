@@ -343,7 +343,7 @@ sub cleanup_old_blocks {
             }
             # we have only best block on this level without descendants in alternate branches, drop it and cleanup the level
             free_block($best_block[$free_height]);
-            foreach my $descendant ($best_block[$free_height]->descendants) {
+            foreach my $descendant (@descendants) {
                 $descendant->prev_block(undef);
             }
             delete $best_block[$free_height];
