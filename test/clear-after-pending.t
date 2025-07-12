@@ -47,6 +47,6 @@ $connection->protocol->command("tx");
 $connection->protocol->cmd_tx($pending_tx->serialize . "\x00"x16);
 
 my $block = QBitcoin::Block->best_block();
-is($block->hash, "a2", "Best block is b2");
+is($block->hash, "a2", "Best block is a2");
 
 done_testing();

@@ -254,6 +254,7 @@ sub receive {
         }
     }
 
+    my $old_height = $HEIGHT;
     if (defined($HEIGHT) && $self->height < $HEIGHT) {
         foreach my $n ($self->height+1 .. $HEIGHT) {
             delete $best_block[$n];
@@ -261,9 +262,23 @@ sub receive {
         $HEIGHT = $self->height;
     }
 
-    # Drop old branch to free my txo, if it's self generated block, for possibility to make new stake transactions
-    if ($old_best && !$old_best->next_block && !$old_best->received_from) {
-        $old_best->drop_branch();
+    if ($old_best) {
+        # Drop old branch to free my txo for possibility to make new stake transactions
+        # Drop if the old branch has the same or less height than the new best branch
+        # or if it contains my stake transactions
+        # Otherwise it's possible to receive new block with the old branch and it will become the best again
+        my $self_branch = 0;
+        if ($old_height < $self->height) {
+            for (my $bl = $old_best; $bl; $bl = $bl->next_block) {
+                if (!$bl->received_from && $bl->transactions && $bl->transactions->[0]->is_stake) {
+                    $self_branch = 1;
+                    last;
+                }
+            }
+        }
+        if ($old_height >= $self->height || $self_branch) {
+            $old_best->drop_branch();
+        }
     }
 
     if ($self->height > ($HEIGHT // -1)) {
