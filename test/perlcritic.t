@@ -6,7 +6,7 @@ use Test::More;
 use FindBin '$Bin';
 use File::Find;
 
-eval "require Perl::Critic" or do {
+eval "require Perl::Critic" or do { ## no critic (BuiltinFunctions::ProhibitStringyEval)
     plan skip_all => "Perl::Critic is not installed";
     exit;
 };
@@ -24,6 +24,7 @@ find(\&check_file, ".");
 chdir "$Bin/../bin" or die "Cannot chdir to $Bin/../bin: $!";
 find(\&check_file, ".");
 chdir "$Bin/../test" or die "Cannot chdir to $Bin/../test: $!";
+find(\&check_file, ".");
 
 is(scalar @violations, 0, 'No Perl::Critic violations')
     or diag("Violations:\n" . join('', @violations));
