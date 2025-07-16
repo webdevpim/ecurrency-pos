@@ -560,10 +560,15 @@ sub cmd_signrawtransactionwithkey {
     my $input_amount = 0;
     foreach my $num (0 .. $#{$tx->in}) {
         my $in = $tx->in->[$num];
-        $input_amount += $in->{txo}->value;
+        my $txo = $in->{txo};
+        if ($txo->tx_out) {
+            # Already confirmed spent
+            return $self->response_error("", ERR_DESERIALIZATION_ERROR, "Input " . $txo->tx_in_str . ":" . $txo->num . " already confirmed spent.");
+        }
+        $input_amount += $txo->value;
         my ($address, $script);
         foreach my $addr (@address) {
-            if ($script = $addr->script_by_hash($in->{txo}->scripthash)) {
+            if ($script = $addr->script_by_hash($txo->scripthash)) {
                 $address = $addr;
                 last;
             }
@@ -573,9 +578,9 @@ sub cmd_signrawtransactionwithkey {
         }
         else {
             push @errors, {
-                txid       => unpack("H*", $in->{txo}->tx_in),
+                txid       => unpack("H*", $txo->tx_in),
                 vout       => $in->{txo}->num,
-                scripthash => unpack("H*", $in->{txo}->scripthash),
+                scripthash => unpack("H*", $txo->scripthash),
                 error      => "Unknown scripthash",
             };
         }
