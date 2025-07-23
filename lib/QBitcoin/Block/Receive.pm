@@ -109,6 +109,7 @@ sub receive {
     my ($loaded) = @_;
 
     return 0 if $block_pool{$self->hash};
+    # $self->prev_block must be already loaded by prev_block_load in QBitcoin::Protocol
     if (my $err = $self->validate()) {
         Warningf("Incorrect block %s from %s: %s", $self->hash_str, $self->received_from ? $self->received_from->peer->id : "me", $err);
         # Incorrect block
@@ -135,7 +136,7 @@ sub receive {
     }
 
     $self->to_cache;
-    if ($self->prev_block_load) {
+    if ($self->prev_block) {
         $self->prev_block->next_block //= $self;
     }
 
