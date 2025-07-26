@@ -151,6 +151,8 @@ sub revalidate {
             }
             my $upgraded = $block->upgraded;
             my $reward_fund = $block->reward_fund;
+            my $size = $block->size;
+            my $min_fee = $block->min_fee;
             my @txs;
             foreach my $txhash (QBitcoin::ORM::fetch($tx_class, block_height => $block->height, -sortby => 'block_pos ASC')) {
                 $tx_class->pre_load($txhash);
@@ -171,7 +173,9 @@ sub revalidate {
                  $block->validate() ||
                  $block->validate_chain() ||
                  $block->upgraded != $upgraded ||
-                 $block->reward_fund != $reward_fund) {
+                 $block->reward_fund != $reward_fund ||
+                 $block->size != $size ||
+                 $block->min_fee != $min_fee) {
                 $bad_height = $block->height;
             }
             $prev_block = $block;
