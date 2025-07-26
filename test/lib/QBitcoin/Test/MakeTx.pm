@@ -18,7 +18,7 @@ my %SCRIPT;
 
 sub make_tx {
     my ($prev_tx, $fee, $script) = @_;
-    state $value = 10;
+    state $value = 100;
     state $tx_num = 1;
     $fee //= 0;
     $prev_tx = [ $prev_tx ] if $prev_tx && ref($prev_tx) ne 'ARRAY';
@@ -36,7 +36,7 @@ sub make_tx {
         tx_type => $fee < 0 ? TX_TYPE_STAKE : $prev_tx ? TX_TYPE_STANDARD : TX_TYPE_COINBASE,
         $prev_tx ? () : ( coins_created => $out_value ),
     );
-    $value += 10;
+    $value += 100;
     $tx_num++;
     $tx->calculate_hash;
     my $num = 0;
