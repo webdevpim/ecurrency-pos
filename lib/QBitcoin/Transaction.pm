@@ -871,7 +871,7 @@ sub validate {
     }
     foreach my $out (@{$self->out}) {
         if ($out->value < 0 || $out->value > MAX_VALUE) {
-            Warningf("Incorrect output value in transaction %s", $self->hash_str);
+            Warningf("Incorrect output value %ld in transaction %s", $out->value, $self->hash_str);
             return -1;
         }
     }
