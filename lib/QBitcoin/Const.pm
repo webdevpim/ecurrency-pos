@@ -59,7 +59,6 @@ use constant QBITCOIN_CONST => {
     REWARD_DIVIDER          => 500, # reward for block is 1/500 of the reward fund
     MAX_BLOCK_SIZE          => 8*1024*1024,
     MAX_TX_IN_BLOCK         => 65535,
-    BLOCK_HEADER_SIZE       => 200, # TODO: calculate precise value
     MAX_TX_SIZE             => 2*1024*1024,
     BLOCKS_IN_BATCH         => 200,
     BLOCK_LOCATOR_INTERVAL  => 100, # < BLOCKS_IN_BATCH

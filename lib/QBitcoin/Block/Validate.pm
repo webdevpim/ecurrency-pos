@@ -9,6 +9,7 @@ use feature 'state';
 # Total amount of all fees (except coinbase) should be equal to the (minus) reward for the block validation
 
 use Time::HiRes;
+use List::Util qw(sum0);
 use QBitcoin::Const;
 use QBitcoin::Config;
 use QBitcoin::ValueUpgraded qw(level_by_total);
@@ -38,6 +39,12 @@ sub validate {
     state $genesis_time = $config->{testnet} ? GENESIS_TIME_TESTNET : GENESIS_TIME;
     if (!@{$block->transactions} && (timeslot($block->time) - $genesis_time) / BLOCK_INTERVAL % FORCE_BLOCKS) {
         return "Empty block";
+    }
+    if (@{$block->transactions} > MAX_TX_IN_BLOCK) {
+        return "Too many transactions in block: " . @{$block->transactions} . " (max " . MAX_TX_IN_BLOCK . ")";
+    }
+    if (sum0(map { $_->size } @{$block->transactions}) > MAX_BLOCK_SIZE) {
+        return "Block size is too big: " . sum(map { $_->size } @{$block->transactions}) . " (max " . MAX_BLOCK_SIZE . ")";
     }
     my $fee = 0;
     my $fee_coinbase = 0;

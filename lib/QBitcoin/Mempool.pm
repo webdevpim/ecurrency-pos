@@ -114,7 +114,7 @@ sub choose_for_block {
         $empty_tx++ if $mempool[$i]->fee == 0 && @{$mempool[$i]->in};
         $size += $mempool[$i]->size;
         $tx_in_block++;
-        if ($empty_tx > MAX_EMPTY_TX_IN_BLOCK || $size > MAX_BLOCK_SIZE - BLOCK_HEADER_SIZE || $tx_in_block >= MAX_TX_IN_BLOCK) {
+        if ($empty_tx > MAX_EMPTY_TX_IN_BLOCK || $size > MAX_BLOCK_SIZE || $tx_in_block > MAX_TX_IN_BLOCK) {
             @mempool = splice(@mempool, 0, $i);
             last;
         }
