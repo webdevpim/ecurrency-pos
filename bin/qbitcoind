@@ -158,8 +158,7 @@ sub revalidate {
                 $tx_class->pre_load($txhash);
                 my $tx = $tx_class->new($txhash);
                 my $hash = $tx->hash;
-                $tx->calculate_hash;
-                if ($hash ne $tx->hash) {
+                if ($tx->validate_hash or $tx->validate) {
                     Warningf("Invalid hash for loaded transaction %s != %s", unpack("H*", $hash), $tx->hash_str);
                     $bad_height = $block->height;
                     last;
@@ -180,6 +179,7 @@ sub revalidate {
             }
             $prev_block = $block;
             last if defined($bad_height);
+            Debugf("Block %d (%s) is valid", $block->height, $block->hash_str);
         }
         last if defined($bad_height);
         last if @blocks < $portion;
