@@ -388,11 +388,11 @@ sub btc_block_hash {
 sub btc_confirm_time {
     my $self = shift;
     if (!defined $self->{btc_confirm_time}) {
-        Debugf("Get btc_confirm_time for coinbase %s:%u",
-            unpack("H*", scalar reverse substr($self->btc_tx_hash, -4)), $self->btc_out_num);
         my ($btc_block) = Bitcoin::Block->find(height => $self->btc_block_height + COINBASE_CONFIRM_BLOCKS);
         return undef unless $btc_block;
         $self->{btc_confirm_time} = $btc_block->time;
+        #Debugf("btc_confirm_time for coinbase %s:%u set to %s",
+        #    unpack("H*", scalar reverse substr($self->btc_tx_hash, -4)), $self->btc_out_num, $self->{btc_confirm_time});
     }
     return $self->{btc_confirm_time};
 }
