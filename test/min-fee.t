@@ -45,14 +45,14 @@ $block = QBitcoin::Block->best_block(1);
 diag("block 1 size: " . $block->size . ", min_fee: " . $block->min_fee) if $config->{debug};
 is($block->min_fee, 10, "Block 1 min fee is 10");
 
-my $stake = send_tx(-45, $tx);
+my $stake = send_tx(-1, $tx);
 $last_tx = undef; # We can't spend outputs from the stake tx due to stake maturity
 my @tx = map { send_tx(11) } (1..5);
 diag("txs: " . join(", ", map { $_->hash_str } @tx)) if $config->{debug};
 send_block(2, "a2", "a1", 54, $stake, @tx);
 is(QBitcoin::Block->best_block()->height, 1, "Block 2 rejected due to min fee");
 
-$stake = send_tx(-25, $tx);
+$stake = send_tx(-1, $tx);
 $last_tx = $tx[2];
 send_block(2, "a2", "a1", 54, $stake, $tx[0], $tx[1], $tx[2], send_tx(2));
 $block = QBitcoin::Block->best_block(2);
@@ -60,7 +60,7 @@ diag("block 2 size: " . $block->size . ", min_fee: " . $block->min_fee) if $conf
 diag("block 2 txs: " . join(", ", map { $_->hash_str } @{$block->transactions})) if $config->{debug};
 is(QBitcoin::Block->best_block()->height, 2, "Block 2 accepted");
 
-$stake = send_tx(-73);
+$stake = send_tx(-1);
 $last_tx = undef;
 @tx = map { send_tx(12) } (1..10);
 # Update received time for sort these txs by input-output chain
