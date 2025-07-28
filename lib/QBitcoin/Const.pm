@@ -64,6 +64,7 @@ use constant QBITCOIN_CONST => {
     MAX_PENDING_BLOCKS      => 256, # > BLOCKS_IN_BATCH
     MAX_PENDING_TX          => 128,
     MAX_EMPTY_TX_IN_BLOCK   => 1,
+    MAX_EMPTY_TX_SIZE       => 32768, # Disable huge transactions with zero fee to prevent spam
     UPGRADE_POW             => 1,
     UPGRADE_FEE             => 0.01, # 1%
     UPGRADE_MAX_BLOCKS      => 1117000, # middle 2030

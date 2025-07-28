@@ -899,6 +899,11 @@ sub validate {
                 $self->hash_str, $self->fee);
             return -1;
         }
+        if ($self->fee == 0 && $self->size > MAX_EMPTY_TX_SIZE) {
+            Warningf("Transaction %s with zero fee has too large size %u, fee must be at least 1 satoshi if size > %u bytes",
+                $self->hash_str, $self->size, MAX_EMPTY_TX_SIZE);
+            return -1;
+        }
         # Signcheck for stake transaction depends on block it relates to,
         # so skip this check while block_sign_data is not known, check from valid_for_block()
         $self->check_input_script == 0
