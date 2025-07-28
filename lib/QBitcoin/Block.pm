@@ -136,9 +136,9 @@ sub hash_str {
 
 sub reward {
     my $class = shift;
-    my ($prev_block, $coinbase_fee) = @_;
+    my ($prev_block, $fee) = @_;
     if ($prev_block) {
-        my $reward_fund = $prev_block->reward_fund + $coinbase_fee
+        my $reward_fund = $prev_block->reward_fund + $fee
             or return 0;
         return int($reward_fund / REWARD_DIVIDER) || 1;
     }

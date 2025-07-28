@@ -153,13 +153,11 @@ sub generate {
         return;
     }
 
-    my @coinbase = grep { $_->is_coinbase } @transactions;
-    my $fee = sum0 map { $_->fee } grep { !$_->is_coinbase } @transactions;
-    my $coinbase_fee = sum0 map { $_->fee } @coinbase;
-    my $reward_block = QBitcoin::Block->reward($prev_block, $coinbase_fee);
+    my $fee = sum0 map { $_->fee } @transactions;
+    my $reward_block = QBitcoin::Block->reward($prev_block, $fee);
     # Block reward if the block will be empty
     my $reward_empty = ($timeslot - genesis_time) % (BLOCK_INTERVAL * FORCE_BLOCKS) ? 0 : $reward_block;
-    my $reward = $fee || @coinbase ? $reward_block + $fee : $reward_empty;
+    my $reward = $fee ? $reward_block : $reward_empty;
 
     if ($reward) {
         $stake_tx or return;

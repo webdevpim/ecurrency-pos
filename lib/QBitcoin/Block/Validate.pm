@@ -49,7 +49,7 @@ sub validate {
         return "Block size is too big: $block_size (max " . MAX_BLOCK_SIZE . ")";
     }
     my $fee = 0;
-    my $fee_coinbase = 0;
+    my $stake_reward = 0;
     my %tx_in_block;
     my $empty_tx = 0;
     my $low_fee_tx = 0;
@@ -72,45 +72,44 @@ sub validate {
         # NB: we do not check that the $txin is unspent in this branch;
         # we will check this on include this block into the best branch
         if ($transaction->is_coinbase) {
-            $fee_coinbase += $transaction->fee;
+            $fee += $transaction->fee;
             if ($was_standard && !$config->{regtest}) {
                 return "Coinbase transaction " . $transaction->hash_str . " must not be after standard transaction $was_standard";
             }
         }
-        else {
+        elsif ($transaction->is_standard) {
             $fee += $transaction->fee;
-            if ($transaction->is_standard) {
-                my $tx_fee_per_kb = int($transaction->fee * 1024 / $transaction->size);
-                if ($tx_fee_per_kb < $min_fee || $transaction->fee == 0) {
-                    if (++$low_fee_tx > MAX_EMPTY_TX_IN_BLOCK) {
-                        return "Too many low-fee transactions";
-                    }
-                    ++$empty_tx if $transaction->fee == 0;
+            my $tx_fee_per_kb = int($transaction->fee * 1024 / $transaction->size);
+            if ($tx_fee_per_kb < $min_fee || $transaction->fee == 0) {
+                if (++$low_fee_tx > MAX_EMPTY_TX_IN_BLOCK) {
+                    return "Too many low-fee transactions";
                 }
-                else {
-                    $min_block_fee = $tx_fee_per_kb if !defined($min_block_fee) || $tx_fee_per_kb < $min_block_fee;
-                }
-                $was_standard = $transaction->hash_str;
-            }
-            elsif ($transaction->is_stake) {
-                if (keys %tx_in_block != 1) {
-                    return "Stake transaction " . $transaction->hash_str . " must be the first transaction in the block";
-                }
+                ++$empty_tx if $transaction->fee == 0;
             }
             else {
-                return "Transaction " . $transaction->hash_str . " is not a coinbase, stake or standard transaction";
+                $min_block_fee = $tx_fee_per_kb if !defined($min_block_fee) || $tx_fee_per_kb < $min_block_fee;
             }
+            $was_standard = $transaction->hash_str;
+        }
+        elsif ($transaction->is_stake) {
+            if (keys %tx_in_block != 1) {
+                return "Stake transaction " . $transaction->hash_str . " must be the first transaction in the block";
+            }
+            $stake_reward = -$transaction->fee; # fee is negative for stake transactions
+        }
+        else {
+            return "Transaction " . $transaction->hash_str . " is not a coinbase, stake or standard transaction";
         }
     }
-    my $block_reward = (ref $block)->reward($block->prev_block, $fee_coinbase);
+    my $block_reward = (ref $block)->reward($block->prev_block, $fee);
     # There are no block rewards for empty blocks
     if ($empty_tx >= @{$block->transactions} - 1 && (timeslot($block->time) - $genesis_time) / BLOCK_INTERVAL % FORCE_BLOCKS) {
         $block_reward = 0;
     }
-    $fee == -$block_reward
-        or return "Total block fee is $fee (not " . -$block_reward . ")";
+    $stake_reward == $block_reward
+        or return "Incorrect stake reward for block " . $block->height . ": $stake_reward, expected $block_reward";
     $block->upgraded = $upgraded;
-    $block->reward_fund = $block->prev_block ? $block->prev_block->reward_fund + $fee + $fee_coinbase : 0;
+    $block->reward_fund = $block->prev_block ? $block->prev_block->reward_fund + $fee - $block_reward : 0;
     $block->size = $block_size;
     $block->min_fee = $block_size > MAX_BLOCK_SIZE / 2 ? $min_block_fee : $min_fee;
     return "";
