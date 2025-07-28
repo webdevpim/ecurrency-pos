@@ -56,6 +56,7 @@ sub validate {
     my $min_fee = min_fee($block->prev_block, $block_size);
     my $upgraded = $block->prev_block ? $block->prev_block->upgraded // 0 : 0;
     my $min_block_fee;
+    my $was_standard;
     foreach my $transaction (@{$block->transactions}) {
         if ($tx_in_block{$transaction->hash}++) {
             return "Transaction " . $transaction->hash_str . " included in the block twice";
@@ -72,6 +73,9 @@ sub validate {
         # we will check this on include this block into the best branch
         if ($transaction->is_coinbase) {
             $fee_coinbase += $transaction->fee;
+            if ($was_standard && !$config->{regtest}) {
+                return "Coinbase transaction " . $transaction->hash_str . " must not be after standard transaction $was_standard";
+            }
         }
         else {
             $fee += $transaction->fee;
@@ -86,6 +90,15 @@ sub validate {
                 else {
                     $min_block_fee = $tx_fee_per_kb if !defined($min_block_fee) || $tx_fee_per_kb < $min_block_fee;
                 }
+                $was_standard = $transaction->hash_str;
+            }
+            elsif ($transaction->is_stake) {
+                if (keys %tx_in_block != 1) {
+                    return "Stake transaction " . $transaction->hash_str . " must be the first transaction in the block";
+                }
+            }
+            else {
+                return "Transaction " . $transaction->hash_str . " is not a coinbase, stake or standard transaction";
             }
         }
     }
