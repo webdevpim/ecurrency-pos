@@ -69,8 +69,8 @@ sub txo_confirmed {
     return $block_height >= 0;
 }
 
-sub make_stake_tx {
-    my ($reward, $block_sign_data) = @_;
+sub make_out_join {
+    my ($reward, $my_txo) = @_;
 
     my $my_address;
     if ($config->{sign_alg}) {
@@ -85,16 +85,98 @@ sub make_stake_tx {
         }
     }
     $my_address //= (my_address())[0]
-        or return undef;
-    my @my_txo = grep { txo_confirmed($_) } QBitcoin::TXO->my_utxo();
-    my $my_amount = sum0 map { $_->value } @my_txo;
+        or return ();
+    my $my_amount = sum0 map { $_->value } @$my_txo;
     my $out = QBitcoin::TXO->new_txo(
         value      => $my_amount + $reward,
         scripthash => scalar(scripthash_by_address($my_address->address)),
     );
+    return $out;
+}
+
+sub my_txo_by_address {
+    my ($my_txo) = @_;
+    if (@$my_txo == 1) {
+        # The most common case, only one my_txo
+        # Weight is not important here, so use 1
+        return [ $my_txo->[0]->scripthash, $my_txo->[0]->value, 1 ];
+    }
+    my $time = timeslot(time());
+    my %my;
+    foreach my $my_txo (@$my_txo) {
+        my $my = $my{$my_txo->scripthash} //= [ 0, 0 ];
+        $my->[0] += $my_txo->value;
+        $my->[1] += $my_txo->value * ($time - QBitcoin::Transaction->txo_time($my_txo));
+    }
+    return (
+        sort { $b->[2] <=> $a->[2] || $b->[1] <=> $a->[1] || $a->[0] cmp $b->[0] }
+        map { [ $_, $my{$_}->[0], $my{$_}->[1] ] } keys %my
+    );
+}
+
+sub make_out_separate {
+    my ($reward, $my_txo) = @_;
+    my ($my_best) = my_txo_by_address($my_txo);
+    @$my_txo = grep { $_->scripthash eq $my_best->[0] } @$my_txo;
+    return QBitcoin::TXO->new_txo(
+        value      => $my_best->[1] + $reward,
+        scripthash => $my_best->[0],
+    );
+}
+
+sub make_out_union {
+    my ($reward, $my_txo) = @_;
+    my @my = my_txo_by_address($my_txo);
+    my $total_weight = sum0 map { $_->[2] } @my;
+    my @out;
+    my $reward_remain = $reward;
+    my %remove_scripthash;
+    for (my $i = $#my; $i >= 0; $i--) {
+        my $reward_part = $i > 0 ? int($reward * $my[$i]->[2] / $total_weight + 0.5) : $reward_remain;
+        if ($reward > 0 && $reward_part == 0) {
+            # Remove utxo related to this address from the @$my_txo list
+            $remove_scripthash{$my[$i]->[0]} = 1;
+            next;
+        }
+        $reward_remain -= $reward_part;
+        push @out, QBitcoin::TXO->new_txo(
+            value      => $my[$i]->[1] + $reward_part,
+            scripthash => $my[$i]->[0],
+        );
+    }
+    if (%remove_scripthash) {
+        # Remove utxo related to this address from the @$my_txo list
+        @$my_txo = grep { !$remove_scripthash{$_->scripthash} } @$my_txo;
+    }
+    return @out;
+}
+
+sub make_stake_tx {
+    my ($reward, $block_sign_data) = @_;
+    my @my_txo = grep { txo_confirmed($_) } QBitcoin::TXO->my_utxo();
+    my $reward_to = $config->{reward_to} // "union";
+    my @out;
+    if ($reward_to eq "join" || !@my_txo) {
+        @out = make_out_join($reward, \@my_txo);
+    }
+    elsif ($reward_to eq "separate") {
+        @out = make_out_separate($reward, \@my_txo);
+    }
+    elsif ($reward_to eq "union") {
+        @out = make_out_union($reward, \@my_txo);
+    }
+    elsif ($reward_to eq "none") {
+        return undef;
+    }
+    else {
+        Errf("Unknown reward_to %s, disable block validation", $reward_to);
+        $config->{reward_to} = "none";
+        return undef;
+    }
+
     my $tx = QBitcoin::Transaction->new(
         in              => [ map +{ txo => $_ }, @my_txo ],
-        out             => [ $out ],
+        out             => \@out,
         fee             => -$reward,
         tx_type         => TX_TYPE_STAKE,
         block_sign_data => $block_sign_data,
@@ -189,7 +271,7 @@ sub generate {
         $stake_tx->validate() == 0
             or die "Incorrect generated stake transaction\n";
         $stake_tx->save() == 0
-            or die "Incorrect generated stake transaction\n";
+            or die "Can't save stake transaction\n";
         $stake_tx->process_pending();
         if (defined(my $height = QBitcoin::Block->recv_pending_tx($stake_tx))) {
             Infof("Generated stake tx %s is pending by a block, process it and skip new block generation", $stake_tx->hash_str);
