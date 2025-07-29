@@ -1,7 +1,6 @@
 package QBitcoin::MyAddress;
 use warnings;
 use strict;
-use feature 'state';
 
 use QBitcoin::Config;
 use QBitcoin::Log;
@@ -23,13 +22,13 @@ use constant FIELDS => {
 
 mk_accessors(qw(private_key));
 
-state $my_address;
-state $my_hashes;
+my $MY_ADDRESS;
+my $MY_HASHES;
 
 sub my_address {
     my $class = shift // __PACKAGE__;
-    $my_address //= [ $class->find() ];
-    return wantarray ? @$my_address : $my_address->[0];
+    $MY_ADDRESS //= [ $class->find() ];
+    return wantarray ? @$MY_ADDRESS : $MY_ADDRESS->[0];
 }
 
 sub pubkey {
@@ -67,8 +66,8 @@ sub create {
     my $self = QBitcoin::ORM::create($class, $attr);
     if ($self) {
         Infof("Created my address %s", $self->address);
-        push @$my_address, $self if $my_address;
-        undef $my_hashes; # Clear cache
+        push @$MY_ADDRESS, $self if $MY_ADDRESS;
+        undef $MY_HASHES; # Clear cache
         # Do not forget to load utxo for this address by QBitcoin::Generate->load_address_utxo()
     }
     return $self;
@@ -108,15 +107,15 @@ sub scripthash {
 sub get_by_hash {
     my $class = shift;
     my ($hash) = @_;
-    if (!$my_hashes) {
-        $my_hashes = {};
+    if (!$MY_HASHES) {
+        $MY_HASHES = {};
         foreach my $address (my_address()) {
             foreach my $scripthash ($address->scripthash) {
-                $my_hashes->{$scripthash} = $address;
+                $MY_HASHES->{$scripthash} = $address;
             }
         }
     }
-    return $my_hashes->{$hash};
+    return $MY_HASHES->{$hash};
 }
 
 sub script_by_hash {
