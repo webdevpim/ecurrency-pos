@@ -79,9 +79,10 @@ sub revalidate {
     }
     Noticef("Blocks starting from height %d are invalid", $bad_height);
     # Remove all blocks starting from the bad block
-    # And move all transactions from the removed blocks to the mempool
+    # It's safe to remove the loop with unconfirming transactions,
+    # in this case they will not be saved in mempool (mb huge)
+    # and will be requested from the neighbor nodes as on usual blockchain sync
     foreach my $tx_hashref (QBitcoin::ORM::fetch( $tx_class, block_height => { '>=', $bad_height }, -sortby => 'block_height DESC, block_pos DESC' )) {
-        next if $tx_hashref->{tx_type} == TX_TYPE_STAKE;
         $tx_class->pre_load($tx_hashref);
         my $tx = $tx_class->new($tx_hashref);
         if ($tx->validate_hash or $tx->validate) {
