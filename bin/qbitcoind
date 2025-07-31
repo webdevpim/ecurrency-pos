@@ -206,6 +206,7 @@ sub revalidate {
         }
         $tx->add_to_cache;
         $tx->unconfirm;
+        $tx->received_time = time();
     }
     my $last_block = QBitcoin::Block->find(-sortby => "height DESC", -limit => 1);
     for (my $height = $last_block->height; $height >= $bad_height; $height--) {
