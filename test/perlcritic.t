@@ -1,4 +1,4 @@
-#! /usr/bin/perl
+#! /usr/bin/env perl
 use warnings;
 use strict;
 
@@ -16,6 +16,7 @@ my @violations;
 
 sub check_file {
     return unless -f $_;
+    return if /^\..*swp$/;
     my $file = substr($File::Find::name, 2); # remove leading './'
     push @violations, map { "$file $_" } $critic->critique($_);
 }
