@@ -7,7 +7,6 @@ use FindBin '$Bin';
 use lib ("$Bin/../lib", "$Bin/lib");
 
 use Test::More;
-use Test::MockModule;
 use QBitcoin::Test::ORM qw(dbh);
 use QBitcoin::Const;
 use QBitcoin::Config;
