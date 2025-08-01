@@ -1002,7 +1002,7 @@ sub pre_load {
                 }
             }
             else {
-                $attr->{coins_created} = sum0(map { $_->value } @outputs) - $attr->{fee};
+                $attr->{coins_created} = sum0(map { $_->value } @outputs) + $attr->{fee};
             }
             $attr->{in} = [];
         }
