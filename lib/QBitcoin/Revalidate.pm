@@ -83,17 +83,20 @@ sub revalidate {
     # in this case they will not be saved in mempool (mb huge)
     # and will be requested from the neighbor nodes as on usual blockchain sync
     foreach my $tx_hashref (QBitcoin::ORM::fetch( $tx_class, block_height => { '>=', $bad_height }, -sortby => 'block_height DESC, block_pos DESC' )) {
-        $tx_class->pre_load($tx_hashref);
-        my $tx = $tx_class->new($tx_hashref);
-        if ($tx->validate_hash or $tx->validate) {
-            foreach my $in (@{$tx->in}) {
-                $in->{txo}->spent_del($tx);
+        my $tx = $tx_class->get($tx_hashref->{hash});
+        if (!$tx) {
+            $tx_class->pre_load($tx_hashref);
+            $tx = $tx_class->new($tx_hashref);
+            if ($tx->validate_hash or $tx->validate) {
+                foreach my $in (@{$tx->in}) {
+                    $in->{txo}->spent_del($tx);
+                }
+                next;
             }
-            next;
+            $tx->add_to_cache;
         }
-        $tx->add_to_cache;
-        $tx->unconfirm;
         $tx->received_time = time();
+        $tx->unconfirm;
     }
     my $last_block = QBitcoin::Block->find(-sortby => "height DESC", -limit => 1);
     for (my $height = $last_block->height; $height >= $bad_height; $height--) {
