@@ -41,7 +41,8 @@ sub send_block {
     my $block_data = $block->serialize;
     block_hash($block->hash);
     $connection->protocol->command("block");
-    return $connection->protocol->cmd_block($block_data);
+    $connection->protocol->cmd_block($block_data);
+    return $block;
 }
 
 sub send_tx {

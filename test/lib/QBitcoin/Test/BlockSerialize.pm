@@ -51,7 +51,7 @@ CHECK {
     $block_module->mock('serialize', \&mock_block_serialize);
     $block_module->mock('deserialize', \&mock_block_deserialize);
     $block_module->mock('self_weight', \&mock_self_weight);
-    $block_module->mock('calculate_hash', sub { $block_hash });
+    $block_module->mock('calculate_hash', sub { $_[0]->{hash} // $block_hash });
     $config->{fake_coinbase} = 1;
 };
 
