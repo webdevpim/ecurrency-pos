@@ -300,7 +300,7 @@ sub cmd_blocks {
                 $self->abort("bad_block_data");
                 return -1;
             }
-            if (!$block->prev_block_load) {
+            if (!$block->prev_block) {
                 # some of ancestor blocks are pending tx?
                 $block->load_transactions();
                 $self->request_tx($block->pending_tx);
