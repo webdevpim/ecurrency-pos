@@ -57,7 +57,7 @@ use constant {
     REJECT_INVALID => 1,
 };
 
-mk_accessors(qw(has_weight has_time));
+mk_accessors(qw(has_weight));
 
 sub type_id() { PROTOCOL_QBITCOIN }
 
@@ -357,8 +357,9 @@ sub cmd_blocks {
                 $self->request_new_block();
             }
         }
-        elsif ($block->time < $self->has_time) {
+        elsif ($block->weight < $self->has_weight) {
             $self->send_message("getblks", pack("Vv", 0, 1) . $block->hash);
+            $self->syncing(1);
         }
     }
     return 0;
@@ -450,23 +451,15 @@ sub request_new_block {
                 }
             }
         }
-        if (($self->has_weight // -1) > $best_weight ||
-            (($self->has_weight // -1) == $best_weight && timeslot($self->has_time // 0) > timeslot($best_time))) {
-            # Should we request batch blocks if $self->has_weight == $best_weight?
-            # If yes, it's possible to request the same batch in infinite loop when remote has no new blocks
-            # If no, we will request long chain of empty blocks one-by-one
-            # It seems we should not request_new_block after receiving batch without any new block
-            if (timeslot($self->has_time // 0) > timeslot($best_time) + BLOCK_INTERVAL || !blockchain_synced()) {
-                $self->request_blocks();
-                $self->syncing(1);
-            }
-            else {
-                if (($self->has_weight // -1) > $best_weight) { # otherwise remote may have no such block, no syncing
-                    $self->syncing(1);
-                    Debugf("Remote %s has block weight %Lu more than our %Lu, request block", $self->peer->id, $self->has_weight, $best_weight);
-                }
+        if (($self->has_weight // -1) > $best_weight) {
+            if (blockchain_synced()) {
+                Debugf("Remote %s has block weight %Lu more than our %Lu, request block", $self->peer->id, $self->has_weight, $best_weight);
                 $self->send_message("sendblock", $hash // ZERO_HASH);
             }
+            else {
+                $self->request_blocks();
+            }
+            $self->syncing(1);
         }
         elsif (!blockchain_synced() && $best_block) {
             if (timeslot($best_block->time) + FORCE_BLOCKS * BLOCK_INTERVAL >= timeslot(time())) {
@@ -653,10 +646,8 @@ sub cmd_ihave {
         $self->syncing(0); # prevent blocking connection on infinite wait
     }
     $self->has_weight = $weight;
-    $self->has_time = $time;
     if (!UPGRADE_POW || btc_synced()) {
-        if ($weight > QBitcoin::Block->best_weight ||
-            ($weight == QBitcoin::Block->best_weight && timeslot($time) > QBitcoin::Block->blockchain_time)) {
+        if ($weight > QBitcoin::Block->best_weight) {
             if (!QBitcoin::Block->block_pool($hash) && !QBitcoin::Block->is_pending($hash)) {
                 $self->request_new_block($hash);
             }
