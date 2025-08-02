@@ -2,7 +2,7 @@
 DESTDIR=/usr/local
 DST_BIN=${DESTDIR}/bin
 DST_LIB=${DESTDIR}/lib
-DST_ETC=${DESTDIR}/etc
+DST_ETC=/etc
 
 all:
 	@echo 'Did you mean "make test" or "make install"?'
@@ -10,7 +10,7 @@ all:
 install::
 	mkdir -p ${DST_LIB} && cp -r lib/* ${DST_LIB}
 	mkdir -p ${DST_BIN} && cp -r bin/* ${DST_BIN}
-	#mkdir -p ${DST_ETC} && cp -r -n etc/* ${DST_ETC} || true
+	mkdir -p ${DST_ETC} && cp -r -n etc/* ${DST_ETC} || true
 	@echo "Install done"
 
 installdeps::

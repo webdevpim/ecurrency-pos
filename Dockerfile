@@ -44,6 +44,36 @@ RUN apk add --no-cache \
 COPY --from=builder /usr/local/lib/perl5 /usr/local/lib/perl5
 COPY --from=builder /usr/local/share/perl5 /usr/local/share/perl5
 COPY . /qbitcoin
+RUN { \
+  echo "#! /bin/sh"; \
+  echo '\
+  if [ "${dbi}" = "sqlite" ]; then \
+    if mount | grep -q " on /database "; then :; \
+    else \
+      echo "Please mount /database as an external volume" >&2; \
+      exit 1; \
+    fi; \
+  elif [ "${dbi}" = "mysql" ]; then \
+    if mount | grep -q " on /var/lib/mysql.sock " && mount | grep -q " on /etc/qbitcoin.conf "; then :; \
+    else \
+      echo "Please mount /var/lib/mysql.sock and /etc/qbitcoin.conf as external files" >&2; \
+      exit 1; \
+    fi; \
+  else \
+    echo "Unsupported dbi ${dbi}, choose sqlite or mysql" >&2; \
+    exit 1; \
+  fi; \
+  /qbitcoin/bin/qbitcoin-init --dbi=${dbi} --database=${database} /qbitcoin/db && \
+  exec /qbitcoin/bin/qbitcoind \
+      --peer=node.qbitcoin.net \
+      --dbi=${dbi} \
+      --database=${database} \
+      --rpc="*:9556" \
+      --log=/dev/null \
+      --verbose ${debug:+$( [ "$debug" = "0" ] || echo --debug )} \
+      $@'; \
+  } > /qbitcoin/bin/run-qbitcoin.sh \
+  && chmod +x /qbitcoin/bin/run-qbitcoin.sh
 
 ENV PERL5LIB=/qbitcoin/lib
 ENV PATH=${PATH}:/qbitcoin/bin
@@ -51,18 +81,6 @@ ENV dbi=sqlite
 ENV database=qbitcoin
 ENV debug=
 
-CMD if [ "${dbi}" = "sqlite" ]; then \
-      if mount | grep -q " on /database "; then :; \
-      else echo "Please mount /database as an external volume" >&2; exit 1; \
-      fi; \
-    elif [ "${dbi}" = "mysql" ]; then \
-      if mount | grep -q " on /var/lib/mysql.sock " && mount | grep -q " on /etc/qbitcoin.conf "; then :; \
-      else echo "Please mount /var/lib/mysql.sock and /etc/qbitcoin.conf as external files" >&2; exit 1; \
-      fi; \
-    else echo "Unsupported dbi ${dbi}, choose sqlite or mysql" >&2; exit 1; \
-    fi; \
-    /qbitcoin/bin/qbitcoin-init --dbi=${dbi} --database=${database} /qbitcoin/db && \
-    exec /qbitcoin/bin/qbitcoind --peer=node.qbitcoin.net --dbi=${dbi} --database=${database} --rpc="*:9556" \
-         --log=/dev/null --verbose ${debug:+$( [ "$debug" = "0" ] || echo --debug )}
+ENTRYPOINT ["/qbitcoin/bin/run-qbitcoin.sh"]
 
 EXPOSE 9555 9556
