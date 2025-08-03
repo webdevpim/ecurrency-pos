@@ -472,7 +472,7 @@ Examples:
 Create a transaction
 > qbitcoin-cli createrawtransaction '[{"txid" : "mytxid","vout":0}]" "{"myaddress":0.01}'
 Sign the transaction, and get back the hex
-> qbitcoin-cli signrawtransactionwithwallet "myhex"
+> qbitcoin-cli signrawtransactionwithkey "myhex" '["myprivatekey"]'
 
 Send the transaction (signed hex)
 > qbitcoin-cli sendrawtransaction "signedhex"
@@ -600,12 +600,25 @@ sub cmd_signrawtransactionwithkey {
     if ($input_amount < $output_amount) {
         return $self->response_error("", ERR_INVALID_REQUEST, "Insufficient funds: $input_amount < $output_amount");
     }
+    my $tx_data = $tx->serialize_unsigned;
+    my $fee_per_kb = ($input_amount - $output_amount) * length($tx_data) / 1024;
+    my $max_fee_per_kb = $self->max_fee_per_kb;
+    if ($max_fee_per_kb && $fee_per_kb > $max_fee_per_kb) {
+        return $self->response_error("", ERR_INVALID_REQUEST, "Transaction fee too high: " . $fee_per_kb / DENOMINATOR . " > " . $max_fee_per_kb / DENOMINATOR . " BTC/kb");
+    }
 
     return $self->response_ok({
-        hex      => unpack("H*", $tx->serialize_unsigned),
+        hex      => unpack("H*", $tx_data),
         complete => @errors ? FALSE : TRUE,
         errors   => \@errors,
     });
+}
+
+sub max_fee_per_kb {
+    my $self = shift;
+    return $config->{max_fee_per_kb} if defined $config->{max_fee_per_kb};
+    return 0 if $config->{testnet} || $config->{regtest};
+    return 100000; # 0.001 BTC
 }
 
 $PARAMS{decoderawtransaction} = "hexstring";
