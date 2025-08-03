@@ -1166,6 +1166,8 @@ sub cmd_getaddressbalance {
     my $self = shift;
     my $scripthash = scripthash_by_address($self->args->[0])
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "The address is not correct");
+    blockchain_synced() && mempool_synced()
+        or return $self->response_error("", ERR_INTERNAL_ERROR, "Blockchain is not synced");
     my $minconf = $self->args->[1] // 1;
     my $value = 0;
     my $best_height;
@@ -1226,6 +1228,8 @@ sub cmd_getreceivedbyaddress {
     my $self = shift;
     my $scripthash = scripthash_by_address($self->args->[0])
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "The address is not correct");
+    blockchain_synced() && mempool_synced()
+        or return $self->response_error("", ERR_INTERNAL_ERROR, "Blockchain is not synced");
     my $minconf = $self->args->[1] // 1;
     my $value = 0;
     my $best_height;
@@ -1286,6 +1290,8 @@ sub cmd_listunspent {
     my $self = shift;
     my $scripthash = scripthash_by_address($self->args->[0])
         or return $self->response_error("", ERR_INVALID_ADDRESS_OR_KEY, "The address is not correct");
+    blockchain_synced() && mempool_synced()
+        or return $self->response_error("", ERR_INTERNAL_ERROR, "Blockchain is not synced");
     my $minconf = $self->args->[1] // 1;
     my $best_height;
     if ($minconf > 1) {
@@ -1362,6 +1368,8 @@ Examples:
 );
 sub cmd_getbalance {
     my $self = shift;
+    blockchain_synced() && mempool_synced()
+        or return $self->response_error("", ERR_INTERNAL_ERROR, "Blockchain is not synced");
     my @my_txo = QBitcoin::TXO->my_utxo();
     my $minconf = $self->args->[0] // 1;
     my $value = 0;
