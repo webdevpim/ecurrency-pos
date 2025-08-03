@@ -20,6 +20,7 @@ use QBitcoin::MyAddress;
 use QBitcoin::Generate;
 use QBitcoin::Protocol;
 use QBitcoin::ConnectionList;
+use QBitcoin::MinFee;
 use Bitcoin::Serialized;
 use Bitcoin::Block;
 
@@ -1416,6 +1417,72 @@ sub cmd_getnewaddress {
     my $keypair = generate_keypair($algo);
     my $address = address_by_pubkey($keypair->pubkey_by_privkey, $algo);
     return $self->response_ok({ address => $address, private_key => wallet_import_format($keypair->pk_serialize) });
+}
+
+$PARAMS{estimatesmartfee} = "conf_target estimate_mode?";
+$HELP{estimatesmartfee} = qq(
+estimatesmartfee conf_target ( "estimate_mode" )
+
+Estimates the approximate fee per kilobyte needed for a transaction to begin
+confirmation within conf_target blocks if possible.
+
+Arguments:
+1. conf_target      (numeric, required) Confirmation target in blocks (1 - 99)
+2. estimate_mode    (string, optional, default=CONSERVATIVE) The fee estimate mode.
+                    Whether to return a more conservative estimate which also satisfies
+                    a longer history. A conservative estimate potentially returns a
+                    higher feerate and is more likely to be sufficient for the desired
+                    target, but is not as responsive to short term drops in the
+                    prevailing fee market.  Must be one of:
+                    "ECONOMICAL"
+                    "CONSERVATIVE"
+
+Result:
+{                   (json object)
+  "feerate" : n,    (numeric, optional) estimate fee rate in BTC/kB (only present if no errors were encountered)
+  "errors" : [      (json array, optional) Errors encountered during processing (if there are any)
+    "str",          (string) error
+    ...
+  ],
+}
+
+Examples:
+> qbitcoin-cli estimatesmartfee 6
+> curl --user myusername --data-binary '{"jsonrpc": "1.0", "id": "curltest", "method": "estimatesmartfee", "params": [6]}' -H 'content-type: text/plain;' http://127.0.0.1:${\RPC_PORT}/
+);
+sub cmd_estimatesmartfee {
+    my $self = shift;
+    my ($target, $mode) = @{$self->args};
+    $mode //= "CONSERVATIVE";
+    $target /= 2 if uc($mode) eq "CONSERVATIVE";
+    blockchain_synced() && mempool_synced()
+        or return $self->response_error("", ERR_INTERNAL_ERROR, "Blockchain is not synced");
+    my $height;
+    if (!defined(my $height = QBitcoin::Block->blockchain_height)) {
+        return $self->response_error("", ERR_INTERNAL_ERROR, "Blockchain is not initialized");
+    }
+    my $best_block = QBitcoin::Block->best_block($height)
+        or return $self->response_error("", ERR_INTERNAL_ERROR, "Best block not found");
+    my @mempool = QBitcoin::Transaction->mempool_list();
+    if (@mempool < $target) {
+        return $self->response_ok({ feerate => 0 });
+    }
+    if ($best_block->min_fee <= QBitcoin::MinFee->MIN_FEE) {
+        return $self->response_ok({ feerate => QBitcoin::MinFee->MIN_FEE });
+    }
+    my $size = sum0 map { $_->size } grep { $_->is_standard && $_->fee * 1024 / $_->size > $best_block->min_fee } @mempool;
+    if ($size < $target * $best_block->size) {
+        return $self->response_ok({ feerate => $best_block->min_fee });
+    }
+    $size = 0;
+    my $prev_tx;
+    foreach my $tx (sort { $b->fee / $b->size <=> $a->fee / $a->size } @mempool) {
+        if ($size += $tx->size > $best_block->size) {
+            return $self->response_ok({ feerate => $prev_tx ? $prev_tx->fee * 1024 / $prev_tx->size : $tx->fee * 1024 / $tx->size });
+        }
+        $prev_tx = $tx;
+    }
+    return $self->response_ok({ feerate => $prev_tx->fee * 1024 / $prev_tx->size });
 }
 
 # getmemoryinfo
