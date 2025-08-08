@@ -190,7 +190,7 @@ sub cmd_getblockheader {
         height            => $block->height,
         time              => $block->time,
         confirmations     => $best_height - $block->height,
-        nTx               => @{$block->transactions}+0,
+        nTx               => @{$block->tx_hashes}+0,
         previousblockhash => unpack("H*", $block->prev_hash),
         nextblockhash     => $next_block ? unpack("H*", $next_block->hash) : undef,
         merkleroot        => unpack("H*", $block->merkle_root),
