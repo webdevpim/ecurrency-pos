@@ -132,7 +132,7 @@ sub process_request {
         elsif ($path[2] eq "utxo") {
             @path == 3
                 or return $self->http_response(404, "Unknown request");
-            return $self->get_address->utxo($path[1]);
+            return $self->get_address_utxo($path[1]);
         }
     }
     elsif ($path[0] eq "address-prefix") {
