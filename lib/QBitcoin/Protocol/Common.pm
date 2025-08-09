@@ -51,7 +51,7 @@ sub receive {
         $command =~ s/\x00+\z//;
         $self->command = $command;
         if ($magic ne $self->magic) {
-            Errf("Incorrect magic: 0x%s, expected 0x%s", unpack("H*", $magic), unpack("H*", $self->magic));
+            Noticef("Incorrect magic: 0x%s, expected 0x%s", unpack("H*", $magic), unpack("H*", $self->magic));
             $self->abort("protocol_error");
             return -1;
         }
