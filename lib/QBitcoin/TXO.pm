@@ -295,10 +295,7 @@ sub spent_confirm {
 sub unspent {
     my $self = shift;
     return 0 if $self->{spent} && %{$self->{spent}};
-    if ($self->tx_out) {
-        Errf("TXO %s:%u is unspent but has tx_out (unfreed?)", $self->tx_in_str, $self->num);
-        return 0;
-    }
+    return 0 if $self->tx_out; # MB for transaction in a pending block
     return 1;
 }
 
