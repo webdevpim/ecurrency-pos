@@ -21,6 +21,7 @@ sub add_pending {
         my ($oldest_block) = values %PENDING_BLOCK;
         $oldest_block->drop_pending();
     }
+    $self->received_from->has_pending(1) if $self->received_from;
 }
 
 sub add_pending_block {

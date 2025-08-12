@@ -216,6 +216,7 @@ sub add_pending_tx {
         $self->in = [ sort { _cmp_inputs($a, $b) } @{$self->in} ];
         delete $PENDING_TX_INPUT{$self->hash};
     }
+    $self->received_from->has_pending(1) if $self->received_from;
     return $self;
 }
 

@@ -12,6 +12,7 @@ use QBitcoin::Crypto qw(checksum32);
 use constant ATTR => qw(
     greeted
     syncing
+    has_pending
     command
     ping_sent
     last_cmd_ping

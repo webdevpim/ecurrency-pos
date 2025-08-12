@@ -722,8 +722,10 @@ sub cmd_ping {
 
 sub drop_pending {
     my $self = shift;
+    return unless $self->has_pending;
     QBitcoin::Block->drop_all_pending($self);
     QBitcoin::Transaction->drop_all_pending($self);
+    $self->has_pending(0);
 }
 
 sub cmd_pong {
