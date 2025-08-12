@@ -738,8 +738,8 @@ sub cmd_pong {
         if ($self->syncing) {
             Infof("%s peer %s is in syncing state but no data receiving, reset syncing", $self->type, $self->peer->id);
             $self->syncing(0);
-            $self->drop_pending();
         }
+        $self->drop_pending();
     }
     $self->last_cmd_ping = undef;
     return 0;
