@@ -549,6 +549,9 @@ sub cmd_signrawtransactionwithkey {
     if (!$tx || $data->length) {
         return $self->response_error("", ERR_DESERIALIZATION_ERROR, "TX decode failed.");
     }
+    if (!$tx->is_standard) {
+        return $self->response_error("", ERR_INVALID_REQUEST, "Non-standard transaction.");
+    }
     $tx->received_from = $self;
     if (!$tx->load_inputs(1)) {
         return $self->response_error("", ERR_DESERIALIZATION_ERROR, "Incorrect transaction data.");
