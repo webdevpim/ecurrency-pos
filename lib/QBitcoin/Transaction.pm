@@ -270,7 +270,7 @@ sub free {
 sub drop {
     no warnings 'recursion'; # recursion may be deeper than perl default 100 levels
     my $self = shift;
-    if (!$TRANSACTION{$self->hash} && !$PENDING_TX_INPUT{$self->hash}) {
+    if (!$TRANSACTION{$self->hash} && !exists $PENDING_TX_INPUT{$self->hash}) {
         Debugf("Attempt to drop not cached transaction %s (already dropped?)", $self->hash_str);
         return 1;
     }
@@ -647,11 +647,12 @@ sub load_txo {
         }
         $self->drop_immune = 1;
         if (keys %PENDING_TX_INPUT > MAX_PENDING_TX) {
-            foreach my $old_pending_tx (values %PENDING_TX_INPUT) {
-                next unless $old_pending_tx->is_pending; # already dropped as dependent in this loop
-                if ($old_pending_tx->drop()) {
-                    Debugf("Drop old pending transaction %s", $old_pending_tx->hash_str);
-                    last if %PENDING_TX_INPUT <= MAX_PENDING_TX;
+            foreach my $pending_tx_hash (keys %PENDING_TX_INPUT) {
+                my $pending_tx = $PENDING_TX_INPUT{$pending_tx_hash}
+                    or next; # already dropped as dependent in this loop
+                if ($pending_tx->drop()) {
+                    Debugf("Drop old pending transaction %s", $pending_tx->hash_str);
+                    last if keys %PENDING_TX_INPUT <= MAX_PENDING_TX;
                 }
             }
         }
@@ -720,7 +721,7 @@ sub load_inputs {
                 Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
                 return undef;
             }
-            if ($PENDING_TX_INPUT{$in->{tx_out}}) {
+            if (exists $PENDING_TX_INPUT{$in->{tx_out}}) {
                 Infof("input %s:%u is pending in transaction %s",
                     $self->hash_str($in->{tx_out}), $in->{num}, $self->hash_str);
                 $pending_inputs{$in->{tx_out}} //= [];
@@ -751,7 +752,7 @@ sub load_inputs {
                     Warningf("Incorrect redeem_script for input %s on %s", $txo->tx_in_str, $self->hash_str);
                     return undef;
                 }
-                if ($PENDING_TX_INPUT{$in->{tx_out}}) {
+                if (exists $PENDING_TX_INPUT{$in->{tx_out}}) {
                     Infof("input %s:%u is pending in transaction %s",
                         $self->hash_str($in->{tx_out}), $in->{num}, $self->hash_str);
                     $pending_inputs{$in->{tx_out}} //= [];
@@ -1331,7 +1332,9 @@ sub drop_all_pending {
     my $class = shift;
     my ($connection) = @_;
 
-    foreach my $tx (values %PENDING_TX_INPUT) {
+    foreach my $tx_hash (keys %PENDING_TX_INPUT) {
+        my $tx = $PENDING_TX_INPUT{$tx_hash}
+            or next;
         if ($tx->received_from_peer && $tx->received_from->peer->id eq $connection->peer->id) {
             $tx->drop();
         }
