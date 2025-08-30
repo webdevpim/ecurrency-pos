@@ -47,7 +47,10 @@ sub store {
         btc_tx_num       => $self->btc_tx_num,
         btc_out_num      => $self->btc_out_num,
     );
-    return if $coinbase;
+    if ($coinbase) {
+        $self->{tx_out} = $coinbase->{tx_out};
+        return;
+    }
     my $scripthash = QBitcoin::RedeemScript->store($self->scripthash);
     my $sql = "INSERT INTO `" . TABLE . "` (btc_block_height, btc_tx_num, btc_out_num, btc_tx_hash, btc_tx_data, merkle_path, value, scripthash, tx_out, upgrade_level) VALUES (?,?,?,?,?,?,?,?,NULL,?)";
     DEBUG_ORM && Debugf("dbi [%s] values [%u,%u,%u,%s,%s,%s,%lu,%u,%u]", $sql, $self->btc_block_height, $self->btc_tx_num, $self->btc_out_num, for_log($self->btc_tx_hash), for_log($self->btc_tx_data), for_log($self->merkle_path), $self->value, $scripthash->id, $self->upgrade_level);

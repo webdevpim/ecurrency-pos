@@ -143,7 +143,7 @@ sub receive {
     }
 
     if ($self->up) {
-        $self->up->store;
+        $self->up->store; # and update $self->up->tx_out here if already stored
     }
 
     Debugf("Process tx %s fee %li size %u", $self->hash_str, $self->fee, $self->size);
