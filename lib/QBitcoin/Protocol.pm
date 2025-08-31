@@ -34,6 +34,7 @@ use strict;
 # If our last known block height less than height_by_time, then batch request all blocks with height from last known to max available
 
 use parent 'QBitcoin::Protocol::Common';
+use Time::HiRes;
 use QBitcoin::Const;
 use QBitcoin::Log;
 use QBitcoin::Accessors qw(mk_accessors);
@@ -709,7 +710,7 @@ sub cmd_eomempool {
         return -1;
     }
     $self->send_message("ping", pack("a8", "emempool"));
-    $self->ping_sent = time();
+    $self->ping_sent = Time::HiRes::time();
     return 0;
 }
 
@@ -755,7 +756,7 @@ sub cmd_reject {
 
 sub keepalive {
     my $self = shift;
-    my $time = time();
+    my $time = Time::HiRes::time();
     if (!$self->ping_sent) {
         # Do not send ping directly after connect
         $self->ping_sent = $time;
@@ -771,9 +772,10 @@ sub keepalive {
         # This needed to reset "syncing" state in case when remote periodically announce new blocks or transactions, or just "ping" us
         # Bitcoin node can ignore "getheaders" if it is in "initial block download" state,
         # and in this case protocol will remain in "syncing" state and do not request new blocks until "ping" response and reset "syncing"
-        $self->send_message("ping", pack("Q", $time));
+        my $time_us = int($time * 1000000);
+        $self->send_message("ping", pack("Q", $time_us));
+        $self->last_cmd_ping = $time_us;
         $self->ping_sent = $time;
-        $self->last_cmd_ping = $time;
     }
     return 1;
 }
