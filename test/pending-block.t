@@ -102,4 +102,28 @@ QBitcoin::Block->cleanup_old_blocks();
 my $incore = QBitcoin::Block->min_incore_height;
 is($incore, (QBitcoin::Block->blockchain_height // -1) - INCORE_LEVELS + 1, "incore levels");
 
+send_blocks([ 5, "c5", "a4", 1, 450 ]);
+send_blocks([ $_, "c$_", "c" . ($_-1), 1, $_*140-70 ]) foreach 6 .. 19;
+
+$block  = QBitcoin::Block->best_block;
+is($block->hash, "b35", "hash");
+$connection->protocol->syncing(0);
+
+QBitcoin::Block->store_blocks();
+QBitcoin::Block->cleanup_old_blocks();
+$incore = QBitcoin::Block->min_incore_height;
+is($incore, (QBitcoin::Block->blockchain_height // -1) - INCORE_LEVELS + 1, "incore levels");
+
+send_blocks([ 5, "d5", "a4", 1, 450 ]);
+send_blocks([ $_, "d$_", "d" . ($_-1), 1, $_*140-70 ]) foreach 6 .. 35;
+
+$block  = QBitcoin::Block->best_block;
+is($block->hash, "d35", "hash");
+$connection->protocol->syncing(0);
+
+QBitcoin::Block->store_blocks();
+QBitcoin::Block->cleanup_old_blocks();
+$incore = QBitcoin::Block->min_incore_height;
+is($incore, (QBitcoin::Block->blockchain_height // -1) - INCORE_LEVELS + 1, "incore levels");
+
 done_testing();
