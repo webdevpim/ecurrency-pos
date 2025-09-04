@@ -1371,7 +1371,7 @@ sub cmd_listmyaddresses {
 
 $PARAMS{getbalance} = "minconf?";
 $HELP{getbalance} = qq(
-getbalance address ( minconf )
+getbalance ( minconf )
 
 Returns total balance of the addresses in the wallet with at least minconf confirmations.
 
