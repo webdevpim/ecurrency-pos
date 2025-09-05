@@ -301,7 +301,10 @@ sub generate {
     QBitcoin::Generate::Control->generated_time($time);
     Debugf("Generated block %s height %u weight %Lu, %u transactions",
         $generated->hash_str, $height, $generated->weight, scalar(@transactions));
-    $generated->receive() ? undef : $generated;
+    if ($generated->receive()) {
+        die "Generated block " . $generated->hash_str . " is invalid\n";
+    }
+    return $generated;
 }
 
 1;
