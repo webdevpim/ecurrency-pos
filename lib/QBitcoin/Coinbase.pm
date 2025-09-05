@@ -362,7 +362,8 @@ sub deserialize {
     }
 
     my $key = $transaction->hash . $btc_out_num;
-    return $COINBASE{$key} //= $class->new({
+    return $COINBASE{$key} if defined($COINBASE{$key});
+    my $coinbase = $class->new({
         btc_block_height => $btc_block_height,
         btc_block_hash   => $btc_block_hash,
         btc_tx_num       => $btc_tx_num,
@@ -375,6 +376,9 @@ sub deserialize {
         value            => upgrade_value($out->{value}, $upgrade_level),
         scripthash       => $scripthash,
     });
+    $COINBASE{$key} = $coinbase;
+    weaken($COINBASE{$key});
+    return $coinbase;
 }
 
 # for serialize loaded blocks
