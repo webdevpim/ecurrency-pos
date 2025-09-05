@@ -1224,7 +1224,7 @@ sub new_coinbase {
     if (my $cached = $class->get($self->hash)) {
         Debugf("Coinbase transaction %s for btc %s:%u already in %s",
             $self->hash_str, $class->hash_str($coinbase->btc_tx_hash), $coinbase->btc_out_num,
-            $self->block_height ? "blockchain" : "mempool");
+            $cached->block_height ? "blockchain" : "mempool");
         $self = $cached;
     }
     else {
