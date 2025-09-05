@@ -48,7 +48,7 @@ sub store {
         btc_out_num      => $self->btc_out_num,
     );
     if ($coinbase) {
-        $self->{tx_out} = $coinbase->{tx_out};
+        $self->{tx_out} //= $coinbase->{tx_out};
         return;
     }
     my $scripthash = QBitcoin::RedeemScript->store($self->scripthash);
