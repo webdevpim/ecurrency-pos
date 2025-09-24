@@ -68,7 +68,7 @@ RUN { \
       --peer=seed.ecurrency.org \
       --dbi=${dbi} \
       --database=${database} \
-      --rpc="*:9667" \
+      --rpc="[::]:9667" \
       --log=/dev/null \
       --verbose ${debug:+$( [ "$debug" = "0" ] || echo --debug )} \
       $@'; \
