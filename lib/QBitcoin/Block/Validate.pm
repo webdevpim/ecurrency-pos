@@ -34,6 +34,8 @@ sub validate {
                 or return "Incorrect genesis block hash " . unpack("H*", $block->hash) . ", must be " . unpack("H*", $genesis_hash);
             $block->upgraded = 0; # Genesis block has no upgrades
             $block->reward_fund = 0;
+            $block->size = sum0(map { $_->size } @{$block->transactions});
+            $block->min_fee = 0;
             return ""; # Not needed to validate genesis block with correct hash
         }
     }
